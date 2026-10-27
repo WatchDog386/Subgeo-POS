@@ -15,7 +15,7 @@ import PaymentModal from '../components/PaymentModal'
 import ReceiptModal from '../components/ReceiptModal'
 import CustomerPicker from '../components/CustomerPicker'
 
-export const CART_KEY = 'optimas.cart'
+export const CART_KEY = 'subgeo.cart'
 
 interface CartState {
   lines: SaleLine[]

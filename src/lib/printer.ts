@@ -12,7 +12,7 @@ export interface PrinterConfig {
   port?: number
 }
 
-const CONFIG_KEY = 'optimas.printer'
+const CONFIG_KEY = 'subgeo.printer'
 
 export function loadPrinterConfig(): PrinterConfig {
   try {
@@ -30,7 +30,7 @@ export function savePrinterConfig(cfg: PrinterConfig) {
   }
 }
 
-const BARCODE_CONFIG_KEY = 'optimas.barcodePrinter'
+const BARCODE_CONFIG_KEY = 'subgeo.barcodePrinter'
 
 export function loadBarcodePrinterConfig(): PrinterConfig {
   try {

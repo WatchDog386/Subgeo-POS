@@ -19,7 +19,7 @@ const SEED: Message[] = [
   {
     id: 1,
     from: 'AutoSpares Ltd <orders@autospares.co.ke>',
-    to: 'shop@optimas.co.ke',
+    to: 'admin@subgeo.com',
     subject: 'PO-000012 confirmed — dispatching tomorrow',
     body: [
       'Hi,',
@@ -33,7 +33,7 @@ const SEED: Message[] = [
   {
     id: 2,
     from: 'M-Pesa <no-reply@safaricom.co.ke>',
-    to: 'shop@optimas.co.ke',
+    to: 'admin@subgeo.com',
     subject: 'Daily statement — yesterday\'s transactions',
     body: [
       'Your till statement for yesterday is ready.',
@@ -46,7 +46,7 @@ const SEED: Message[] = [
   {
     id: 3,
     from: 'Grace Wanjiku <grace.w@gmail.com>',
-    to: 'shop@optimas.co.ke',
+    to: 'admin@subgeo.com',
     subject: 'Quote request — Ekon 500 battery pack',
     body: [
       'Hello,',
@@ -59,7 +59,7 @@ const SEED: Message[] = [
   {
     id: 4,
     from: 'KRA iTax <noreply@itax.kra.go.ke>',
-    to: 'shop@optimas.co.ke',
+    to: 'admin@subgeo.com',
     subject: 'Reminder — monthly VAT return due 20th',
     body: [
       'This is a reminder that your monthly VAT return for the previous tax period is due on the 20th.',
@@ -70,13 +70,13 @@ const SEED: Message[] = [
   },
   {
     id: 5,
-    from: 'shop@optimas.co.ke',
+    from: 'admin@subgeo.com',
     to: 'grace.w@gmail.com',
     subject: 'Re: Quote request — Ekon 500 battery pack',
     body: [
       'Hi Grace,',
       'Yes, the 60V 20Ah pack is in stock at KES 28,500 fitted. We can book you in for Thursday afternoon — just reply with your plate number.',
-      'Regards, Optimas Moto Spares',
+      'Regards, Subgeo Pharmacy',
     ],
     at: NOW - DAY * 1.4,
     folder: 'sent',
@@ -125,7 +125,7 @@ export default function MessagesPage() {
       setMessages((prev) => [
         {
           id: Date.now(),
-          from: 'shop@optimas.co.ke',
+          from: 'admin@subgeo.com',
           to: draft.to.trim(),
           subject: draft.subject.trim() || '(no subject)',
           body: draft.body.split('\n').filter(Boolean),

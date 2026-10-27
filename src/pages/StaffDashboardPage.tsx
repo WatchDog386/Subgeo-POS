@@ -518,7 +518,7 @@ export default function StaffDashboardPage() {
               <div className="pos-lookup-title-actions">
                 <button onClick={() => setDialog('custom')}>Custom item</button>
                 <button onClick={() => setDialog('parked')}>Parked{parkedCount ? ` (${parkedCount})` : ''}</button>
-                <button onClick={() => window.open('/display', 'optimas-customer-display', 'width=1024,height=640')}>
+                <button onClick={() => window.open('/display', 'subgeo-customer-display', 'width=1024,height=640')}>
                   Customer display
                 </button>
               </div>

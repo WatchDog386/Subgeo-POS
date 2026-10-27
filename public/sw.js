@@ -1,7 +1,7 @@
-/* Optimas POS — offline app-shell service worker.
+/* Subgeo POS — offline app-shell service worker.
    Navigations: network-first (falls back to cached shell when offline).
    Same-origin assets: cache-first (hashed build files are immutable). */
-const CACHE = 'optimas-shell-v1'
+const CACHE = 'subgeo-shell-v1'
 const SHELL = [
   '/',
   '/index.html',

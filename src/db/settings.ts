@@ -4,7 +4,7 @@ import { logActivity } from './logs'
 import type { Settings } from './types'
 
 export const DEFAULT_SETTINGS: Settings = {
-  shopName: 'Optimas Moto Spares',
+  shopName: 'Subgeo Pharmacy',
   address: 'Nairobi, Kenya',
   phone: '',
   kraPin: '',

@@ -1,6 +1,6 @@
-# Hardware specification — Optimas POS
+# Hardware specification — Subgeo POS
 
-Optimas POS is a browser app (React + Tailwind) served by a small Node/Express server
+Subgeo POS is a browser app (React + Tailwind) served by a small Node/Express server
 (`server/index.ts`) that also acts as the printer relay and the M‑Pesa bridge. Shop data
 lives in the browser's IndexedDB on the till machine, so **the till is the till** — if the
 till dies, unsynced sales die with it.
@@ -26,7 +26,7 @@ These come from the code, not from preference. Buying outside these lines breaks
 | Node.js | **Node 22 LTS (≥ 22.12) or Node 24 LTS** | `better-sqlite3@13` declares `engines.node >= 22`; `vite@8` declares `^20.19.0 \|\| >=22.12.0`. Node 20 will refuse to install. |
 | CPU | Intel N100 minimum; **i3 / N150 / i5 preferred** | Chrome + Node + SQLite + the whole catalogue in IndexedDB all share one box. |
 | RAM | **8 GB minimum, 16 GB preferred** | The browser holds the full parts catalogue, sales history and stock ledger in memory. 4 GB runs out with a few thousand SKUs. |
-| Storage | **256 GB SSD** (128 GB works but fills with Windows updates) | `node_modules` (~400 MB) + SQLite `data/optimas.db` + the Chrome profile + the IndexedDB store + Windows. |
+| Storage | **256 GB SSD** (128 GB works but fills with Windows updates) | `node_modules` (~400 MB) + SQLite `data/subgeo.db` + the Chrome profile + the IndexedDB store + Windows. |
 | Panel | **15.6" 1920×1080 (FHD), 10-point capacitive touch** | `DESIGN.md` splits the UI at **1180 px**: below that the POS falls back to the compact tablet layout instead of the 8+4 column desktop till. Many 15" POS terminals ship **1024×768** — ask for the panel resolution explicitly. |
 | Ports | **≥ 4 × USB‑A free, 1 × RJ45 gigabit, 1 × audio out, VGA or HDMI for a 2nd display** | Scanner + label printer + receipt printer (if USB) + PDQ need USB. The receipt printer and the till must sit on the same LAN. |
 | Network | **Wired Ethernet on the shop LAN** | The printer relay (`server/index.ts:281-292`) refuses any address that is not a private IPv4 — the till, the server and the printer must share one LAN. |
@@ -70,11 +70,11 @@ Not hardware, but it is what makes the box work — include it in the installer'
 1. Windows 11 Pro, activated
 2. Node.js 22 LTS (>= 22.12) — https://nodejs.org  (NOT 20.x, NOT 18.x)
 3. Google Chrome (or Edge) — the ONLY supported browser
-4. The Optimas POS repo + build:
+4. The Subgeo POS repo + build:
        npm install          <-- full install, dev dependencies included
        npm run build        <-- builds dist/
        npm run server:start <-- serves the app + printer relay + M-Pesa on :8787
-5. Open http://localhost:8787  and install it as an app (Chrome menu -> Install Optimas POS)
+5. Open http://localhost:8787  and install it as an app (Chrome menu -> Install Subgeo POS)
 6. Run the server as a service (pm2 on Linux, or NSSM/Task Scheduler on Windows)
 ```
 
@@ -238,7 +238,7 @@ Critical points:
 ## 5. Purchase order — send this to the supplier verbatim
 
 ```
-OPTIMAS POS — HARDWARE SUPPLY REQUEST (one till counter)
+SUBGEO POS — HARDWARE SUPPLY REQUEST (one till counter)
 
 A. TILL TERMINAL (15.6" touchscreen all-in-one, Windows 11 Pro)
    1. Touchscreen POS terminal, 15.6", 1920x1080 (FHD) 10-point capacitive touch
@@ -324,7 +324,7 @@ TOTAL ESTIMATE REQUESTED: KSh ____________  (excluding the till terminal)
 2. **Install Node 22 LTS, Chrome, then the app.** `npm install && npm run build`.
 3. **Start the server** and open `http://localhost:8787` — the login screen appears.
    Default PINs: owner `1234`, cashier `0000`. Change them in *Settings → Users*.
-4. **Install it as an app** (Chrome menu → *Install Optimas POS*).
+4. **Install it as an app** (Chrome menu → *Install Subgeo POS*).
 5. **Printer:** plug the printer into the switch. Hold **FEED while powering on** → the
    self-test page prints the IP address. In the POS: *Settings → Hardware → Receipt printer →
    Network (LAN)*, enter the IP and port **9100**, set paper width **80**, tick
@@ -341,7 +341,7 @@ TOTAL ESTIMATE REQUESTED: KSh ____________  (excluding the till terminal)
 11. **UPS:** power-cut test — pull the mains plug and confirm the till, the printer and the
     router stay alive and you can still complete a sale.
 12. **Backup:** *Settings → Backup → Export JSON* every day at close of business, and copy
-    the file to a USB stick. Also back up `data/optimas.db`.
+    the file to a USB stick. Also back up `data/subgeo.db`.
 
 ---
 

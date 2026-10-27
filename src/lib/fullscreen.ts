@@ -1,4 +1,4 @@
-const KEY = 'optimas.fullscreen'
+const KEY = 'subgeo.fullscreen'
 
 /** 'on' unless the user turned it off. */
 export function fullscreenPref(): 'on' | 'off' {

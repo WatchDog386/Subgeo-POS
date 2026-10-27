@@ -1,4 +1,4 @@
-# Optimas POS
+# Subgeo POS
 
 Point-of-sale and inventory system for a **motorbike / e-bike spare parts shop** in Kenya. It works offline, takes M-Pesa, cash, card and credit payments, and drives standard receipt-printer hardware.
 

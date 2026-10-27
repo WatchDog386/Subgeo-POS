@@ -17,11 +17,11 @@ PAY_AUTH_TOKEN=               # optional Bearer token
 - The till polls `/api/mpesa/status/:id`; the server asks the gateway for the outcome (transaction ids and statuses are read from the usual field names — `transactionId`, `id`, `status`, `ResultCode`, …) and stores it in SQLite.
 - Every prompt is persisted in `mpesa_transactions` (see below) with the raw request/response JSON for auditing.
 
-Check it is live: `curl https://pos.optimaswifi.co.ke/api/health` → `"mpesa":"pinnovatech pay gateway"`.
+Check it is live: `curl https://pos.subgeo.com/api/health` → `"mpesa":"pinnovatech pay gateway"`.
 
 ## Server database (SQLite)
 
-The server keeps a durable copy of **M-Pesa payments, staff users and shop settings** in `data/optimas.db` (path: `DB_PATH`). Sales and inventory stay in the till browser's IndexedDB.
+The server keeps a durable copy of **M-Pesa payments, staff users and shop settings** in `data/subgeo.db` (path: `DB_PATH`). Sales and inventory stay in the till browser's IndexedDB.
 
 - Migrations live in `server/migrations/*.sql` and run automatically on boot; run them by hand with `npm run db:migrate`.
 - API: `GET/PUT /api/users` (PINs are accepted on PUT but never returned by GET), `POST /api/users` (single upsert), `GET/PUT /api/settings`, `GET /api/mpesa/status/:id`.

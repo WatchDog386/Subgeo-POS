@@ -19,7 +19,7 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 /** Path of the SQLite file — override with DB_PATH in .env. */
 export const dbPath = process.env.DB_PATH
   ? path.resolve(process.env.DB_PATH)
-  : path.join(here, '..', 'data', 'optimas.db')
+  : path.join(here, '..', 'data', 'subgeo.db')
 
 fs.mkdirSync(path.dirname(dbPath), { recursive: true })
 

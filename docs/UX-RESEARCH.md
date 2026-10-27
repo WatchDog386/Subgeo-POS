@@ -1,6 +1,6 @@
 # Design notes: patterns borrowed from leading retail POS systems
 
-Optimas POS does not copy any vendor's code, branding, names, logos or assets. Instead, it adopts the **workflow patterns** that well-known retail POS products have converged on. These are documented publicly in their help centres and visible in their product demos. The main references were:
+Subgeo POS does not copy any vendor's code, branding, names, logos or assets. Instead, it adopts the **workflow patterns** that well-known retail POS products have converged on. These are documented publicly in their help centres and visible in their product demos. The main references were:
 
 - **Lightspeed Retail**: widely used by bicycle and powersports parts shops. It added work orders, serialized items and special orders.
 - **Square for Retail**: tap-tile register, split tender, simple receipts.
@@ -9,7 +9,7 @@ Optimas POS does not copy any vendor's code, branding, names, logos or assets. I
 
 ## Patterns adopted
 
-| Pattern | Where it's seen | How Optimas implements it |
+| Pattern | Where it's seen | How Subgeo implements it |
 |---|---|---|
 | **Two-pane register**: product grid on the left, ticket/cart on the right, one large "Charge" button | All of the above | `SellPage`. The Charge button always shows the live total. |
 | **Category tabs plus colour-coded tiles** | Square, Loyverse | Category chips and a coloured bar on each tile. Stock badge goes amber when low and red when out. |

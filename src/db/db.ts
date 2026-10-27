@@ -34,7 +34,7 @@ export class PosDB extends Dexie {
   logs!: EntityTable<LogEntry, 'id'>
   kv!: EntityTable<KV, 'key'>
 
-  constructor(name = 'optimas-pos') {
+  constructor(name = 'subgeo-pos') {
     super(name)
     this.version(1).stores({
       users: '++id, pin, role',

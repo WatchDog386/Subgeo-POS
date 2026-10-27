@@ -131,15 +131,15 @@ export default function ProfilePage() {
     const url = window.location.origin
     const bat = [
       '@echo off',
-      'rem Optimas POS — launches the till in app mode and installs itself to run at Windows startup.',
-      'set "LINK=%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\Start Optimas POS.bat"',
+      'rem Subgeo POS — launches the till in app mode and installs itself to run at Windows startup.',
+      'set "LINK=%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\Start Subgeo POS.bat"',
       'if not exist "%LINK%" copy "%~f0" "%LINK%"',
       `start "" msedge.exe --app=${url}`,
     ].join('\r\n')
     const blob = new Blob([bat], { type: 'application/bat' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = 'Start Optimas POS.bat'
+    a.download = 'Start Subgeo POS.bat'
     a.click()
     URL.revokeObjectURL(a.href)
     toast('Startup script saved — run it once and the till will boot with this computer')

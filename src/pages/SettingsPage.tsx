@@ -701,7 +701,7 @@ function BackupSettings() {
   const backup = async () => {
     const data: Record<string, unknown> = {}
     for (const t of db.tables) data[t.name] = await t.toArray()
-    download(`optimas-backup-${new Date().toISOString().slice(0, 16).replace(':', '')}.json`, JSON.stringify({ version: 1, exportedAt: Date.now(), data }), 'application/json')
+    download(`subgeo-backup-${new Date().toISOString().slice(0, 16).replace(':', '')}.json`, JSON.stringify({ version: 1, exportedAt: Date.now(), data }), 'application/json')
   }
   const restore = async (file: File) => {
     if (!confirm('Restoring replaces ALL data on this till with the backup. Continue?')) return
@@ -811,7 +811,7 @@ function AboutSettings() {
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="rounded-xl border border-slate-200 p-4">
           <div className="flex items-center gap-2 font-semibold text-slate-900">
-            <Database size={17} className="text-brand-600" /> Optimas POS
+            <Database size={17} className="text-brand-600" /> Subgeo POS
           </div>
           <dl className="mt-2 space-y-1 text-sm text-slate-600">
             <div className="flex justify-between">

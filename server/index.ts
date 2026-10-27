@@ -1,4 +1,4 @@
-// Optimas POS local server.
+// Subgeo POS local server.
 //  - Serves the built app (dist/) so tills just open http://<shop-pc>:8787
 //  - M-Pesa STK Push via Safaricom Daraja (keeps the consumer secret & passkey off the browser)
 //  - Relays raw ESC/POS bytes to LAN receipt printers on port 9100
@@ -392,7 +392,7 @@ if (migrated.length) console.log(`DB migrations applied: ${migrated.join(', ')}`
 seedDefaultUsers()
 
 app.listen(PORT, () => {
-  console.log(`Optimas POS server on http://localhost:${PORT}`)
+  console.log(`Subgeo POS server on http://localhost:${PORT}`)
   console.log(`Database: ${dbPath}`)
   console.log(
     `M-Pesa: ${

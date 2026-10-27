@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "Optimas POS",
-  "short_name": "Optimas",
+  "name": "Subgeo POS",
+  "short_name": "Subgeo",
   "description": "Point of sale for spare parts, service jobs and sales.",
   "start_url": "/",
   "scope": "/",
