@@ -1,0 +1,905 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useLiveQuery } from 'dexie-react-hooks'
+import { Bike, Check, ChevronRight, CreditCard, Image as ImageIcon, Minus, PauseCircle, Package, Percent, Plus, Search, ShoppingCart, Trash2, UserRound, Wrench, X } from 'lucide-react'
+import { db } from '../db/db'
+import { useSettings } from '../db/settings'
+import { completeSale } from '../db/sales'
+import { openShift } from '../db/shifts'
+import type { Customer, ParkedSale, Product, Sale, SaleLine } from '../db/types'
+import { computeTotals, lineTotal } from '../lib/cart'
+import { money, moneyShort, toCents } from '../lib/money'
+import { useBarcodeScanner } from '../hooks/useBarcodeScanner'
+import { useSession } from '../session'
+import { Badge, Modal, errorText, useToast } from '../components/ui'
+import PaymentModal from '../components/PaymentModal'
+import ReceiptModal from '../components/ReceiptModal'
+import CustomerPicker from '../components/CustomerPicker'
+
+export const CART_KEY = 'optimas.cart'
+
+interface CartState {
+  lines: SaleLine[]
+  discount: number
+  customerId?: number
+}
+
+function loadCart(): CartState {
+  try {
+    return JSON.parse(localStorage.getItem(CART_KEY) ?? '') as CartState
+  } catch {
+    return { lines: [], discount: 0 }
+  }
+}
+
+export function lineFromProduct(p: Product): SaleLine {
+  return {
+    productId: p.id,
+    name: p.name,
+    sku: p.sku,
+    qty: 1,
+    unitPrice: p.price,
+    unitCost: p.cost,
+    discount: 0,
+    taxable: p.taxable,
+  }
+}
+
+export function matchesSearch(p: Product, term: string): boolean {
+  const t = term.toLowerCase()
+  return [p.name, p.sku, p.barcode, p.partNumber, p.brand].some((v) => v?.toLowerCase().includes(t))
+}
+
+type Dialog = 'pay' | 'customer' | 'discount' | 'custom' | 'parked' | 'shift' | { line: number } | null
+
+export default function SellPage() {
+  const settings = useSettings()
+  const { user, shift, can } = useSession()
+  const toast = useToast()
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  const [cart, setCart] = useState<CartState>(loadCart)
+  const [query, setQuery] = useState('')
+  const [category, setCategory] = useState<number | 'all'>('all')
+  const [bike, setBike] = useState<string>('all')
+  const [dialog, setDialog] = useState<Dialog>(null)
+  const [receipt, setReceipt] = useState<Sale | null>(null)
+  const [addedId, setAddedId] = useState<number | null>(null)
+  const [cartOpen, setCartOpen] = useState(false)
+  const addedTimer = useRef<number | undefined>(undefined)
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CART_KEY, JSON.stringify(cart))
+    } catch {
+      // Cart just won't survive a reload.
+    }
+  }, [cart])
+
+  const categories = useLiveQuery(() => db.categories.toArray(), [], [])
+  const products = useLiveQuery(() => db.products.filter((p) => p.active).toArray(), [], [] as Product[])
+  const customer = useLiveQuery(() => (cart.customerId ? db.customers.get(cart.customerId) : undefined), [cart.customerId])
+  const parkedCount = useLiveQuery(() => db.parked.count(), [], 0)
+
+  const visible = useMemo(() => {
+    const term = query.trim()
+    return products
+      .filter((p) => category === 'all' || p.categoryId === category)
+      .filter((p) => bike === 'all' || p.fitment.length === 0 || p.fitment.includes(bike))
+      .filter((p) => !term || matchesSearch(p, term))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [products, category, bike, query])
+
+  const totals = computeTotals(cart.lines, cart.discount, settings.vatRate, settings.pricesIncludeVat)
+
+  const addProduct = (p: Product) => {
+    const inCart = cart.lines.filter((l) => l.productId === p.id).reduce((s, l) => s + l.qty, 0)
+    if (p.trackStock && p.stock - inCart <= 0) toast(`${p.name}: no stock recorded — sale will go negative`, 'error')
+    setCart((c) => {
+      // Serial-tracked items always get their own line so each serial can be captured.
+      const idx = p.serialized ? -1 : c.lines.findIndex((l) => l.productId === p.id && !l.serial)
+      if (idx >= 0) {
+        const lines = c.lines.map((l, i) => (i === idx ? { ...l, qty: l.qty + 1 } : l))
+        return { ...c, lines }
+      }
+      return { ...c, lines: [...c.lines, lineFromProduct(p)] }
+    })
+    if (p.serialized) setTimeout(() => setDialog({ line: cart.lines.length }), 0)
+    setAddedId(p.id ?? null)
+    window.clearTimeout(addedTimer.current)
+    addedTimer.current = window.setTimeout(() => setAddedId(null), 900)
+  }
+
+  const findExact = (code: string) => {
+    const c = code.trim().toLowerCase()
+    return products.find((p) => p.barcode?.toLowerCase() === c || p.sku.toLowerCase() === c || p.partNumber?.toLowerCase() === c)
+  }
+
+  useBarcodeScanner((code) => {
+    const p = findExact(code)
+    if (p) addProduct(p)
+    else toast(`No product with barcode ${code}`, 'error')
+  }, dialog === null && receipt === null)
+
+  // Keyboard shortcuts, modelled on desktop retail POS conventions.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (dialog || receipt) return
+      if (e.key === 'F2') {
+        e.preventDefault()
+        searchRef.current?.focus()
+      } else if (e.key === 'F4') {
+        e.preventDefault()
+        setDialog('customer')
+      } else if (e.key === 'F8') {
+        e.preventDefault()
+        park()
+      } else if (e.key === 'F9' || e.key === 'F12') {
+        e.preventDefault()
+        charge()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
+  const setQty = (i: number, qty: number) =>
+    setCart((c) => ({ ...c, lines: qty <= 0 ? c.lines.filter((_, j) => j !== i) : c.lines.map((l, j) => (j === i ? { ...l, qty } : l)) }))
+
+  const clear = () => setCart({ lines: [], discount: 0 })
+
+  const park = async () => {
+    if (!cart.lines.length || !user) return
+    const parked: ParkedSale = {
+      label: customer?.name ?? `Sale ${new Date().toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })}`,
+      createdAt: Date.now(),
+      lines: cart.lines,
+      discount: cart.discount,
+      customerId: cart.customerId,
+      userId: user.id!,
+    }
+    await db.parked.add(parked)
+    clear()
+    toast('Sale parked')
+  }
+
+  const charge = () => {
+    if (!cart.lines.length) return
+    if (cart.lines.some((l) => products.find((p) => p.id === l.productId)?.serialized && !l.serial)) {
+      return toast('Enter serial numbers for serial-tracked items', 'error')
+    }
+    setDialog(shift ? 'pay' : 'shift')
+  }
+
+  const onPaid = async (payments: Sale['payments']) => {
+    const sale = await completeSale({
+      lines: cart.lines,
+      discount: cart.discount,
+      payments,
+      customerId: cart.customerId,
+      userId: user!.id!,
+      shiftId: shift?.id,
+    })
+    clear()
+    setDialog(null)
+    setReceipt(sale)
+  }
+
+  return (
+    <div className="flex h-full">
+      {/* Catalogue */}
+      <section className="flex min-w-0 flex-1 flex-col bg-mist p-4 pb-24 lg:pb-4">
+        <div className="mb-3 flex gap-2">
+          <div className="relative flex-1">
+            <Search size={18} className="absolute left-3 top-3 text-slate-400" />
+            <input
+              ref={searchRef}
+              data-scan="allow"
+              className="input h-11 rounded-md border-hairline bg-white pl-10 pr-14 text-base shadow-none focus:border-brand-500 focus:ring-brand-500/45"
+              placeholder="Search name, SKU, part number — or scan a barcode (F2)"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return
+                const p = findExact(query) ?? (visible.length === 1 ? visible[0] : undefined)
+                if (p) {
+                  addProduct(p)
+                  setQuery('')
+                }
+              }}
+            />
+            {query && (
+              <button className="absolute right-12 top-3 text-slate-400" onClick={() => setQuery('')} aria-label="Clear search">
+                <X size={18} />
+              </button>
+            )}
+            <button
+              type="button"
+              aria-label="Search"
+              className="absolute right-1.5 top-1.5 grid h-8 w-10 place-items-center rounded bg-cta text-white transition hover:bg-cta-hover"
+              onClick={() => {
+                const p = findExact(query) ?? (visible.length === 1 ? visible[0] : undefined)
+                if (p) {
+                  addProduct(p)
+                  setQuery('')
+                }
+              }}
+            >
+              <Search size={16} />
+            </button>
+          </div>
+          <div className="relative">
+            <Bike size={18} className="pointer-events-none absolute left-3 top-3 text-slate-500" />
+            <select
+              className="input h-11 w-48 rounded-md border-hairline bg-white pl-10 shadow-none focus:border-brand-500 focus:ring-brand-500/45"
+              value={bike}
+              onChange={(e) => setBike(e.target.value)}
+              title="Show parts that fit this bike"
+            >
+              <option value="all">All bikes</option>
+              {settings.bikeModels.map((m) => (
+                <option key={m} value={m}>
+                  Fits {m}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex min-w-0 gap-2 overflow-x-auto pb-1">
+            <CategoryChip active={category === 'all'} count={products.length} onClick={() => setCategory('all')}>
+              All
+            </CategoryChip>
+            {categories.map((c) => (
+              <CategoryChip
+                key={c.id}
+                active={category === c.id}
+                count={products.filter((p) => p.categoryId === c.id).length}
+                onClick={() => setCategory(c.id!)}
+              >
+                {c.name}
+              </CategoryChip>
+            ))}
+          </div>
+          <span className="shrink-0 rounded-md bg-white px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-slate-400 ring-1 ring-hairline">
+            {visible.length} shown
+          </span>
+        </div>
+
+        <div className="grid min-h-0 flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto pb-4 sm:grid-cols-3 sm:gap-3 xl:grid-cols-4 2xl:grid-cols-5">
+          {visible.map((p) => {
+            const low = p.trackStock && p.stock <= p.reorderLevel
+            return (
+              <button
+                key={p.id}
+                onClick={() => addProduct(p)}
+                className="tile group flex flex-col overflow-hidden rounded-xl border border-hairline bg-white text-left shadow-[0_1px_2px_rgba(16,24,40,0.05)] transition duration-150 hover:-translate-y-1 hover:border-brand-500/50 hover:shadow-lg active:scale-[0.98]"
+              >
+                <div className="relative aspect-[3/2] w-full overflow-hidden border-b border-hairline bg-mist sm:aspect-[4/3]">
+                  {p.image ? (
+                    <img src={p.image} alt={p.name} className="h-full w-full object-cover transition duration-200 group-hover:scale-105" draggable={false} />
+                  ) : (
+                    <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-slate-300">
+                      <Package size={34} strokeWidth={1.5} />
+                      <span className="px-2 text-center text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                        {p.brand || 'No photo'}
+                      </span>
+                    </div>
+                  )}
+                  {p.image && p.brand && (
+                    <span className="absolute left-2 top-2 rounded bg-white/90 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 ring-1 ring-[#ececec]">
+                      {p.brand}
+                    </span>
+                  )}
+                  {p.trackStock && (
+                    <span
+                      className={`absolute right-2 top-2 inline-flex items-center gap-1 rounded-md bg-white/95 px-1.5 py-0.5 text-[10px] font-bold ring-1 ring-[#ececec] ${
+                        p.stock <= 0 ? 'text-red-600' : low ? 'text-amber-700' : 'text-slate-600'
+                      }`}
+                    >
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${
+                          p.stock <= 0 ? 'bg-red-500' : low ? 'bg-amber-400' : 'bg-cta'
+                        }`}
+                      />
+                      {p.stock <= 0 ? 'Out of stock' : `${p.stock} left`}
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-1 flex-col p-2 sm:p-3">
+                  <div className="line-clamp-1 min-h-0 text-[13px] font-medium leading-snug text-slate-800 transition group-hover:text-brand-600 sm:line-clamp-2 sm:min-h-[2.5rem] sm:text-sm">
+                    {p.name}
+                  </div>
+                  <div className="mt-0.5 font-mono text-[10px] text-slate-400 sm:mt-1 sm:text-[11px]">{p.sku}</div>
+                  <div className="mt-auto flex items-end justify-between pt-1.5 sm:pt-2">
+                    <div>
+                      <div className="text-[15px] font-extrabold leading-none tracking-tight text-slate-900 sm:text-[17px]">{moneyShort(p.price)}</div>
+                      <div className="mt-0.5 text-[10px] text-slate-400 sm:mt-1">
+                        {p.trackStock
+                          ? low
+                            ? 'Reorder soon'
+                            : 'In stock'
+                          : p.taxable && settings.pricesIncludeVat
+                            ? 'incl. VAT'
+                            : ''}
+                      </div>
+                    </div>
+                    {!p.trackStock && <Badge tone="blue">service</Badge>}
+                  </div>
+                  <span
+                    className={`mt-2 flex w-full items-center justify-center gap-1.5 rounded-md py-1.5 text-[11px] font-bold uppercase tracking-wide text-white shadow-sm transition sm:mt-2.5 sm:py-2 sm:text-xs ${
+                      addedId === p.id ? 'bg-cta-hover' : 'bg-cta group-hover:bg-cta-hover'
+                    }`}
+                  >
+                    {addedId === p.id ? (
+                      <>
+                        <Check size={13} /> Added
+                      </>
+                    ) : (
+                      <>
+                        <ShoppingCart size={13} /> Add to cart
+                      </>
+                    )}
+                  </span>
+                </div>
+              </button>
+            )
+          })}
+          {visible.length === 0 && (
+            <div className="col-span-full flex flex-col items-center gap-2 py-16 text-slate-400">
+              <ImageIcon size={32} strokeWidth={1.5} />
+              <p>No parts match. Try another search or bike filter.</p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Cart / ticket — side rail from lg up, full-screen sheet on phones */}
+      {cartOpen && (
+        <button
+          type="button"
+          aria-label="Close cart"
+          onClick={() => setCartOpen(false)}
+          className="fixed inset-0 z-40 bg-slate-950/50 backdrop-blur-[2px] lg:hidden"
+        />
+      )}
+      <aside
+        className={`fixed inset-0 z-40 flex flex-col border-l border-hairline bg-canvas transition-transform duration-200 lg:static lg:z-auto lg:w-[380px] lg:shrink-0 lg:translate-x-0 xl:w-[420px] ${
+          cartOpen ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        <div className="border-b border-hairline bg-white p-3.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand-500/10 text-brand-500">
+                <ShoppingCart size={17} />
+              </span>
+              <div>
+                <div className="text-sm font-bold leading-tight text-slate-900">Current sale</div>
+                <div className="text-[11px] text-slate-400">
+                  {totals.itemCount} item{totals.itemCount === 1 ? '' : 's'} · {cart.lines.length} line{cart.lines.length === 1 ? '' : 's'}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                className="grid h-9 w-9 place-items-center rounded-lg border border-hairline bg-white text-slate-500 transition hover:border-brand-500/60 hover:text-brand-600 lg:hidden"
+                onClick={() => setCartOpen(false)}
+                title="Back to parts"
+                aria-label="Back to parts"
+              >
+                <X size={16} />
+              </button>
+              <button
+                className="relative grid h-9 w-9 place-items-center rounded-lg border border-hairline bg-white text-slate-500 transition hover:border-brand-500/60 hover:text-brand-600"
+                onClick={() => setDialog('parked')}
+                title="Parked sales"
+              >
+                <PauseCircle size={16} />
+                {parkedCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-cta text-[9px] font-bold text-white">
+                    {parkedCount}
+                  </span>
+                )}
+              </button>
+              <button
+                className="grid h-9 w-9 place-items-center rounded-lg border border-hairline bg-white text-slate-500 transition hover:border-red-300 hover:text-red-500 disabled:opacity-40"
+                onClick={clear}
+                disabled={!cart.lines.length}
+                title="Clear sale"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          </div>
+          <button
+            className="mt-3 flex w-full items-center gap-2 rounded-lg border border-hairline bg-mist px-3 py-2 text-left text-sm transition hover:border-brand-500/60"
+            onClick={() => setDialog('customer')}
+          >
+            <UserRound size={15} className="shrink-0 text-slate-400" />
+            <span className="min-w-0 flex-1 truncate font-medium text-slate-700">
+              {customer ? (
+                <>
+                  {customer.name}
+                  {customer.bikeModel && <span className="text-slate-400"> · {customer.bikeModel}</span>}
+                </>
+              ) : (
+                'Walk-in customer'
+              )}
+            </span>
+            <span className="shrink-0 text-[11px] font-bold uppercase tracking-wide text-brand-500">{customer ? 'Change' : 'Add · F4'}</span>
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+          {cart.lines.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center gap-3 text-slate-400">
+              <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white shadow-sm ring-1 ring-hairline">
+                <ShoppingCart size={24} className="text-brand-500" />
+              </span>
+              <p className="text-sm font-medium text-slate-500">Tap a part or scan a barcode</p>
+              <p className="text-[11px] text-slate-400">Items you add will appear here</p>
+            </div>
+          ) : (
+            cart.lines.map((l, i) => {
+              const img = products.find((x) => x.id === l.productId)?.image
+              return (
+                <div key={i} className="flex items-start gap-2.5 rounded-xl border border-hairline bg-white p-2.5 shadow-[0_1px_2px_rgba(16,24,40,0.05)]">
+                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-hairline bg-mist">
+                    {img ? (
+                      <img src={img} alt="" className="h-full w-full object-cover" draggable={false} />
+                    ) : (
+                      <div className="grid h-full w-full place-items-center text-slate-300">
+                        <Package size={16} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <button className="min-w-0 text-left" onClick={() => setDialog({ line: i })}>
+                        <div className="truncate text-sm font-semibold text-slate-800">{l.name}</div>
+                        <div className="mt-0.5 truncate text-[11px] text-slate-400">
+                          {money(l.unitPrice, '')} each
+                          {l.discount > 0 && <span className="text-emerald-700"> · −{money(l.discount, '')}</span>}
+                          {l.serial && <span> · S/N {l.serial}</span>}
+                        </div>
+                      </button>
+                      <div className="shrink-0 text-sm font-extrabold text-slate-900">{money(lineTotal(l), '')}</div>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <div className="inline-flex items-center gap-0.5 rounded-full bg-canvas p-0.5">
+                        <button
+                          className="grid h-7 w-7 place-items-center rounded-full text-brand-500 transition hover:bg-white hover:shadow-sm"
+                          onClick={() => setQty(i, l.qty - 1)}
+                          aria-label="Decrease"
+                        >
+                          <Minus size={13} />
+                        </button>
+                        <span className="min-w-[1.5rem] text-center text-sm font-bold">{l.qty}</span>
+                        <button
+                          className="grid h-7 w-7 place-items-center rounded-full text-brand-500 transition hover:bg-white hover:shadow-sm disabled:opacity-40"
+                          onClick={() => setQty(i, l.qty + 1)}
+                          disabled={!!l.serial}
+                          aria-label="Increase"
+                        >
+                          <Plus size={13} />
+                        </button>
+                      </div>
+                      <button className="text-[11px] font-semibold text-slate-400 transition hover:text-brand-600" onClick={() => setDialog({ line: i })}>
+                        Edit
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </div>
+
+        <div className="border-t border-hairline bg-canvas p-3.5">
+          <div className="mb-3 grid grid-cols-3 gap-2">
+            <button
+              className="flex flex-col items-center gap-1 rounded-xl border border-hairline bg-white py-2 text-[11px] font-semibold text-slate-600 shadow-[0_1px_2px_rgba(16,24,40,0.05)] transition hover:border-brand-500/60 hover:text-brand-600"
+              onClick={() => setDialog('custom')}
+            >
+              <Wrench size={16} /> Custom
+            </button>
+            <button
+              className="flex flex-col items-center gap-1 rounded-xl border border-hairline bg-white py-2 text-[11px] font-semibold text-slate-600 shadow-[0_1px_2px_rgba(16,24,40,0.05)] transition hover:border-brand-500/60 hover:text-brand-600 disabled:opacity-40"
+              onClick={() => setDialog('discount')}
+              disabled={!cart.lines.length || !can('discount')}
+            >
+              <Percent size={16} /> Discount
+            </button>
+            <button
+              className="flex flex-col items-center gap-1 rounded-xl border border-hairline bg-white py-2 text-[11px] font-semibold text-slate-600 shadow-[0_1px_2px_rgba(16,24,40,0.05)] transition hover:border-brand-500/60 hover:text-brand-600 disabled:opacity-40"
+              onClick={park}
+              disabled={!cart.lines.length}
+            >
+              <PauseCircle size={16} /> Park
+            </button>
+          </div>
+          <div className="rounded-xl border border-hairline bg-white p-3 shadow-[0_1px_2px_rgba(16,24,40,0.05)]">
+            <dl className="space-y-1 text-sm">
+              <div className="flex justify-between text-slate-500">
+                <dt>Subtotal</dt>
+                <dd className="font-medium text-slate-700">{money(totals.subtotal, settings.currency)}</dd>
+              </div>
+              {totals.discount > 0 && (
+                <div className="flex justify-between text-emerald-700">
+                  <dt>Discount</dt>
+                  <dd>−{money(totals.discount, settings.currency)}</dd>
+                </div>
+              )}
+              <div className="flex justify-between text-slate-500">
+                <dt>
+                  VAT {settings.vatRate}%{settings.pricesIncludeVat ? ' (incl.)' : ''}
+                </dt>
+                <dd className="font-medium text-slate-700">{money(totals.tax, settings.currency)}</dd>
+              </div>
+              <div className="mt-2 flex items-center justify-between border-t border-dashed border-hairline pt-2">
+                <span className="text-sm font-bold text-slate-700">Total · {totals.itemCount} items</span>
+                <span className="text-xl font-extrabold tracking-tight text-slate-900">{money(totals.total, settings.currency)}</span>
+              </div>
+            </dl>
+          </div>
+          <button
+            className="mt-3 flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-cta text-base font-bold uppercase tracking-wide text-white shadow-[0_8px_18px_-8px_rgba(31,195,65,0.8)] transition hover:bg-cta-hover active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+            onClick={charge}
+            disabled={!cart.lines.length}
+          >
+            <CreditCard size={18} /> Charge {money(totals.total, settings.currency)}
+          </button>
+          <p className="mt-2 hidden flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[11px] text-slate-400 lg:flex">
+            {(
+              [
+                ['F2', 'search'],
+                ['F4', 'customer'],
+                ['F8', 'park'],
+                ['F9', 'charge'],
+              ] as const
+            ).map(([key, what]) => (
+              <span key={key} className="flex items-center gap-1">
+                <kbd className="rounded border border-hairline bg-white px-1 py-0.5 text-[10px] font-bold text-slate-500">{key}</kbd>
+                {what}
+              </span>
+            ))}
+          </p>
+        </div>
+      </aside>
+
+      {/* Phone: sticky bar replaces the side rail */}
+      {cart.lines.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setCartOpen(true)}
+          className="fixed inset-x-0 bottom-0 z-20 flex items-center justify-between gap-3 border-t border-[#24528f] bg-[#2f63a8] px-4 py-3.5 text-white shadow-[0_-8px_24px_-12px_rgba(15,39,44,0.5)] transition hover:bg-[#3a75c4] active:scale-[0.995] lg:hidden"
+        >
+          <span className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide">
+            <ShoppingCart size={17} />
+            {totals.itemCount} item{totals.itemCount === 1 ? '' : 's'}
+          </span>
+          <span className="flex items-center gap-2 text-sm font-extrabold">
+            {money(totals.total, settings.currency)}
+            <span className="flex items-center gap-0.5 rounded-md bg-black/15 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide">
+              View cart <ChevronRight size={13} />
+            </span>
+          </span>
+        </button>
+      )}
+
+      {dialog === 'pay' && (
+        <PaymentModal total={totals.total} settings={settings} customer={customer} onClose={() => setDialog(null)} onComplete={onPaid} />
+      )}
+      {dialog === 'customer' && (
+        <CustomerPicker
+          onClose={() => setDialog(null)}
+          onPick={(c?: Customer) => {
+            setCart((x) => ({ ...x, customerId: c?.id }))
+            if (c?.bikeModel && settings.bikeModels.includes(c.bikeModel)) setBike(c.bikeModel)
+            setDialog(null)
+          }}
+        />
+      )}
+      {dialog === 'discount' && (
+        <DiscountModal
+          subtotal={totals.subtotal}
+          current={cart.discount}
+          onClose={() => setDialog(null)}
+          onApply={(d) => {
+            setCart((c) => ({ ...c, discount: d }))
+            setDialog(null)
+          }}
+        />
+      )}
+      {dialog === 'custom' && (
+        <CustomItemModal
+          onClose={() => setDialog(null)}
+          onAdd={(line) => {
+            setCart((c) => ({ ...c, lines: [...c.lines, line] }))
+            setDialog(null)
+          }}
+        />
+      )}
+      {dialog === 'parked' && (
+        <ParkedModal
+          onClose={() => setDialog(null)}
+          onResume={async (p) => {
+            if (cart.lines.length) await park()
+            setCart({ lines: p.lines, discount: p.discount, customerId: p.customerId })
+            await db.parked.delete(p.id!)
+            setDialog(null)
+          }}
+        />
+      )}
+      {dialog === 'shift' && (
+        <OpenShiftModal
+          onClose={() => setDialog(null)}
+          onOpen={async (float) => {
+            await openShift(user!.id!, float)
+            setDialog('pay')
+          }}
+        />
+      )}
+      {dialog !== null && typeof dialog === 'object' && cart.lines[dialog.line] && (
+        <LineEditor
+          line={cart.lines[dialog.line]}
+          allowPrice={can('discount')}
+          serialized={!!products.find((p) => p.id === cart.lines[dialog.line].productId)?.serialized}
+          onClose={() => setDialog(null)}
+          onSave={(l) => {
+            setCart((c) => ({ ...c, lines: c.lines.map((x, j) => (j === dialog.line ? l : x)) }))
+            setDialog(null)
+          }}
+          onRemove={() => {
+            setQty(dialog.line, 0)
+            setDialog(null)
+          }}
+        />
+      )}
+      {receipt && (
+        <ReceiptModal
+          sale={receipt}
+          settings={settings}
+          isNew
+          onClose={() => {
+            setReceipt(null)
+            searchRef.current?.focus()
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function CategoryChip({
+  active,
+  count,
+  onClick,
+  children,
+}: {
+  active: boolean
+  count?: number
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex shrink-0 items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-semibold transition ${
+        active
+          ? 'border-brand-500 bg-brand-500 text-white shadow-[0_4px_10px_-4px_rgba(44,130,134,0.6)]'
+          : 'border-hairline bg-white text-slate-600 hover:border-brand-500/60 hover:text-brand-600'
+      }`}
+    >
+      {children}
+      {count !== undefined && (
+        <span
+          className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
+            active ? 'bg-white/20 text-white' : 'bg-canvas text-slate-500'
+          }`}
+        >
+          {count}
+        </span>
+      )}
+    </button>
+  )
+}
+
+function DiscountModal({ subtotal, current, onApply, onClose }: { subtotal: number; current: number; onApply: (d: number) => void; onClose: () => void }) {
+  const [mode, setMode] = useState<'%' | 'KES'>('%')
+  const [value, setValue] = useState('')
+  const amount = mode === '%' ? Math.round((subtotal * (parseFloat(value) || 0)) / 100) : toCents(value)
+  return (
+    <Modal
+      title="Discount on whole sale"
+      onClose={onClose}
+      footer={
+        <>
+          {current > 0 && (
+            <button className="btn-ghost mr-auto" onClick={() => onApply(0)}>
+              Remove discount
+            </button>
+          )}
+          <button className="btn-primary" onClick={() => onApply(Math.min(amount, subtotal))}>
+            Apply −{money(Math.min(amount, subtotal))}
+          </button>
+        </>
+      }
+    >
+      <div className="mb-3 flex gap-2">
+        {(['%', 'KES'] as const).map((m) => (
+          <button key={m} className={mode === m ? 'btn-dark flex-1' : 'btn-ghost flex-1'} onClick={() => setMode(m)}>
+            {m === '%' ? 'Percent' : 'Amount'}
+          </button>
+        ))}
+      </div>
+      <input className="input text-lg" inputMode="decimal" autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder={mode === '%' ? 'e.g. 5' : 'e.g. 200'} />
+      <div className="mt-3 flex gap-2">
+        {[5, 10, 15].map((p) => (
+          <button key={p} className="btn-ghost flex-1" onClick={() => onApply(Math.round((subtotal * p) / 100))}>
+            {p}%
+          </button>
+        ))}
+      </div>
+    </Modal>
+  )
+}
+
+function CustomItemModal({ onAdd, onClose }: { onAdd: (l: SaleLine) => void; onClose: () => void }) {
+  const [name, setName] = useState('Labour')
+  const [price, setPrice] = useState('')
+  const [qty, setQty] = useState(1)
+  return (
+    <Modal
+      title="Custom item / labour"
+      onClose={onClose}
+      footer={
+        <button
+          className="btn-primary"
+          disabled={!name.trim() || toCents(price) <= 0}
+          onClick={() => onAdd({ name: name.trim(), qty, unitPrice: toCents(price), unitCost: 0, discount: 0, taxable: true })}
+        >
+          Add to sale
+        </button>
+      }
+    >
+      <div className="space-y-3">
+        <div>
+          <label className="label">Description</label>
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="label">Price (KES)</label>
+            <input className="input" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Qty</label>
+            <input className="input" type="number" min={1} value={qty} onChange={(e) => setQty(Math.max(1, Number(e.target.value)))} />
+          </div>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function LineEditor({
+  line,
+  allowPrice,
+  serialized,
+  onSave,
+  onRemove,
+  onClose,
+}: {
+  line: SaleLine
+  allowPrice: boolean
+  serialized: boolean
+  onSave: (l: SaleLine) => void
+  onRemove: () => void
+  onClose: () => void
+}) {
+  const [qty, setQty] = useState(line.qty)
+  const [price, setPrice] = useState(String(line.unitPrice / 100))
+  const [discount, setDiscount] = useState(String(line.discount / 100))
+  const [serial, setSerial] = useState(line.serial ?? '')
+  return (
+    <Modal
+      title={line.name}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn-danger mr-auto" onClick={onRemove}>
+            <Trash2 size={16} /> Remove
+          </button>
+          <button
+            className="btn-primary"
+            onClick={() =>
+              onSave({
+                ...line,
+                qty: serialized ? 1 : Math.max(1, qty),
+                unitPrice: allowPrice ? toCents(price) : line.unitPrice,
+                discount: allowPrice ? Math.min(toCents(discount), toCents(price) * qty) : line.discount,
+                serial: serial.trim() || undefined,
+              })
+            }
+          >
+            Save
+          </button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-3 gap-3">
+        <div>
+          <label className="label">Qty</label>
+          <input className="input" type="number" min={1} value={qty} disabled={serialized} onChange={(e) => setQty(Number(e.target.value))} />
+        </div>
+        <div>
+          <label className="label">Unit price</label>
+          <input className="input" inputMode="decimal" value={price} disabled={!allowPrice} onChange={(e) => setPrice(e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Line discount</label>
+          <input className="input" inputMode="decimal" value={discount} disabled={!allowPrice} onChange={(e) => setDiscount(e.target.value)} />
+        </div>
+      </div>
+      {serialized && (
+        <div className="mt-3">
+          <label className="label">Serial number *</label>
+          <input className="input font-mono" data-scan="allow" autoFocus value={serial} onChange={(e) => setSerial(e.target.value)} placeholder="Scan or type the serial on the part" />
+          <p className="mt-1 text-xs text-slate-500">Recorded on the receipt for warranty claims.</p>
+        </div>
+      )}
+    </Modal>
+  )
+}
+
+function ParkedModal({ onResume, onClose }: { onResume: (p: ParkedSale) => void; onClose: () => void }) {
+  const parked = useLiveQuery(() => db.parked.orderBy('createdAt').reverse().toArray(), [], [])
+  return (
+    <Modal title="Parked sales" onClose={onClose}>
+      {parked.length === 0 && <p className="text-sm text-slate-500">No parked sales. Use Park to hold a sale while a customer fetches their bike or cash.</p>}
+      <div className="divide-y divide-slate-100">
+        {parked.map((p) => (
+          <div key={p.id} className="flex items-center justify-between py-2">
+            <div>
+              <div className="font-semibold">{p.label}</div>
+              <div className="text-xs text-slate-500">
+                {p.lines.length} lines · {new Date(p.createdAt).toLocaleTimeString('en-KE')}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button className="btn-ghost px-3" onClick={() => db.parked.delete(p.id!)} aria-label="Delete parked sale">
+                <Trash2 size={16} />
+              </button>
+              <button className="btn-primary" onClick={() => onResume(p)}>
+                Resume
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Modal>
+  )
+}
+
+export function OpenShiftModal({ onOpen, onClose }: { onOpen: (float: number) => Promise<void>; onClose: () => void }) {
+  const [float, setFloat] = useState('')
+  const [error, setError] = useState('')
+  return (
+    <Modal
+      title="Open shift"
+      onClose={onClose}
+      footer={
+        <button className="btn-primary" onClick={() => onOpen(toCents(float)).catch((e) => setError(errorText(e)))}>
+          Open shift
+        </button>
+      }
+    >
+      <p className="mb-3 text-sm text-slate-600">Count the cash in the drawer before the first sale. This is your opening float.</p>
+      <label className="label">Opening float (KES)</label>
+      <input className="input text-lg" inputMode="decimal" autoFocus value={float} onChange={(e) => setFloat(e.target.value)} placeholder="0" />
+      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+    </Modal>
+  )
+}
