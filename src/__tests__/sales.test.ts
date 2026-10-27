@@ -17,10 +17,29 @@ const lineFor = (p: Product, qty = 1): SaleLine => ({
   taxable: p.taxable,
 })
 
+/** Fixture products replacing the removed demo catalog. */
+async function seedFixture(): Promise<void> {
+  await db.products.bulkAdd([
+    { sku: 'BRK-PAD-F', name: 'Front brake pads', cost: 600_00, price: 850_00, stock: 10, reorderLevel: 3, fitment: [], taxable: true, serialized: false, trackStock: true, active: true, createdAt: 0, updatedAt: 0 },
+    { sku: 'LAB-FIT', name: 'Fitting labour', cost: 0, price: 300_00, stock: 0, reorderLevel: 0, fitment: [], taxable: false, serialized: false, trackStock: false, active: true, createdAt: 0, updatedAt: 0 },
+    { sku: 'ACC-HLM', name: 'Helmet', cost: 700_00, price: 1_200_00, stock: 8, reorderLevel: 2, fitment: [], taxable: true, serialized: false, trackStock: true, active: true, createdAt: 0, updatedAt: 0 },
+    { sku: 'ELC-CTRL', name: 'Controller', cost: 14_000_00, price: 21_000_00, stock: 5, reorderLevel: 1, fitment: [], taxable: true, serialized: true, trackStock: true, active: true, createdAt: 0, updatedAt: 0 },
+    { sku: 'TUB-17', name: 'Tube 17 inch', cost: 350_00, price: 650_00, stock: 10, reorderLevel: 4, fitment: [], taxable: true, serialized: false, trackStock: true, active: true, createdAt: 0, updatedAt: 0 },
+    { sku: 'BRK-LEV-L', name: 'Left brake lever', cost: 400_00, price: 700_00, stock: 6, reorderLevel: 5, fitment: [], taxable: true, serialized: false, trackStock: true, active: true, createdAt: 0, updatedAt: 0 },
+  ])
+  await db.customers.add({
+    name: 'Boda Fleet Ltd',
+    balance: 0,
+    creditLimit: 50_000_00,
+    createdAt: 0,
+  })
+}
+
 beforeEach(async () => {
   await db.delete()
   await db.open()
   await seedIfEmpty()
+  await seedFixture()
 })
 
 describe('sales', () => {

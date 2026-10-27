@@ -51,3 +51,8 @@ export function download(filename: string, content: string, type = 'text/csv') {
   a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
+
+/** Export a results grid: filename, header row and data rows. */
+export function downloadCsv(filename: string, headers: string[], rows: (string | number | undefined)[][]) {
+  download(filename.endsWith('.csv') ? filename : `${filename}.csv`, toCsv([headers, ...rows]))
+}

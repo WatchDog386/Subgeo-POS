@@ -26,7 +26,7 @@ import { useSession, type Permission } from './session'
 import { useSettings } from './db/settings'
 import LoginPage from './pages/LoginPage'
 import LoadingScreen from './components/LoadingScreen'
-import DashboardPage from './pages/DashboardPage'
+import ErpApp from './erp/ErpApp'
 import StaffDashboardPage from './pages/StaffDashboardPage'
 import StaffProductsPage from './pages/StaffProductsPage'
 import CustomerDisplayPage from './pages/CustomerDisplayPage'
@@ -140,24 +140,22 @@ export default function App() {
   if (!user) return <LoginPage />
   if (booting) return <LoadingScreen />
 
-  const isOwner = can('users')
+  // Owner lands in the medapp-style ERP shell (medapp header, tabs and
+  // accordion sidebar). Managers and cashiers keep the register shell.
+  if (can('users')) return <ErpApp />
+
   const isCashier = user.role === 'cashier'
   const visibleGroups = NAV_GROUPS.map((g) => ({
     ...g,
     items: g.items.filter((n) => {
       if (isCashier && n.to === '/sell') return false
-      if (n.to === '/products' && isOwner) return false
-      if (isOwner) return true
       if (!n.perm) return ['/dashboard', '/sell', '/sales', '/products', '/inventory', '/notifications'].includes(n.to)
       return can(n.perm)
     }),
   })).filter((g) => g.items.length > 0)
   const topTabs = isCashier
     ? TOP_TABS.filter((tab) => tab.to !== '/sell')
-    : TOP_TABS.filter((tab) => tab.to !== '/products')
-
-  // Staff land on the checkout workspace, not the owner's analytics dashboard.
-  const navLabel = (label: string) => (label === 'Dashboard' && !isOwner ? 'Checkout' : label)
+    : TOP_TABS
 
   // Card colors per top-bar tab, matching the register chrome.
   const TAB_COLORS: Record<string, { border: string; bg: string }> = {
@@ -208,7 +206,7 @@ export default function App() {
                   }
                   style={color ? { borderColor: color.border, background: color.bg } : undefined}
                 >
-                  {navLabel(tab.label)}
+                  {tab.label}
                 </NavLink>
               )
             })}
@@ -348,7 +346,7 @@ export default function App() {
                     }
                   >
                     <Icon size={17} className={`shrink-0 ${iconClass}`} />
-                    {navLabel(label)}
+                    {label}
                   </NavLink>
                 ))}
               </div>
@@ -358,7 +356,7 @@ export default function App() {
 
         <main className="custom-scrollbar min-h-0 flex-1 overflow-auto bg-mist">
           <Routes>
-            <Route path="/dashboard" element={can('users') ? <DashboardPage /> : <StaffDashboardPage />} />
+            <Route path="/dashboard" element={<StaffDashboardPage />} />
             <Route path="/sell" element={isCashier ? <StaffDashboardPage /> : <SellPage />} />
             <Route path="/sales" element={<SalesPage />} />
             <Route path="/products" element={<StaffProductsPage />} />

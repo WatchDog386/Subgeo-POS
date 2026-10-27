@@ -6,3 +6,6 @@ dist
 data
 *.db
 *.db-*
+
+# Reference screenshots for the ERP redesign (kept locally, not shipped)
+public/WhatsApp*

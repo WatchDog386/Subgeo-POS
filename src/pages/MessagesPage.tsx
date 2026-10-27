@@ -76,7 +76,7 @@ const SEED: Message[] = [
     body: [
       'Hi Grace,',
       'Yes, the 60V 20Ah pack is in stock at KES 28,500 fitted. We can book you in for Thursday afternoon — just reply with your plate number.',
-      'Regards, Subgeo Pharmacy',
+      'Regards, Subgeo Chemist',
     ],
     at: NOW - DAY * 1.4,
     folder: 'sent',
