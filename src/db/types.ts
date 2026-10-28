@@ -216,7 +216,7 @@ export interface Settings {
   mpesaTill: string
   mpesaMode: 'manual' | 'stk'
   apiUrl: string
-  bikeModels: string[]
+  dosageForms: string[]
   paperWidth: 58 | 80
   autoPrint: boolean
   openDrawerOnCash: boolean

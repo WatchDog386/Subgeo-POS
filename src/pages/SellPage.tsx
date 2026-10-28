@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Bike, Check, ChevronRight, CreditCard, Image as ImageIcon, Minus, PauseCircle, Package, Percent, Plus, Search, ShoppingCart, Trash2, UserRound, Wrench, X } from 'lucide-react'
+import { Check, ChevronRight, CreditCard, Image as ImageIcon, Minus, PauseCircle, Package, Percent, Plus, Search, ShoppingCart, Trash2, UserRound, Wrench, X } from 'lucide-react'
 import { db } from '../db/db'
 import { useSettings } from '../db/settings'
 import { completeSale } from '../db/sales'
@@ -60,7 +60,6 @@ export default function SellPage() {
   const [cart, setCart] = useState<CartState>(loadCart)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<number | 'all'>('all')
-  const [bike, setBike] = useState<string>('all')
   const [dialog, setDialog] = useState<Dialog>(null)
   const [receipt, setReceipt] = useState<Sale | null>(null)
   const [addedId, setAddedId] = useState<number | null>(null)
@@ -84,10 +83,9 @@ export default function SellPage() {
     const term = query.trim()
     return products
       .filter((p) => category === 'all' || p.categoryId === category)
-      .filter((p) => bike === 'all' || p.fitment.length === 0 || p.fitment.includes(bike))
       .filter((p) => !term || matchesSearch(p, term))
       .sort((a, b) => a.name.localeCompare(b.name))
-  }, [products, category, bike, query])
+  }, [products, category, query])
 
   const totals = computeTotals(cart.lines, cart.discount, settings.vatRate, settings.pricesIncludeVat)
 
@@ -228,20 +226,7 @@ export default function SellPage() {
             </button>
           </div>
           <div className="relative">
-            <Bike size={18} className="pointer-events-none absolute left-3 top-3 text-slate-500" />
-            <select
-              className="input h-11 w-48 rounded-md border-hairline bg-white pl-10 shadow-none focus:border-brand-500 focus:ring-brand-500/45"
-              value={bike}
-              onChange={(e) => setBike(e.target.value)}
-              title="Show parts that fit this bike"
-            >
-              <option value="all">All bikes</option>
-              {settings.bikeModels.map((m) => (
-                <option key={m} value={m}>
-                  Fits {m}
-                </option>
-              ))}
-            </select>
+            <Search size={18} className="pointer-events-none absolute left-3 top-3 text-slate-500" />
           </div>
         </div>
 
@@ -348,7 +333,7 @@ export default function SellPage() {
           {visible.length === 0 && (
             <div className="col-span-full flex flex-col items-center gap-2 py-16 text-slate-400">
               <ImageIcon size={32} strokeWidth={1.5} />
-              <p>No parts match. Try another search or bike filter.</p>
+              <p>No medicines match. Try another search.</p>
             </div>
           )}
         </div>
@@ -421,7 +406,6 @@ export default function SellPage() {
               {customer ? (
                 <>
                   {customer.name}
-                  {customer.bikeModel && <span className="text-slate-400"> · {customer.bikeModel}</span>}
                 </>
               ) : (
                 'Walk-in customer'
@@ -596,7 +580,6 @@ export default function SellPage() {
           onClose={() => setDialog(null)}
           onPick={(c?: Customer) => {
             setCart((x) => ({ ...x, customerId: c?.id }))
-            if (c?.bikeModel && settings.bikeModels.includes(c.bikeModel)) setBike(c.bikeModel)
             setDialog(null)
           }}
         />
@@ -858,7 +841,7 @@ function ParkedModal({ onResume, onClose }: { onResume: (p: ParkedSale) => void;
   const parked = useLiveQuery(() => db.parked.orderBy('createdAt').reverse().toArray(), [], [])
   return (
     <Modal title="Parked sales" onClose={onClose}>
-      {parked.length === 0 && <p className="text-sm text-slate-500">No parked sales. Use Park to hold a sale while a customer fetches their bike or cash.</p>}
+      {parked.length === 0 && <p className="text-sm text-slate-500">No parked sales. Use Park to hold a sale while a customer fetches their cash.</p>}
       <div className="divide-y divide-slate-100">
         {parked.map((p) => (
           <div key={p.id} className="flex items-center justify-between py-2">

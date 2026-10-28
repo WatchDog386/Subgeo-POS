@@ -15,7 +15,7 @@ export const DEFAULT_SETTINGS: Settings = {
   mpesaTill: '',
   mpesaMode: 'stk',
   apiUrl: '/api',
-  bikeModels: [],
+  dosageForms: [],
   paperWidth: 80,
   autoPrint: false,
   openDrawerOnCash: true,

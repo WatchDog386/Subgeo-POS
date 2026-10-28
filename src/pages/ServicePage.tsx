@@ -497,7 +497,7 @@ function JobModal({ job, onClose }: { job?: ServiceJob; onClose: () => void }) {
           <label className="label">Bike model</label>
           <select className="input" value={j.bikeModel ?? ''} onChange={(e) => set('bikeModel', e.target.value || undefined)}>
             <option value="">—</option>
-            {settings.bikeModels.map((m) => (
+            {settings.dosageForms.map((m: string) => (
               <option key={m}>{m}</option>
             ))}
           </select>

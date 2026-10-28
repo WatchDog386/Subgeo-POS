@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, Banknote, Bell, Bike, CreditCard, Database, Download, Info, Loader2, PackageSearch, Percent, Printer, Save, ShieldCheck, Smartphone, Store, Trash2, UserRound } from 'lucide-react'
+import { AlertTriangle, Banknote, Bell, Layers, CreditCard, Database, Download, Info, Loader2, PackageSearch, Percent, Printer, Save, ShieldCheck, Smartphone, Store, Trash2, UserRound } from 'lucide-react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
 import { saveSettings, useSettings } from '../db/settings'
@@ -14,7 +14,7 @@ import { useSession } from '../session'
 import { PageHeader, errorText, useToast } from '../components/ui'
 import ChangePinForm from '../components/ChangePinForm'
 
-const TABS = ['Shop & receipt', 'Taxes', 'Payments', 'Hardware', 'Bike models', 'Notifications', 'Security', 'Backup', 'About'] as const
+const TABS = ['Shop & receipt', 'Taxes', 'Payments', 'Hardware', 'Dosage forms', 'Notifications', 'Security', 'Backup', 'About'] as const
 type Tab = (typeof TABS)[number]
 
 const APP_VERSION = '0.1.0'
@@ -27,7 +27,7 @@ const SECTIONS: { group: string; items: { id: Tab; icon: typeof Store; tint: str
       { id: 'Taxes', icon: Percent, tint: 'bg-blue-100 text-blue-600', desc: 'VAT rate and whether shelf prices include tax.' },
       { id: 'Payments', icon: Banknote, tint: 'bg-violet-100 text-violet-600', desc: 'Currency, accepted tenders, M-Pesa and the local server.' },
       { id: 'Hardware', icon: Printer, tint: 'bg-slate-200 text-slate-600', desc: 'Receipt printers, cash drawer and barcode scanners.' },
-      { id: 'Bike models', icon: Bike, tint: 'bg-amber-100 text-amber-600', desc: 'Models used for part fitment and the Fits filter.' },
+      { id: 'Dosage forms', icon: Layers, tint: 'bg-amber-100 text-amber-600', desc: 'Tablets, capsules, syrup and other medicine forms.' },
     ],
   },
   {
@@ -109,7 +109,7 @@ export default function SettingsPage() {
           {tab === 'Taxes' && <TaxSettings />}
           {tab === 'Payments' && <PaymentsSettings />}
           {tab === 'Hardware' && <HardwareSettings />}
-          {tab === 'Bike models' && <BikeSettings />}
+          {tab === 'Dosage forms' && <DosageFormsSettings />}
           {tab === 'Notifications' && <NotifySettings />}
           {tab === 'Security' && <SecuritySettings />}
           {tab === 'Backup' && <BackupSettings />}
@@ -598,30 +598,30 @@ function HardwareSettings() {
   )
 }
 
-// ---------------------------------------------------------------- Bike models
+// ---------------------------------------------------------------- Dosage forms
 
-function BikeSettings() {
+function DosageFormsSettings() {
   const { draft, set, save } = useDraft()
   const [name, setName] = useState('')
   return (
     <>
-      <p className="mb-3 text-sm text-slate-600">Bike models drive the “Fits” filter on the Sell screen and part fitment. Add every model your customers ride.</p>
+      <p className="mb-3 text-sm text-slate-600">Dosage forms — tablets, capsules, syrup and other medicine forms. Add every form you stock.</p>
       <div className="mb-3 flex flex-wrap gap-2">
-        {draft.bikeModels.map((m) => (
+        {draft.dosageForms.map((m) => (
           <span key={m} className="flex items-center gap-1 rounded-full bg-slate-100 py-1 pl-3 pr-1 text-sm">
             {m}
-            <button className="rounded-full p-1 text-slate-400 hover:text-red-600" onClick={() => set('bikeModels', draft.bikeModels.filter((x) => x !== m))} aria-label={`Remove ${m}`}>
+            <button className="rounded-full p-1 text-slate-400 hover:text-red-600" onClick={() => set('dosageForms', draft.dosageForms.filter((x) => x !== m))} aria-label={`Remove ${m}`}>
               <Trash2 size={14} />
             </button>
           </span>
         ))}
       </div>
       <div className="flex gap-2">
-        <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ekon 450 M2" />
+        <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Tablet, Capsule, Syrup" />
         <button
           className="btn-dark"
           onClick={() => {
-            if (name.trim() && !draft.bikeModels.includes(name.trim())) set('bikeModels', [...draft.bikeModels, name.trim()])
+            if (name.trim() && !draft.dosageForms.includes(name.trim())) set('dosageForms', [...draft.dosageForms, name.trim()])
             setName('')
           }}
         >
@@ -638,9 +638,9 @@ function BikeSettings() {
 function NotifySettings() {
   const { draft, set, save } = useDraft()
   const rows: { key: 'notifyLowStock' | 'notifyOwing' | 'notifyJobUpdates'; title: string; desc: string; icon: typeof Bell }[] = [
-    { key: 'notifyLowStock', title: 'Low stock & reorders', desc: 'Parts at or below their reorder level, plus out-of-stock alerts.', icon: PackageSearch },
+    { key: 'notifyLowStock', title: 'Low stock & reorders', desc: 'Medicines at or below their reorder level, plus out-of-stock alerts.', icon: PackageSearch },
     { key: 'notifyOwing', title: 'Customer credit', desc: 'Customers with an outstanding on-account balance.', icon: UserRound },
-    { key: 'notifyJobUpdates', title: 'Service jobs', desc: 'Jobs waiting for parts and jobs ready for collection.', icon: Bell },
+    { key: 'notifyJobUpdates', title: 'Service jobs', desc: 'Jobs awaiting stock and jobs ready for collection.', icon: Bell },
   ]
   return (
     <>
