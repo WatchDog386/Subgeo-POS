@@ -410,7 +410,7 @@ export default function ErpApp() {
                 to={`/${t}`}
                 style={{ background: bg, borderColor: border }}
                 className={({ isActive }) =>
-                  `flex h-11 shrink-0 items-center gap-2 rounded-[4px] border px-5 text-sm font-semibold text-white shadow-sm transition ${
+                  `flex h-12 shrink-0 items-center gap-2 rounded-none border px-6 text-[15px] font-semibold text-white shadow-sm transition ${
                     isActive ? 'brightness-110' : 'hover:brightness-105'
                   }`
                 }

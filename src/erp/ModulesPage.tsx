@@ -104,9 +104,9 @@ function ModuleSales({
   const rows = sales.filter((s) => (kind === 'otc-return' ? s.status === 'refunded' || s.status === 'partially_refunded' : kind === 'invoice' ? s.status === 'completed' && s.customerId !== undefined : s.status === 'completed'))
   return (
     <div className="overflow-x-auto rounded-sm border border-slate-300 bg-white shadow-sm">
-      <table className="w-full border-collapse text-[13px] text-slate-700">
+      <table className="w-full border-collapse text-[15px] text-[#2b3337]">
         <thead>
-          <tr className="bg-[#dcdcd2] text-left text-[12px] font-semibold text-[#2c2a27]">
+          <tr className="bg-[#dcdcd2] text-left text-[14px] font-semibold text-[#2c2a27]">
             <th className="border-b border-slate-300 px-2 py-1.5">Bill No</th>
             <th className="border-b border-slate-300 px-2 py-1.5">Date</th>
             <th className="border-b border-slate-300 px-2 py-1.5">Patient Category</th>
@@ -126,7 +126,7 @@ function ModuleSales({
                 onClick={() => nav('/sales')}
                 className={`cursor-pointer border-b border-[#d6d2c8] transition hover:bg-[#eef2a8] ${i % 2 ? 'bg-white' : 'bg-[#f0ede2]'}`}
               >
-                <td className="px-2 py-1.5 font-mono text-[12px]">{prefix}-{String(s.id ?? 0).padStart(3, '0')}</td>
+                <td className="px-3 py-2 font-mono text-[14px]">{prefix}-{String(s.id ?? 0).padStart(3, '0')}</td>
                 <td className="px-2 py-1.5">{new Date(s.createdAt).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
                 <td className="px-2 py-1.5">OTC CLIENTS</td>
                 <td className="px-2 py-1.5">{s.payments[0] ? (s.payments[0].method === 'account' ? 'CREDIT ACCOUNT' : s.payments[0].method.toUpperCase()) : 'CASH'}</td>
@@ -169,9 +169,9 @@ function ModuleJobs({ jobs }: { jobs: ServiceJob[] }) {
   }
   return (
     <div className="overflow-x-auto rounded-sm border border-slate-300 bg-white shadow-sm">
-      <table className="w-full border-collapse text-[13px] text-slate-700">
+      <table className="w-full border-collapse text-[15px] text-[#2b3337]">
         <thead>
-          <tr className="bg-[#dcdcd2] text-left text-[12px] font-semibold text-[#2c2a27]">
+          <tr className="bg-[#dcdcd2] text-left text-[14px] font-semibold text-[#2c2a27]">
             <th className="border-b border-slate-300 px-2 py-1.5">Request No</th>
             <th className="border-b border-slate-300 px-2 py-1.5">Party</th>
             <th className="border-b border-slate-300 px-2 py-1.5">Service Request</th>
@@ -182,7 +182,7 @@ function ModuleJobs({ jobs }: { jobs: ServiceJob[] }) {
         <tbody>
           {jobs.map((j, i) => (
             <tr key={j.id} onClick={() => nav('/service')} className={`cursor-pointer border-b border-[#d6d2c8] transition hover:bg-[#eef2a8] ${i % 2 ? 'bg-white' : 'bg-[#f0ede2]'}`}>
-              <td className="px-2 py-1.5 font-mono text-[12px]">{j.jobNo}</td>
+              <td className="px-3 py-2 font-mono text-[14px]">{j.jobNo}</td>
               <td className="px-2 py-1.5">{j.customerName}</td>
               <td className="px-2 py-1.5">{j.complaint}</td>
               <td className="px-2 py-1.5 capitalize">{j.status.replace('_', ' ')}</td>
@@ -199,9 +199,9 @@ function ModuleParty({ parties }: { parties: (Customer | Supplier)[] }) {
   const nav = useNavigate()
   return (
     <div className="overflow-x-auto rounded-sm border border-slate-300 bg-white shadow-sm">
-      <table className="w-full border-collapse text-[13px] text-slate-700">
+      <table className="w-full border-collapse text-[15px] text-[#2b3337]">
         <thead>
-          <tr className="bg-[#dcdcd2] text-left text-[12px] font-semibold text-[#2c2a27]">
+          <tr className="bg-[#dcdcd2] text-left text-[14px] font-semibold text-[#2c2a27]">
             <th className="border-b border-slate-300 px-2 py-1.5">Party Code</th>
             <th className="border-b border-slate-300 px-2 py-1.5">Party Name</th>
             <th className="border-b border-slate-300 px-2 py-1.5">Phone</th>
@@ -214,7 +214,7 @@ function ModuleParty({ parties }: { parties: (Customer | Supplier)[] }) {
           ) : (
             parties.map((p, i) => (
               <tr key={p.id} onClick={() => nav('/customers')} className={`cursor-pointer border-b border-[#d6d2c8] transition hover:bg-[#eef2a8] ${i % 2 ? 'bg-white' : 'bg-[#f0ede2]'}`}>
-                <td className="px-2 py-1.5 font-mono text-[12px]">{p.id ? `PTY${String(p.id).padStart(4, '0')}` : '—'}</td>
+                <td className="px-3 py-2 font-mono text-[14px]">{p.id ? `PTY${String(p.id).padStart(4, '0')}` : '—'}</td>
                 <td className="px-2 py-1.5 font-semibold">{p.name}</td>
                 <td className="px-2 py-1.5">{p.phone ?? '—'}</td>
                 <td className="px-2 py-1.5">{p.email ?? '—'}</td>

@@ -218,7 +218,7 @@ function StockReport() {
           >
             {rows.length === 0 ? <ErpEmptyRow cols={7} /> : rows.map((p: Product, i) => (
               <tr key={p.id} className={`border-b border-[#d6d2c8] ${i % 2 ? 'bg-white' : 'bg-[#f0ede2]'}`}>
-                <td className="px-2 py-1.5 font-mono text-[12px]">{p.sku}</td>
+                <td className="px-3 py-2 font-mono text-[14px]">{p.sku}</td>
                 <td className="px-2 py-1.5 font-semibold">{p.name}</td>
                 <td className="px-2 py-1.5">{p.categoryId ? catById.get(p.categoryId) ?? '—' : '—'}</td>
                 <td className="px-2 py-1.5">{p.location ?? '—'}</td>
@@ -883,7 +883,7 @@ function NonCompliance() {
           <ErpTable columns={[{ label: 'Bill No' }, { label: 'Date' }, { label: 'Issue' }, { label: 'Amount', align: 'right' }]}>
             {rows.length === 0 ? <ErpEmptyRow cols={4} /> : rows.map((s, i) => (
               <tr key={s.id} className={`border-b border-[#d6d2c8] ${i % 2 ? 'bg-white' : 'bg-[#f0ede2]'}`}>
-                <td className="px-2 py-1.5 font-mono text-[12px]">{s.receiptNo}</td>
+                <td className="px-3 py-2 font-mono text-[14px]">{s.receiptNo}</td>
                 <td className="px-2 py-1.5">{fmtDate(s.createdAt)}</td>
                 <td className="px-2 py-1.5">Missing narration / untaxed lines</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{money(s.total, '')}</td>

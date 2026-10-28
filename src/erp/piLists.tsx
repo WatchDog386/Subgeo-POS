@@ -175,9 +175,9 @@ export function ErpTable({
 }) {
   return (
     <div className={`overflow-x-auto rounded-[4px] border border-[#b6b1a8] bg-white shadow-sm ${className}`}>
-      <table className="w-full border-collapse text-[12.5px] text-[#2c2a27]">
+      <table className="w-full border-collapse text-[15px] text-[#2b3337]">
         <thead>
-          <tr className="bg-[#dcdcd2] text-left text-[12px] font-semibold text-[#2c2a27]">
+          <tr className="bg-[#dcdcd2] text-left text-[14px] font-semibold text-[#2c2a27]">
             {columns.map((c) => (
               <th
                 key={c.label}

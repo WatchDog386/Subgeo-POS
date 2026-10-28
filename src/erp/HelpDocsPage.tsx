@@ -24,9 +24,9 @@ export default function ErpHelpDocsPage() {
   return (
     <ErpPanel title="HelpDocs - Document Center">
       <div className="overflow-x-auto rounded-sm border border-slate-300 bg-white shadow-sm">
-        <table className="w-full border-collapse text-[13px] text-slate-700">
+        <table className="w-full border-collapse text-[15px] text-[#2b3337]">
           <thead>
-            <tr className="bg-[#dcdcd2] text-left text-[12px] font-semibold text-[#2c2a27]">
+            <tr className="bg-[#dcdcd2] text-left text-[14px] font-semibold text-[#2c2a27]">
               <th className="w-10 border-b border-slate-300 px-2 py-2 text-center">
                 <input type="checkbox" className="h-4 w-4 accent-[#3b74b8]" />
               </th>
@@ -45,7 +45,7 @@ export default function ErpHelpDocsPage() {
                 <td className="px-2 py-1.5">{d.user}</td>
                 <td className="px-2 py-1.5 font-semibold">{d.type}</td>
                 <td className="px-2 py-1.5 text-slate-500">{d.description}</td>
-                <td className="px-2 py-1.5 font-mono text-[12px] text-[#3b74b8]">{d.attachment}</td>
+                <td className="px-3 py-2 font-mono text-[14px] text-[#3b74b8]">{d.attachment}</td>
               </tr>
             ))}
           </tbody>
