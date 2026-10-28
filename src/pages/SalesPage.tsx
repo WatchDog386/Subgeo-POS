@@ -251,7 +251,7 @@ function RefundModal({ sale, onClose, onDone }: { sale: Sale; onClose: () => voi
       </div>
       <div className="mt-3">
         <label className="label">Reason</label>
-        <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. wrong part for bike model" />
+        <input className="input" value={reason} onChange={(e) => setReason(e.target.value)}         placeholder="e.g. wrong medicine for patient" />
       </div>
     </Modal>
   )

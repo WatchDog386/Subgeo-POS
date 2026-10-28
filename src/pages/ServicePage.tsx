@@ -177,10 +177,10 @@ export default function ServicePage() {
     <div className="flex h-full flex-col p-4 lg:p-6">
       <PageHeader
         title="Service & fitting jobs"
-        subtitle="Track bikes in the workshop, the parts used and labour, then bill at the till"
+        subtitle="Track patient care in the service room, the medicines dispensed and labour, then bill at the till"
         actions={
           <button className="btn-primary" onClick={() => setOpen('new')}>
-            <Plus size={16} /> Book in a bike
+            <Plus size={16} /> Book in a patient
           </button>
         }
       />
@@ -230,7 +230,7 @@ export default function ServicePage() {
                       </span>
                     </div>
                     <div className="mt-0.5 font-semibold text-slate-900">{j.customerName}</div>
-                    <div className="text-xs text-slate-600">{[j.bikeModel, j.plate].filter(Boolean).join(' · ')}</div>
+                    <div className="text-xs text-slate-600">{j.plate}</div>
                     <div className="mt-1 line-clamp-2 text-sm text-slate-700">{j.complaint}</div>
                     <div className="mt-2 flex items-center justify-between text-xs">
                       {j.mechanic ? (
@@ -366,7 +366,7 @@ export default function ServicePage() {
             <ClockDots />
           </div>
           {recent.length === 0 ? (
-            <p className="mt-3 text-sm text-slate-500">No open jobs yet — book in the first bike.</p>
+            <p className="mt-3 text-sm text-slate-500">No open jobs yet — book in the first patient.</p>
           ) : (
             <ul className="mt-2 space-y-3">
               {recent.map((j) => {
@@ -458,7 +458,7 @@ function JobModal({ job, onClose }: { job?: ServiceJob; onClose: () => void }) {
 
   return (
     <Modal
-      title={job ? `Job ${job.jobNo}` : 'Book in a bike'}
+      title={job ? `Job ${job.jobNo}` : 'Book in a patient'}
       onClose={onClose}
       wide
       footer={
@@ -492,15 +492,6 @@ function JobModal({ job, onClose }: { job?: ServiceJob; onClose: () => void }) {
         <div>
           <label className="label">Phone</label>
           <input className="input" value={j.phone ?? ''} onChange={(e) => set('phone', e.target.value)} />
-        </div>
-        <div>
-          <label className="label">Bike model</label>
-          <select className="input" value={j.bikeModel ?? ''} onChange={(e) => set('bikeModel', e.target.value || undefined)}>
-            <option value="">—</option>
-            {settings.dosageForms.map((m: string) => (
-              <option key={m}>{m}</option>
-            ))}
-          </select>
         </div>
         <div>
           <label className="label">Plate</label>
@@ -545,7 +536,7 @@ function JobModal({ job, onClose }: { job?: ServiceJob; onClose: () => void }) {
         <select className="input flex-1" value={pick} onChange={(e) => setPick(e.target.value)}>
           <option value="">Add a part…</option>
           {products
-            .filter((p) => !j.bikeModel || p.fitment.length === 0 || p.fitment.includes(j.bikeModel))
+            .filter((p) => p.trackStock)
             .map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name} — {money(p.price, c)} ({p.stock} in stock)
@@ -572,7 +563,7 @@ function JobModal({ job, onClose }: { job?: ServiceJob; onClose: () => void }) {
           onClose={() => setPicking(false)}
           onPick={(c2?: Customer) => {
             if (c2)
-              setJ((x) => ({ ...x, customerId: c2.id, customerName: c2.name, phone: c2.phone, bikeModel: c2.bikeModel ?? x.bikeModel, plate: c2.plate ?? x.plate }))
+              setJ((x) => ({ ...x, customerId: c2.id, customerName: c2.name, phone: c2.phone, plate: c2.plate ?? x.plate }))
             setPicking(false)
           }}
         />

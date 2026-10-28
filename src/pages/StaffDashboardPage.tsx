@@ -311,13 +311,13 @@ export default function StaffDashboardPage() {
               <option value="">Walk-in customer</option>
               {customers.map((entry) => (
                 <option key={entry.id} value={entry.id}>
-                  {entry.name}{entry.bikeModel ? ` — ${entry.bikeModel}` : ''}
+                  {entry.name}{entry.bikeModel ? ` · Reg ${entry.bikeModel}` : ''}
                 </option>
               ))}
             </select>
             {customer && (
               <p className="pos-customer-detail">
-                {[customer.phone, customer.plate, customer.bikeModel].filter(Boolean).join(' · ')}
+                {[customer.phone, customer.bikeModel ? `Reg ${customer.bikeModel}` : '', customer.plate].filter(Boolean).join(' · ')}
                 {customer.balance > 0 ? ` · Owes ${money(customer.balance, settings.currency)}` : ''}
               </p>
             )}

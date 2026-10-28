@@ -72,7 +72,7 @@ export default function CustomersPage() {
             <tr>
               <th>Name</th>
               <th>Phone</th>
-              <th>Bike</th>
+              <th>Reg. no.</th>
               <th>Plate</th>
               <th className="text-right">Balance owed</th>
             </tr>
@@ -143,7 +143,7 @@ function CustomerDetail({ id, onClose, onEdit }: { id: number; onClose: () => vo
     >
       <div className="mb-4 grid gap-3 md:grid-cols-4">
         <Stat label="Phone" value={c.phone ?? '—'} />
-        <Stat label="Bike" value={[c.bikeModel, c.plate].filter(Boolean).join(' · ') || '—'} />
+        <Stat label="Reg." value={[c.bikeModel, c.plate].filter(Boolean).join(' · ') || '—'} />
         <Stat label="Lifetime spend" value={money(lifetime, settings.currency)} />
         <Stat label="Owes" value={money(c.balance, settings.currency)} danger={c.balance > 0} />
       </div>

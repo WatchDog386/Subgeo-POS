@@ -190,7 +190,7 @@ export default function DashboardPage() {
       title: 'Service bay',
       body:
         jobs === 0
-          ? 'No open service jobs. Create one from the Service page when a bike comes in.'
+          ? 'No open service jobs. Create one from the Service page when a patient comes in.'
           : `${jobs} job${jobs === 1 ? '' : 's'} still open. Follow up with customers waiting for parts.`,
       action: 'Open service jobs',
       to: '/service',
