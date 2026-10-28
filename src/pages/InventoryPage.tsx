@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ComponentType, ReactNode } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useSearchParams } from 'react-router-dom'
-import { Bike, Download, History, Package, Pencil, Plus, Printer, Search, SlidersHorizontal, Tag, Trash2, Upload } from 'lucide-react'
+import { Download, History, Package, Pencil, Plus, Printer, Search, SlidersHorizontal, Tag, Trash2, Upload } from 'lucide-react'
 import { db } from '../db/db'
 import { useSettings } from '../db/settings'
 import { adjustStock } from '../db/sales'
@@ -15,7 +15,7 @@ import { Badge, Empty, ListPanel, Modal, PageHeader, errorText, useToast } from 
 import { quotationImportSummary, quotationProductSkus } from '../db/quotationProducts'
 const API_BASE = '/api'
 
-const CSV_HEADER = ['sku', 'name', 'barcode', 'partNumber', 'category', 'brand', 'fitment', 'cost', 'price', 'stock', 'reorderLevel', 'location', 'taxable', 'serialized', 'trackStock']
+const CSV_HEADER = ['sku', 'name', 'barcode', 'regNumber', 'category', 'brand', 'cost', 'price', 'stock', 'reorderLevel', 'location', 'taxable', 'serialized', 'trackStock']
 
 export default function InventoryPage() {
   const [searchParams] = useSearchParams()
@@ -53,7 +53,7 @@ export default function InventoryPage() {
     return products
       .filter((p) => cat === 'all' || p.categoryId === cat)
       .filter((p) => !lowOnly || (p.trackStock && p.stock <= p.reorderLevel))
-      .filter((p) => !t || [p.name, p.sku, p.barcode, p.partNumber, p.brand, ...p.fitment].some((v) => v?.toLowerCase().includes(t)))
+      .filter((p) => !t || [p.name, p.sku, p.barcode, p.partNumber, p.brand].some((v) => v?.toLowerCase().includes(t)))
   }, [products, q, cat, lowOnly])
 
   const stockValue = products.filter((p) => p.trackStock && p.stock > 0).reduce((s, p) => s + p.stock * p.cost, 0)
@@ -64,14 +64,14 @@ export default function InventoryPage() {
 
   const exportCsv = () => {
     const data = products.map((p) => [
-      p.sku, p.name, p.barcode, p.partNumber, catName[p.categoryId ?? -1], p.brand, p.fitment.join('|'),
+      p.sku, p.name, p.barcode, p.partNumber, catName[p.categoryId ?? -1], p.brand,
       p.cost / 100, p.price / 100, p.stock, p.reorderLevel, p.location, p.taxable ? 1 : 0, p.serialized ? 1 : 0, p.trackStock ? 1 : 0,
     ])
     download(`products-${new Date().toISOString().slice(0, 10)}.csv`, toCsv([CSV_HEADER, ...data]))
   }
 
   const clearAllInventory = async () => {
-    if (!confirm('Are you sure you want to delete ALL parts from inventory? This cannot be undone.')) return
+    if (!confirm('Are you sure you want to delete ALL medicines from stock? This cannot be undone.')) return
     await db.products.clear()
     // Also clear server-side if available
     try {
@@ -79,7 +79,7 @@ export default function InventoryPage() {
     } catch {
       // Server may not be running; local clear is still effective
     }
-    toast('All parts deleted from inventory')
+    toast('All medicines deleted from stock')
     setQ('')
     setCat('all')
     setLowOnly(false)
@@ -115,7 +115,6 @@ export default function InventoryPage() {
             partNumber: get(r, 'partNumber') || prev?.partNumber,
             brand: get(r, 'brand') || prev?.brand,
             categoryId: categoryId ?? prev?.categoryId,
-            fitment: get(r, 'fitment') ? get(r, 'fitment')!.split('|').map((s) => s.trim()).filter(Boolean) : prev?.fitment ?? [],
             cost: num('cost') !== undefined ? toCents(num('cost')!) : prev?.cost ?? 0,
             price: num('price') !== undefined ? toCents(num('price')!) : prev?.price ?? 0,
             stock: num('stock') ?? prev?.stock ?? 0,
@@ -125,6 +124,7 @@ export default function InventoryPage() {
             serialized: flag(get(r, 'serialized'), prev?.serialized ?? false),
             trackStock: flag(get(r, 'trackStock'), prev?.trackStock ?? true),
             active: prev?.active ?? true,
+            fitment: [],
             createdAt: prev?.createdAt ?? now,
             updatedAt: now,
           }
@@ -142,8 +142,8 @@ export default function InventoryPage() {
   return (
     <div className="p-4 lg:p-6">
       <PageHeader
-        title="Inventory"
-        subtitle={`${products.length} parts · ${inactiveCount} inactive · stock value ${money(stockValue, settings.currency)} at cost · ${lowCount} low on stock`}
+        title="Stock"
+        subtitle={`${products.length} medicines · ${inactiveCount} inactive · stock value ${money(stockValue, settings.currency)} at cost · ${lowCount} low on stock`}
         actions={
           <>
             <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={(e) => e.target.files?.[0] && importCsv(e.target.files[0])} />
@@ -157,14 +157,14 @@ export default function InventoryPage() {
               <Trash2 size={16} /> Clear all
             </button>
             <button className="btn-primary" onClick={() => setEditing({})}>
-              <Plus size={16} /> New part
+              <Plus size={16} /> New medicine
             </button>
           </>
         }
       />
       {quoteProducts.length > 0 && (
         <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-950">
-          <div className="font-semibold">Quotation {quotationImportSummary.reference}: {quoteProducts.length} parts in the catalog</div>
+          <div className="font-semibold">Quotation {quotationImportSummary.reference}: {quoteProducts.length} medicines in the catalog</div>
           <p className="mt-1 text-blue-800">
             {quoteSetupCount} still need barcode, selling price, or activation. The quoted {quotationImportSummary.requestedUnits} units are not counted as on-hand stock; record a receipt after availability is confirmed.
           </p>
@@ -197,7 +197,7 @@ export default function InventoryPage() {
         </label>
       </div>
       <ListPanel
-        title="Parts inventory"
+        title="Medicines in stock"
         barClassName="hidden sm:flex"
         toolbarClassName="hidden sm:flex"
         actions={
@@ -246,11 +246,11 @@ export default function InventoryPage() {
         }
       >
         <table className="w-full min-w-[900px]">
-          <thead className="table-head">
+            <thead className="table-head">
             <tr>
               <th>SKU</th>
-              <th>Part</th>
-              <th>Fits</th>
+              <th>Medicine</th>
+              <th>Reg. no.</th>
               <th>Bin</th>
               <th className="text-right">Stock</th>
               <th className="text-right">Cost</th>
@@ -262,14 +262,13 @@ export default function InventoryPage() {
           <tbody>
             {rows.map((p) => {
               const margin = p.price ? Math.round(((p.price - p.cost) / p.price) * 100) : 0
-              const quotationPart = quotationProductSkus.has(p.sku)
               return (
                 <tr key={p.id} className="table-row">
                   <td className="font-mono text-xs">{p.sku}</td>
                   <td>
                     <div className="font-semibold">{p.name}</div>
                     <div className="flex flex-wrap items-center gap-1 text-xs text-slate-500">
-                      {[catName[p.categoryId ?? -1], p.partNumber && `P/N ${p.partNumber}`, p.barcode].filter(Boolean).join(' · ')}
+                      {[catName[p.categoryId ?? -1], p.partNumber && `Reg ${p.partNumber}`, p.barcode].filter(Boolean).join(' · ')}
                       {!p.active && (
                         <span className="rounded bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-600" title="Not available on the cashier screen until activated">
                           Draft · not for sale
@@ -277,7 +276,6 @@ export default function InventoryPage() {
                       )}
                     </div>
                   </td>
-                  <td className="text-xs">{p.fitment.length ? p.fitment.join(', ') : <span className="text-slate-400">{quotationPart ? 'Fitment unconfirmed' : 'Universal'}</span>}</td>
                   <td className="text-xs">{p.location}</td>
                   <td className="text-right">
                     {p.trackStock ? <Badge tone={p.stock <= 0 ? 'red' : p.stock <= p.reorderLevel ? 'amber' : 'green'}>{p.stock}</Badge> : '—'}
@@ -316,7 +314,7 @@ export default function InventoryPage() {
             })}
           </tbody>
         </table>
-        {rows.length === 0 && <Empty>No parts found.</Empty>}
+        {rows.length === 0 && <Empty>No medicines found.</Empty>}
       </ListPanel>
 
       {editing && <ProductForm initial={editing} onClose={() => setEditing(null)} />}
@@ -326,7 +324,7 @@ export default function InventoryPage() {
   )
 }
 
-/** Panel used to group the part form — mirrors the ListPanel chrome exactly. */
+/** Panel used to group the medicine form — mirrors the ListPanel chrome exactly. */
 function Section({
   icon: Icon,
   title,
@@ -358,7 +356,6 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
   const categories = useLiveQuery(() => db.categories.toArray(), [], [])
   const suppliers = useLiveQuery(() => db.suppliers.toArray(), [], [])
   const [p, setP] = useState<Partial<Product>>({
-    fitment: [],
     cost: 0,
     price: 0,
     stock: 0,
@@ -391,10 +388,10 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
   const save = async () => {
     try {
       if (!p.sku?.trim() || !p.name?.trim()) throw new Error('SKU and name are required')
-      if (p.active && toCents(price) <= 0) throw new Error('Set a selling price above zero before activating this part')
+      if (p.active && toCents(price) <= 0) throw new Error('Set a selling price above zero before activating this medicine')
       if (p.active && quotationProductSkus.has(p.sku.trim())) {
-        if (!p.barcode?.trim()) throw new Error('Add the barcode before activating this quoted part')
-        if (p.trackStock !== false && (p.stock ?? 0) <= 0) throw new Error('Receive stock before activating this quoted part')
+        if (!p.barcode?.trim()) throw new Error('Add the barcode before activating this quoted medicine')
+        if (p.trackStock !== false && (p.stock ?? 0) <= 0) throw new Error('Receive stock before activating this quoted medicine')
       }
       const clash = await db.products.where('sku').equals(p.sku.trim()).first()
       if (clash && clash.id !== p.id) throw new Error(`SKU ${p.sku} is already used by ${clash.name}`)
@@ -439,18 +436,16 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
           active: record.active === false ? 0 : 1,
         }),
       }).catch(() => {})
-      toast(isNew ? 'Part added' : 'Part updated')
+      toast(isNew ? 'Medicine added' : 'Medicine updated')
       onClose()
     } catch (e) {
       toast(errorText(e), 'error')
     }
   }
 
-  const toggleFit = (m: string) => set('fitment', p.fitment!.includes(m) ? p.fitment!.filter((x) => x !== m) : [...p.fitment!, m])
-
   return (
     <Modal
-      title={isNew ? 'New part' : `Edit ${p.name}`}
+      title={isNew ? 'New medicine' : `Edit ${p.name}`}
       onClose={onClose}
       wide
       footer={
@@ -459,7 +454,7 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
             Cancel
           </button>
           <button className="btn-primary" onClick={save}>
-            Save part
+            Save medicine
           </button>
           <button
             className="btn-ghost"
@@ -474,20 +469,16 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
         </>
       }
     >
-      <Section icon={Package} title="Part details" hint={isNew ? 'New part' : 'Editing'}>
+          <Section icon={Package} title="Medicine details" hint={isNew ? 'New medicine' : 'Editing'}>
         <div className="grid gap-3 md:grid-cols-3">
           <div className="md:col-span-2">
             <label className="label">Name *</label>
             <input className="input" value={p.name ?? ''} onChange={(e) => set('name', e.target.value)} autoFocus />
           </div>
           <div>
-            <label className="label">SKU *</label>
-            <input className="input font-mono uppercase" value={p.sku ?? ''} onChange={(e) => set('sku', e.target.value.toUpperCase())} />
-          </div>
-          <div>
             <label className="label">Barcode</label>
             <input className="input font-mono" data-scan="allow" placeholder="Barcode (auto-generated from SKU if blank)" value={p.barcode ?? ''} onChange={(e) => set('barcode', e.target.value)} />
-            <span className="text-[10px] text-slate-500">Leave blank to auto-generate from SKU, then print a label to stick on the part.</span>
+            <span className="text-[10px] text-slate-500">Leave blank to auto-generate from SKU, then print a label to stick on the medicine.</span>
           </div>
           <div>
             <label className="label">Labels to print</label>
@@ -600,38 +591,16 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
         </div>
       </Section>
 
-      <Section icon={Bike} title="Bike fitment" hint="Leave empty for universal parts">
-        <div className="flex flex-wrap gap-2">
-          {settings.bikeModels.map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => toggleFit(m)}
-              className={`rounded-full border px-3 py-1.5 text-sm font-semibold transition duration-150 ${
-                p.fitment!.includes(m)
-                  ? 'border-brand-500 bg-brand-500 text-white shadow-[0_4px_10px_-4px_rgba(44,130,134,0.6)]'
-                  : 'border-hairline bg-white text-slate-600 hover:border-brand-500/60 hover:text-brand-600'
-              }`}
-            >
-              {m}
-            </button>
-          ))}
-          {settings.bikeModels.length === 0 && (
-            <span className="text-sm text-ink-faint">No bike models configured yet — add them in Settings.</span>
-          )}
-        </div>
-      </Section>
-
       <Section icon={SlidersHorizontal} title="Options">
-        <div className="grid gap-2.5 sm:grid-cols-2">
-          {(
-            [
-              ['taxable', 'VAT applies'],
-              ['trackStock', 'Track stock'],
-              ['serialized', 'Ask for serial no. (batteries, controllers, motors)'],
-              ['active', 'Active (shown on Sell screen)'],
-            ] as const
-          ).map(([k, label]) => (
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            {(
+              [
+                ['taxable', 'VAT applies'],
+                ['trackStock', 'Track stock'],
+                ['serialized', 'Ask for serial no.'],
+                ['active', 'Active (shown on Sell screen)'],
+              ] as const
+            ).map(([k, label]) => (
             <label
               key={k}
               className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-hairline bg-white px-3 py-2.5 transition duration-150 hover:border-brand-400 hover:bg-brand-50/50"

@@ -285,14 +285,14 @@ export default function ErpApp() {
       <header className="flex h-[92px] shrink-0 items-center gap-4 bg-white px-4">
         <div className="flex min-w-0 items-center gap-3">
           <img src="logo.png" alt="SUBGEO" className="h-[72px] w-[72px] shrink-0 object-contain" />
-          <span className="text-[17px] font-bold text-slate-700">{APP_VERSION}</span>
+          <span className="text-[15px] font-bold text-slate-700">{APP_VERSION}</span>
         </div>
         <div className="hidden min-w-0 flex-1 text-center md:block">
-          <span className="block truncate text-[21px] font-bold tracking-[0.06em] text-slate-800">{COMPANY_LABEL}</span>
-          <span className="block font-mono text-[11px] font-semibold text-slate-400">{LICENSE_PERIOD}</span>
+          <span className="block truncate text-[15px] font-bold tracking-[0.06em] text-slate-800">{COMPANY_LABEL}</span>
+          <span className="block font-mono text-[13px] font-semibold text-slate-400">{LICENSE_PERIOD}</span>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-3">
-          <span className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[12px] font-medium text-slate-600" title={online ? 'Online' : 'Offline'}>
+          <span className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[13px] font-medium text-slate-600" title={online ? 'Online' : 'Offline'}>
             <span className={`h-2 w-2 rounded-full ${online ? 'bg-emerald-500' : 'bg-amber-500'}`} />
             {online ? 'Online' : 'Offline'}
           </span>
@@ -307,7 +307,7 @@ export default function ErpApp() {
               <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 ring-1 ring-slate-200">
                 <img src={user.image ?? 'avatar.svg'} alt={user.name} className="h-full w-full object-cover" />
               </span>
-              <span className="hidden text-[14px] font-bold text-slate-800 sm:block">{user.name}</span>
+              <span className="hidden text-[15px] font-bold text-slate-800 sm:block">{user.name}</span>
               <ChevronDown size={15} className={`text-slate-400 transition ${menuOpen ? 'rotate-180' : ''}`} />
             </button>
             {menuOpen && (

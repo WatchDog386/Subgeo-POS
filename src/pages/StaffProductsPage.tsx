@@ -65,7 +65,7 @@ export default function StaffProductsPage() {
 
   return (
     <div className="p-4 lg:p-6">
-      <PageHeader title="Products" subtitle="Live stock levels — check here before promising a part to a customer." />
+      <PageHeader title="Products" subtitle="Live stock levels — check here before promising a medicine to a patient." />
 
       <ListPanel
         title={`Products · ${visible.length} shown`}
@@ -77,7 +77,7 @@ export default function StaffProductsPage() {
                 <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   className="w-60 rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-8 text-sm text-slate-700 outline-none transition focus:border-slate-500"
-                  placeholder="Search name, part no., SKU or barcode"
+                  placeholder="Search name, reg. no., SKU or barcode"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   aria-label="Search products"
@@ -142,9 +142,6 @@ export default function StaffProductsPage() {
                       <td className="font-mono text-xs">{p.sku}</td>
                       <td>
                         <div className="font-semibold">{p.name}</div>
-                        {p.fitment.length > 0 && (
-                          <div className="text-xs text-slate-500">Fits: {p.fitment.join(', ')}</div>
-                        )}
                       </td>
                       <td className="text-xs">{categoryName(p.categoryId)}</td>
                       <td className="text-xs">{p.partNumber || <span className="text-slate-400">—</span>}</td>
@@ -186,7 +183,7 @@ export default function StaffProductsPage() {
                     <div className="truncate text-xs text-slate-400">{p.partNumber || p.sku}</div>
                     <div className="mt-2 flex items-center justify-between gap-2">
                       <span className="text-sm font-bold text-slate-900">{money(p.price, settings.currency)}</span>
-                      <Badge tone={STOCK_TONE[status]}>{p.trackStock ? `${p.stock} pcs` : 'Service'}</Badge>
+                      <Badge tone={STOCK_TONE[status]}>{p.trackStock ? `${p.stock} units` : 'Service'}</Badge>
                     </div>
                   </div>
                 </div>

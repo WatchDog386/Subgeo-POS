@@ -18,14 +18,14 @@ const DAY = 86_400_000
 const SEED: Message[] = [
   {
     id: 1,
-    from: 'AutoSpares Ltd <orders@autospares.co.ke>',
+    from: 'MediSupply Ltd <orders@medisupply.co.ke>',
     to: 'admin@subgeo.com',
     subject: 'PO-000012 confirmed — dispatching tomorrow',
     body: [
       'Hi,',
-      'We confirm receipt of your purchase order PO-000012 for 24 chain sprockets and 12 inner tubes. The goods will be dispatched tomorrow morning and delivered to your Nairobi address.',
+      'We confirm receipt of your purchase order PO-000012 for 24 boxes of paracetamol and 12 bottles of amoxicillin. The goods will be dispatched tomorrow morning and delivered to your Nairobi address.',
       'Attached invoice is due on the 30th of this month.',
-      'Regards, AutoSpares Ltd',
+      'Regards, MediSupply Ltd',
     ],
     at: NOW - DAY * 0.2,
     folder: 'inbox',
