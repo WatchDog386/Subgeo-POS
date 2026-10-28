@@ -68,7 +68,7 @@ function ListPicker({
                     onSelect(isOn ? selected.filter((x) => x !== item) : [...selected, item])
                   }
                   className={`w-full px-2 py-1 text-left text-[15px] transition ${
-                    isOn ? 'bg-[#f0a848] text-[#1f272b]' : i % 2 ? 'bg-white hover:bg-[#f3f4f5]' : 'bg-[#f3ece2] hover:bg-[#f3f4f5]'
+                    isOn ? 'bg-[#f0a848] text-[#1f272b]' : i % 2 ? 'bg-white hover:bg-[#f3f4f5]' : 'bg-[#f2f4f5] hover:bg-[#f3f4f5]'
                   }`}
                 >
                   {render ? render(item) : item}
@@ -213,7 +213,7 @@ export function ErpPanel({ title, children, actions }: { title: ReactNode; child
         <h2 className="text-[17px] font-bold text-[#1f272b]">{title}</h2>
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </div>
-      <div className="space-y-3 bg-[#e2ddd3] p-3">{children}</div>
+      <div className="space-y-3 bg-[#e4e7e9] p-3">{children}</div>
     </section>
   )
 }

@@ -71,7 +71,7 @@ function DateRange({
 function ReportActions({ onExport, rows }: { onExport: () => void; rows: number }) {
   return (
     <div className="flex items-center gap-2">
-      <button type="button" onClick={() => window.print()} className="flex items-center gap-1 rounded-sm border border-[#969ea4] bg-gradient-to-b from-[#d3d9dc] to-[#bcc3c8] px-3 py-1.5 text-[14px] font-bold text-[#333b3f] transition hover:brightness-105">
+      <button type="button" onClick={() => window.print()} className="flex items-center gap-1 rounded-sm min-h-[52px] border border-[#969ea4] bg-gradient-to-b from-[#d3d9dc] to-[#bcc3c8] px-5 text-[16px] font-bold text-[#333b3f] shadow-sm transition hover:brightness-105">
         <Printer size={14} /> Print
       </button>
       <button type="button" onClick={onExport} disabled={rows === 0} className="flex items-center gap-1 rounded-sm bg-[#2e8fc4] px-2.5 py-1.5 text-[12px] font-bold text-white shadow-sm transition enabled:hover:brightness-105 disabled:opacity-40">
@@ -151,7 +151,7 @@ function MonthWiseAnalysis() {
               <ErpEmptyRow cols={5} />
             ) : (
               byMonth.map((m, i) => (
-                <tr key={m.month} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f3ece2]'}`}>
+                <tr key={m.month} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f2f4f5]'}`}>
                   <td className="px-2 py-1.5 font-semibold">{m.month}</td>
                   <td className="px-2 py-1.5 text-right tabular-nums">{m.bills}</td>
                   <td className="px-2 py-1.5 text-right tabular-nums">{money(m.gross, '')}</td>
@@ -217,7 +217,7 @@ function StockReport() {
             ]}
           >
             {rows.length === 0 ? <ErpEmptyRow cols={7} /> : rows.map((p: Product, i) => (
-              <tr key={p.id} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f3ece2]'}`}>
+              <tr key={p.id} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f2f4f5]'}`}>
                 <td className="px-2 py-1.5 font-mono text-[12px]">{p.sku}</td>
                 <td className="px-2 py-1.5 font-semibold">{p.name}</td>
                 <td className="px-2 py-1.5">{p.categoryId ? catById.get(p.categoryId) ?? '—' : '—'}</td>
@@ -258,7 +258,7 @@ function StockReorder() {
         <>
           <ErpTable columns={[{ label: 'Medicine' }, { label: 'Stock', align: 'right' }, { label: 'Reorder Level', align: 'right' }, { label: 'EOQ Suggestion', align: 'right' }]}>
             {rows.length === 0 ? <ErpEmptyRow cols={4} /> : rows.map((p, i) => (
-              <tr key={p.id} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f3ece2]'}`}>
+              <tr key={p.id} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f2f4f5]'}`}>
                 <td className="px-2 py-1.5 font-semibold">{p.name}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{p.stock}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{p.reorderLevel}</td>
@@ -325,7 +325,7 @@ function AbcAnalysis() {
         <>
           <ErpTable columns={[{ label: 'Material' }, { label: 'Qty Issued', align: 'right' }, { label: 'Value', align: 'right' }, { label: 'Cumulative %', align: 'right' }, { label: 'Band', align: 'center' }]}>
             {viewRows.length === 0 ? <ErpEmptyRow cols={5} /> : viewRows.map((r, i) => (
-              <tr key={r.key} className={`border-b border-slate-100 ${r.band === 'A' ? 'bg-emerald-50' : i % 2 ? 'bg-white' : 'bg-[#f3ece2]'}`}>
+              <tr key={r.key} className={`border-b border-slate-100 ${r.band === 'A' ? 'bg-emerald-50' : i % 2 ? 'bg-white' : 'bg-[#f2f4f5]'}`}>
                 <td className="px-2 py-1.5 font-semibold">{r.name}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{r.qty}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{money(r.value, '')}</td>
@@ -410,7 +410,7 @@ function AgeingRows({
       <>
         <ErpTable columns={[{ label: 'Ageing Bucket' }, { label: 'Parties', align: 'right' }, { label: 'Amount Due', align: 'right' }]}>
           {[0, 1, 2, 3, 4, 5, 6, 7].map((b, i) => (
-            <tr key={b} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f3ece2]'}`}>
+            <tr key={b} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f2f4f5]'}`}>
               <td className="px-2 py-1.5 font-semibold">{bucketLabel(b)}</td>
               <td className="px-2 py-1.5 text-right tabular-nums">{byBucket.get(b) ?? 0}</td>
               <td className="px-2 py-1.5 text-right tabular-nums">{money(rows.filter((r) => r.bucket === b).reduce((s, r) => s + r.customer.balance, 0), '')}</td>
@@ -430,7 +430,7 @@ function AgeingRows({
     <>
       <ErpTable columns={[{ label: 'Party' }, { label: 'Last Sale' }, { label: 'Balance', align: 'right' }, { label: 'Bucket' }]}>
         {rows.length === 0 ? <ErpEmptyRow cols={4} /> : rows.map((r, i) => (
-          <tr key={r.customer.id} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f3ece2]'}`}>
+          <tr key={r.customer.id} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f2f4f5]'}`}>
             <td className="px-2 py-1.5 font-semibold">{r.customer.name}</td>
             <td className="px-2 py-1.5">{fmtDate(r.customer.createdAt)}</td>
             <td className="px-2 py-1.5 text-right tabular-nums">{money(r.customer.balance, '')}</td>
@@ -462,7 +462,7 @@ function ReceivablesReport() {
         <>
           <ErpTable columns={[{ label: 'Party Master' }, { label: 'Phone' }, { label: 'Outstanding', align: 'right' }, { label: 'Bucket' }]}>
             {rows.length === 0 ? <ErpEmptyRow cols={4} /> : rows.map((c, i) => (
-              <tr key={c.id} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f3ece2]'}`}>
+              <tr key={c.id} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f2f4f5]'}`}>
                 <td className="px-2 py-1.5 font-semibold">{c.name}</td>
                 <td className="px-2 py-1.5">{c.phone ?? '—'}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{money(c.balance, '')}</td>
@@ -512,7 +512,7 @@ function PayablesReport() {
         <>
           <ErpTable columns={[{ label: 'Supplier (Party Master)' }, { label: 'Pending POs', align: 'right' }, { label: 'Payable', align: 'right' }]}>
             {rows.length === 0 ? <ErpEmptyRow cols={3} /> : rows.map((r, i) => (
-              <tr key={r.name} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f3ece2]'}`}>
+              <tr key={r.name} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f2f4f5]'}`}>
                 <td className="px-2 py-1.5 font-semibold">{r.name}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{r.pos}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{money(r.value, '')}</td>
@@ -554,7 +554,7 @@ function OutstandingReport() {
         <>
           <ErpTable columns={[{ label: 'Party' }, { label: 'Balance', align: 'right' }, { label: 'Credit Limit', align: 'right' }, { label: 'Head-room', align: 'right' }]}>
             {rows.length === 0 ? <ErpEmptyRow cols={4} /> : rows.map((c, i) => (
-              <tr key={c.id} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f3ece2]'}`}>
+              <tr key={c.id} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f2f4f5]'}`}>
                 <td className="px-2 py-1.5 font-semibold">{c.name}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{money(c.balance, '')}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{money(c.creditLimit, '')}</td>
@@ -615,7 +615,7 @@ function AuditTrail() {
         <>
           <ErpTable columns={[{ label: 'Date & Time' }, { label: 'Transaction' }, { label: 'Operation' }, { label: 'User' }]}>
             {rows.length === 0 ? <ErpEmptyRow cols={4} /> : rows.map((l, i) => (
-              <tr key={l.id} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f3ece2]'}`}>
+              <tr key={l.id} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f2f4f5]'}`}>
                 <td className="px-2 py-1.5">{fmtDate(l.at)} {new Date(l.at).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })}</td>
                 <td className="px-2 py-1.5 capitalize">{l.kind}</td>
                 <td className="px-2 py-1.5">{l.action}{l.detail ? ` — ${l.detail}` : ''}</td>
@@ -659,7 +659,7 @@ function ExceptionReport() {
         <>
           <ErpTable columns={[{ label: 'Area' }, { label: 'Item' }, { label: 'Exception' }, { label: 'Value', align: 'right' }]}>
             {rows.length === 0 ? <ErpEmptyRow cols={4} /> : rows.map((r, i) => (
-              <tr key={`${r.area}-${r.item}`} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f3ece2]'}`}>
+              <tr key={`${r.area}-${r.item}`} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f2f4f5]'}`}>
                 <td className="px-2 py-1.5 font-semibold">{r.area}</td>
                 <td className="px-2 py-1.5">{r.item}</td>
                 <td className="px-2 py-1.5 capitalize">{r.exception}</td>
@@ -695,7 +695,7 @@ function PriceComparison() {
         <>
           <ErpTable columns={[{ label: 'Medicine' }, { label: 'Purchase Cost', align: 'right' }, { label: 'Selling Price', align: 'right' }, { label: 'Margin', align: 'right' }]}>
             {rows.length === 0 ? <ErpEmptyRow cols={4} /> : rows.map((r, i) => (
-              <tr key={r.p.id} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f3ece2]'}`}>
+              <tr key={r.p.id} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f2f4f5]'}`}>
                 <td className="px-2 py-1.5 font-semibold">{r.p.name}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{money(r.p.cost, '')}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{money(r.p.price, '')}</td>
@@ -739,7 +739,7 @@ function LocationMIS() {
         <>
           <ErpTable columns={[{ label: 'Location (Bin)' }, { label: 'Medicines', align: 'right' }, { label: 'Stock Value', align: 'right' }]}>
             {rows.length === 0 ? <ErpEmptyRow cols={3} /> : rows.map((r, i) => (
-              <tr key={r.location} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f3ece2]'}`}>
+              <tr key={r.location} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f2f4f5]'}`}>
                 <td className="px-2 py-1.5 font-semibold">{r.location}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{r.items}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{money(r.value, '')}</td>
@@ -798,7 +798,7 @@ function BudgetAnalysis() {
         <>
           <ErpTable columns={[{ label: 'Month' }, { label: 'Target', align: 'right' }, { label: 'Actual', align: 'right' }, { label: 'Variance', align: 'right' }]}>
             {budget === 0 ? <ErpEmptyRow cols={4} /> : rows.map((r, i) => (
-              <tr key={r.month} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f3ece2]'}`}>
+              <tr key={r.month} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f2f4f5]'}`}>
                 <td className="px-2 py-1.5 font-semibold">{r.month}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{moneyShort(r.target)}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{moneyShort(r.actual)}</td>
@@ -843,7 +843,7 @@ function PartyStockLedger() {
         <>
           <ErpTable columns={[{ label: 'Date' }, { label: 'Medicine' }, { label: 'Reason' }, { label: 'Qty', align: 'right' }, { label: 'Reference' }]}>
             {rows.length === 0 ? <ErpEmptyRow cols={5} /> : rows.map((m, i) => (
-              <tr key={m.id} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f3ece2]'}`}>
+              <tr key={m.id} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f2f4f5]'}`}>
                 <td className="px-2 py-1.5">{fmtDate(m.at)}</td>
                 <td className="px-2 py-1.5 font-semibold">{m.productId !== undefined ? nameOf.get(m.productId) ?? '—' : '—'}</td>
                 <td className="px-2 py-1.5 capitalize">{m.reason}</td>
@@ -882,7 +882,7 @@ function NonCompliance() {
         <>
           <ErpTable columns={[{ label: 'Bill No' }, { label: 'Date' }, { label: 'Issue' }, { label: 'Amount', align: 'right' }]}>
             {rows.length === 0 ? <ErpEmptyRow cols={4} /> : rows.map((s, i) => (
-              <tr key={s.id} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f3ece2]'}`}>
+              <tr key={s.id} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f2f4f5]'}`}>
                 <td className="px-2 py-1.5 font-mono text-[12px]">{s.receiptNo}</td>
                 <td className="px-2 py-1.5">{fmtDate(s.createdAt)}</td>
                 <td className="px-2 py-1.5">Missing narration / untaxed lines</td>

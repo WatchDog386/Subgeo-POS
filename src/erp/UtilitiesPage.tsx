@@ -77,7 +77,7 @@ export default function ErpUtilitiesPage() {
               <span className="min-w-0">
                 <span className="block text-[14px] font-bold text-slate-800">{c.title}</span>
                 <span className="block text-[12px] text-slate-500">{c.desc}</span>
-                <span className="mt-1 inline-block rounded-sm bg-[#f0a848] px-2 py-0.5 text-[11px] font-bold text-slate-900">{c.cta}</span>
+                <span className="mt-1 inline-block rounded-sm border border-[#cc7010] bg-[#f2891d] px-2 py-0.5 text-[11px] font-bold text-white">{c.cta}</span>
               </span>
             </button>
           ))}

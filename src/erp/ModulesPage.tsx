@@ -58,13 +58,13 @@ function ErpModules({ label }: { label: string }) {
         title={active.title}
         actions={
           <>
-            <button type="button" onClick={() => nav(active.kind === 'service' ? '/service' : active.kind === 'party' ? '/customers' : active.kind === 'services-master' ? '/products' : active.kind === 'lpo' ? '/purchasing' : '/sell')} className="flex items-center gap-1 rounded-sm border border-[#5c8f31] bg-[#76b043] px-3 py-1.5 text-[14px] font-bold text-white transition hover:brightness-105 active:scale-95">
+            <button type="button" onClick={() => nav(active.kind === 'service' ? '/service' : active.kind === 'party' ? '/customers' : active.kind === 'services-master' ? '/products' : active.kind === 'lpo' ? '/purchasing' : '/sell')} className="flex items-center gap-1 rounded-sm min-h-[52px] border border-[#5c8f31] bg-[#76b043] px-5 text-[16px] font-bold text-white shadow-sm transition hover:bg-[#6da53c] active:scale-95">
               <Plus size={14} /> New
             </button>
-            <button type="button" onClick={() => nav(active.kind === 'service' ? '/service' : active.kind === 'party' ? '/customers' : active.kind === 'services-master' ? '/products' : active.kind === 'lpo' ? '/purchasing' : '/sales')} className="flex items-center gap-1 rounded-sm border border-[#969ea4] bg-gradient-to-b from-[#d3d9dc] to-[#bcc3c8] px-3 py-1.5 text-[14px] font-bold text-[#333b3f] transition hover:brightness-105">
+            <button type="button" onClick={() => nav(active.kind === 'service' ? '/service' : active.kind === 'party' ? '/customers' : active.kind === 'services-master' ? '/products' : active.kind === 'lpo' ? '/purchasing' : '/sales')} className="flex items-center gap-1 rounded-sm min-h-[52px] border border-[#969ea4] bg-gradient-to-b from-[#d3d9dc] to-[#bcc3c8] px-5 text-[16px] font-bold text-[#333b3f] shadow-sm transition hover:brightness-105">
               <Eye size={14} /> View
             </button>
-            <button type="button" className="flex items-center gap-1 rounded-sm border border-[#969ea4] bg-gradient-to-b from-[#d3d9dc] to-[#bcc3c8] px-3 py-1.5 text-[14px] font-bold text-[#333b3f] transition hover:brightness-105">
+            <button type="button" className="flex items-center gap-1 rounded-sm min-h-[52px] border border-[#969ea4] bg-gradient-to-b from-[#d3d9dc] to-[#bcc3c8] px-5 text-[16px] font-bold text-[#333b3f] shadow-sm transition hover:brightness-105">
               <Filter size={14} /> Filter
             </button>
           </>
@@ -124,7 +124,7 @@ function ModuleSales({
               <tr
                 key={s.id}
                 onClick={() => nav('/sales')}
-                className={`cursor-pointer border-b border-slate-100 transition hover:bg-sky-50 ${i % 2 ? 'bg-white' : 'bg-[#f3ece2]'}`}
+                className={`cursor-pointer border-b border-slate-100 transition hover:bg-sky-50 ${i % 2 ? 'bg-white' : 'bg-[#f2f4f5]'}`}
               >
                 <td className="px-2 py-1.5 font-mono text-[12px]">{prefix}-{String(s.id ?? 0).padStart(3, '0')}</td>
                 <td className="px-2 py-1.5">{new Date(s.createdAt).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
@@ -138,7 +138,7 @@ function ModuleSales({
           )}
         </tbody>
       </table>
-      <div className="flex flex-wrap items-center gap-1 border-t border-slate-300 bg-[#e2ddd3] px-2 py-1.5 text-slate-600">
+      <div className="flex flex-wrap items-center gap-1 border-t border-slate-300 bg-[#e4e7e9] px-2 py-1.5 text-slate-600">
         {['Delete', 'New', 'Edit', 'View', 'Copy', 'Print', 'Export'].map((a) => (
           <button
             key={a}
@@ -181,7 +181,7 @@ function ModuleJobs({ jobs }: { jobs: ServiceJob[] }) {
         </thead>
         <tbody>
           {jobs.map((j, i) => (
-            <tr key={j.id} onClick={() => nav('/service')} className={`cursor-pointer border-b border-slate-100 transition hover:bg-sky-50 ${i % 2 ? 'bg-white' : 'bg-[#f3ece2]'}`}>
+            <tr key={j.id} onClick={() => nav('/service')} className={`cursor-pointer border-b border-slate-100 transition hover:bg-sky-50 ${i % 2 ? 'bg-white' : 'bg-[#f2f4f5]'}`}>
               <td className="px-2 py-1.5 font-mono text-[12px]">{j.jobNo}</td>
               <td className="px-2 py-1.5">{j.customerName}</td>
               <td className="px-2 py-1.5">{j.complaint}</td>
@@ -213,7 +213,7 @@ function ModuleParty({ parties }: { parties: (Customer | Supplier)[] }) {
             <ErpEmptyRow cols={4} />
           ) : (
             parties.map((p, i) => (
-              <tr key={p.id} onClick={() => nav('/customers')} className={`cursor-pointer border-b border-slate-100 transition hover:bg-sky-50 ${i % 2 ? 'bg-white' : 'bg-[#f3ece2]'}`}>
+              <tr key={p.id} onClick={() => nav('/customers')} className={`cursor-pointer border-b border-slate-100 transition hover:bg-sky-50 ${i % 2 ? 'bg-white' : 'bg-[#f2f4f5]'}`}>
                 <td className="px-2 py-1.5 font-mono text-[12px]">{p.id ? `PTY${String(p.id).padStart(4, '0')}` : '—'}</td>
                 <td className="px-2 py-1.5 font-semibold">{p.name}</td>
                 <td className="px-2 py-1.5">{p.phone ?? '—'}</td>

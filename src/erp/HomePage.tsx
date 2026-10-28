@@ -73,7 +73,7 @@ export default function ErpHomePage() {
               <li key={t.label}>
                 <Link
                   to={t.to}
-                  className="block rounded-sm border border-slate-300 bg-[#f3ece2] px-3 py-2 text-[13px] shadow-sm transition hover:bg-amber-200"
+                  className="block rounded-sm border border-slate-300 bg-[#f2f4f5] px-3 py-2 text-[13px] shadow-sm transition hover:bg-amber-200"
                 >
                   <div className="font-semibold text-slate-800">{t.label}</div>
                   <div className="text-slate-500">{t.detail}</div>
@@ -149,7 +149,7 @@ export default function ErpHomePage() {
         {QUICK_ACCESS.map((q, i) => (
           <tr
             key={q.transaction}
-            className={`cursor-pointer border-b border-slate-100 transition hover:bg-sky-50 ${i % 2 ? 'bg-white' : 'bg-[#f3ece2]'}`}
+            className={`cursor-pointer border-b border-slate-100 transition hover:bg-sky-50 ${i % 2 ? 'bg-white' : 'bg-[#f2f4f5]'}`}
             onClick={() => nav(q.to)}
           >
             <td className="px-2 py-1.5">{q.module}</td>

@@ -38,7 +38,7 @@ export default function ErpHelpDocsPage() {
           </thead>
           <tbody>
             {DOCS.map((d, i) => (
-              <tr key={d.type} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f3ece2]'}`}>
+              <tr key={d.type} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f2f4f5]'}`}>
                 <td className="px-2 py-1.5 text-center">
                   <input type="checkbox" className="h-3.5 w-3.5 accent-[#3b74b8]" />
                 </td>

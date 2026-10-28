@@ -153,7 +153,7 @@ function Sidebar({
         >
           Report List
         </NavLink>
-        <div className="border-b-4 border-[#1857b0] bg-[#efe9df] px-2 py-2">
+        <div className="border-b-4 border-[#1857b0] bg-white px-2 py-2">
           <div className="flex items-center gap-1.5 px-1 py-1 text-[15px] font-bold text-[#1f272b]">
             <Folder size={15} className="shrink-0 text-amber-500" /> Report List
           </div>
@@ -209,7 +209,7 @@ function Sidebar({
               {isOpen ? <ChevronDown size={14} className="ml-auto shrink-0" /> : <ChevronRight size={14} className="ml-auto shrink-0" />}
             </button>
             {isOpen && (
-              <ul className="border-b-4 border-[#1857b0] bg-[#efe9df] py-1">
+              <ul className="border-b-4 border-[#1857b0] bg-white py-1">
                 {group.items.map((item) => (
                   <li key={item.to + item.label}>
                     <NavLink
@@ -236,7 +236,7 @@ function Sidebar({
         <div className="flex items-center gap-2 border-b border-[#8a6d1d] bg-[#c9a227] px-3 py-2.5 text-[13px] font-bold uppercase tracking-wide text-slate-900">
           <Star size={15} className="shrink-0 fill-slate-900" /> Favourites
         </div>
-        <ul className="bg-[#efe9df] pb-1">
+        <ul className="bg-white pb-1">
           {FAVOURITES.map((f) => (
             <li key={f.to + f.label}>
               <NavLink
@@ -423,7 +423,7 @@ export default function ErpApp() {
           </div>
 
           {/* Beige medapp work area */}
-          <main className="erp-scroll min-h-0 flex-1 overflow-auto bg-[#e2ddd3]">
+          <main className="erp-scroll min-h-0 flex-1 overflow-auto bg-[#e4e7e9]">
           <Routes>
             <Route path="/" element={<Navigate to="/home" replace />} />
             <Route path="/home" element={<ErpHomePage />} />
