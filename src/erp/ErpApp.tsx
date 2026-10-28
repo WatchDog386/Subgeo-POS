@@ -6,6 +6,9 @@ import {
   BookOpen,
   ChevronDown,
   ChevronRight,
+  FileText,
+  Folder,
+  Globe,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -37,8 +40,8 @@ import ErpReportsPage from './ReportsPage'
 import ErpChartsPage from './ChartsPage'
 import ErpUtilitiesPage from './UtilitiesPage'
 import ErpHelpDocsPage from './HelpDocsPage'
-import { APP_VERSION, BRANCH_CODE, COMPANY_LABEL, LICENSE_PERIOD, type ErpTab } from './config'
-import { FAVOURITES, MODULE_GROUPS, REPORT_ITEMS, UTILITY_ITEMS } from './erpNav'
+import { APP_VERSION, COMPANY_LABEL, LICENSE_PERIOD, type ErpTab } from './config'
+import { FAVOURITES, MODULE_GROUPS, REPORT_ITEMS, REPORT_TREE, UTILITY_ITEMS } from './erpNav'
 
 // Layout mirroring the old medapp window: white header with the store banner,
 // grey tab strip (Home | Modules | Reports | Charts | Utilities | HelpDocs),
@@ -117,9 +120,13 @@ function useOnline() {
 
 function Sidebar({
   groups,
+  variant,
+  activePath,
   onNavigate,
 }: {
   groups: { label: string; items: { label: string; to: string }[] }[]
+  variant: 'groups' | 'stack'
+  activePath: string
   onNavigate: () => void
 }) {
   const [open, setOpen] = useState<Record<string, boolean>>({})
@@ -130,22 +137,78 @@ function Sidebar({
     setOpen(all)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groups.map((g) => g.label).join('|')])
+
+  // Reports tab keeps the medapp look: a "Report List" tree on top, then the
+  // rest as a continuous stack of blue rows.
+  if (variant === 'stack') {
+    return (
+      <nav className="erp-scroll min-h-0 flex-1 overflow-y-auto">
+        <NavLink
+          to="/reports/list"
+          className={`block border-b border-[#123c7c] px-3 py-3 text-[14px] font-bold text-white transition ${
+            activePath === '/reports/list' || activePath === '/reports' ? 'bg-[#123c7c]' : 'bg-[#1857b0] hover:bg-[#1a5fc0]'
+          }`}
+          onClick={onNavigate}
+        >
+          Report List
+        </NavLink>
+        <div className="border-b-4 border-[#1857b0] bg-[#efe9df] px-2 py-2">
+          <div className="flex items-center gap-1.5 px-1 py-1 text-[13.5px] font-semibold text-slate-700">
+            <Folder size={15} className="shrink-0 text-amber-500" /> Report List
+          </div>
+          <ul>
+            {REPORT_TREE.items.map((doc) => (
+              <li key={doc}>
+                <NavLink
+                  to="/reports/list"
+                  onClick={onNavigate}
+                  className="flex items-center gap-1.5 px-5 py-1.5 text-[13px] text-slate-700 transition hover:bg-amber-200"
+                >
+                  <FileText size={14} className="shrink-0 text-slate-400" />
+                  <span className="truncate">{doc}</span>
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <ul>
+          {REPORT_ITEMS.filter((r) => r.to !== '/reports/list').map((r) => (
+            <li key={r.to}>
+              <NavLink
+                to={r.to}
+                onClick={onNavigate}
+                className={({ isActive }) =>
+                  `block border-b border-[#5b93dd] px-3 py-3 text-[13.5px] font-semibold transition ${
+                    isActive ? 'bg-[#f0a848] text-slate-900' : 'bg-[#1e63c5] text-white hover:bg-[#2a70d2]'
+                  }`
+                }
+              >
+                {r.label}
+              </NavLink>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    )
+  }
+
   return (
     <nav className="erp-scroll min-h-0 flex-1 overflow-y-auto pb-4">
       {groups.map((group) => {
         const isOpen = open[group.label] ?? true
         return (
-          <div key={group.label} className="mb-px">
+          <div key={group.label} className="mb-0">
             <button
               type="button"
               onClick={() => setOpen({ ...open, [group.label]: !isOpen })}
-              className="flex w-full items-center gap-2 bg-[#27538a] px-3 py-2 text-left text-[12px] font-bold uppercase tracking-wide text-white transition hover:bg-[#21507f]"
+              className="flex w-full items-center gap-2 border-b border-[#123c7c] bg-[#1857b0] px-3 py-3.5 text-left text-[14px] font-bold uppercase tracking-wide text-white transition hover:bg-[#1a5fc0]"
             >
-              {isOpen ? <ChevronDown size={14} className="shrink-0" /> : <ChevronRight size={14} className="shrink-0" />}
+              <Globe size={16} className="shrink-0 text-[#9cc0f0]" />
               <span className="truncate">{group.label}</span>
+              {isOpen ? <ChevronDown size={14} className="ml-auto shrink-0" /> : <ChevronRight size={14} className="ml-auto shrink-0" />}
             </button>
             {isOpen && (
-              <ul>
+              <ul className="border-b-4 border-[#1857b0] bg-[#efe9df] py-1">
                 {group.items.map((item) => (
                   <li key={item.to + item.label}>
                     <NavLink
@@ -153,12 +216,13 @@ function Sidebar({
                       end={item.to !== '/home'}
                       onClick={onNavigate}
                       className={({ isActive }) =>
-                        `block truncate border-b border-[#3f6da3]/40 px-5 py-2 text-[13px] text-white transition ${
-                          isActive ? 'bg-[#f0a848] text-slate-900' : 'hover:bg-[#5d90c9]'
+                        `flex items-center gap-2 px-4 py-2 text-[13.5px] text-slate-700 transition ${
+                          isActive ? 'bg-[#f0a848] font-semibold text-slate-900' : 'hover:bg-amber-200'
                         }`
                       }
                     >
-                      {item.label}
+                      <Globe size={14} className="shrink-0 text-[#2a70d2]" />
+                      <span className="truncate">{item.label}</span>
                     </NavLink>
                   </li>
                 ))}
@@ -167,23 +231,24 @@ function Sidebar({
           </div>
         )
       })}
-      <div className="mt-3">
-        <div className="flex items-center gap-2 bg-[#c9a227] px-3 py-2 text-[12px] font-bold uppercase tracking-wide text-slate-900">
-          <Star size={14} className="shrink-0 fill-slate-900" /> Favourites
+      <div className="mt-0">
+        <div className="flex items-center gap-2 border-b border-[#8a6d1d] bg-[#c9a227] px-3 py-2.5 text-[13px] font-bold uppercase tracking-wide text-slate-900">
+          <Star size={15} className="shrink-0 fill-slate-900" /> Favourites
         </div>
-        <ul>
+        <ul className="bg-[#efe9df] pb-1">
           {FAVOURITES.map((f) => (
             <li key={f.to + f.label}>
               <NavLink
                 to={f.to}
                 onClick={onNavigate}
                 className={({ isActive }) =>
-                  `block truncate border-b border-[#3f6da3]/40 px-5 py-2 text-[13px] transition ${
-                    isActive ? 'bg-[#f0a848] text-slate-900' : 'text-white hover:bg-[#5d90c9]'
+                  `flex items-center gap-2 px-4 py-2 text-[13.5px] text-slate-700 transition ${
+                    isActive ? 'bg-[#f0a848] font-semibold text-slate-900' : 'hover:bg-amber-200'
                   }`
                 }
               >
-                {f.label}
+                <Star size={13} className="shrink-0 text-[#c9a227]" />
+                <span className="truncate">{f.label}</span>
               </NavLink>
             </li>
           ))}
@@ -216,87 +281,69 @@ export default function ErpApp() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header banner: logo, date, welcome, company + license, logout */}
-      <header className="flex flex-wrap items-center justify-between gap-2 bg-white px-3 py-1.5 shadow-sm">
+      {/* Header banner: exactly like the medapp — tall silver strip with the
+          round SUBGEO cross badge, version, welcome block, company + license,
+          logout and offline icons, closed by the double blue rule. */}
+      <header className="relative flex h-[92px] shrink-0 items-center gap-4 border-b border-[#2f63a8] bg-gradient-to-b from-white via-[#fdfcfa] to-[#eae7e1] px-3 shadow-sm">
+        <div aria-hidden className="absolute bottom-0 left-0 h-[3px] w-full bg-gradient-to-r from-[#3a76c4] via-[#7fb0e8] to-[#3a76c4]" />
         <div className="flex min-w-0 items-center gap-2">
-          <img src="logo.png" alt="" className="h-9 w-9 shrink-0 object-contain" />
-          <div className="min-w-0 leading-tight">
-            <div className="truncate text-[15px] font-bold text-slate-900">{settings.shopName.toUpperCase()}</div>
-            <div className="text-[11px] text-slate-500">Version {APP_VERSION} · {BRANCH_CODE}</div>
-          </div>
+          <img src="logo.png" alt="SUBGEO" className="h-[72px] w-[72px] shrink-0 object-contain" />
+          <span className="text-[17px] font-bold text-slate-700">{APP_VERSION}</span>
         </div>
-        <div className="hidden text-[12px] text-slate-600 lg:block">
-          {new Date().toLocaleDateString('en-KE', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
+        <div className="flex items-center gap-2 pl-2 sm:pl-6">
+          <span className="hidden h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-b from-amber-400 to-orange-600 shadow-inner sm:flex">
+            <img src={user.image ?? 'avatar.svg'} alt="" className="h-full w-full object-cover" />
+          </span>
+          <span className="leading-tight">
+            <span className="block text-[15px] text-slate-600">Welcome</span>
+            <span className="block text-[15px] font-semibold tracking-wide text-slate-800">{user.name.toUpperCase()}</span>
+          </span>
         </div>
-        <div className="hidden text-[12px] text-slate-600 sm:block">
-          Welcome <b className="text-slate-800">{user.name.toUpperCase()}</b>
-          {user.role !== 'owner' ? '' : ' - (Manager)'}
-        </div>
-        <div className="hidden text-[12px] leading-tight text-slate-600 xl:block">
-          <div className="font-bold text-slate-800">{COMPANY_LABEL}</div>
-          <div className="font-mono text-[10px] text-slate-500">{LICENSE_PERIOD}</div>
+        <div className="hidden min-w-0 flex-1 text-center md:block">
+          <span className="block truncate text-[21px] font-bold tracking-[0.06em] text-slate-800">{COMPANY_LABEL}</span>
+          <span className="block font-mono text-[11px] font-bold text-slate-500">{LICENSE_PERIOD}</span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <span className="flex items-center gap-1.5 text-[12px] text-slate-600" title={online ? 'Online' : 'Offline'}>
+          <span className="flex items-center gap-1.5 rounded-sm border border-slate-300 bg-white/70 px-2 py-1 text-[12px] text-slate-600" title={online ? 'Online' : 'Offline'}>
             <span className={`h-2 w-2 rounded-full ${online ? 'bg-emerald-500' : 'bg-amber-500'}`} />
             {online ? 'On' : 'Off'}
           </span>
           <button
             type="button"
             onClick={lock}
-            className="flex items-center gap-1.5 rounded-sm bg-[#c0392b] px-2.5 py-1.5 text-[12px] font-bold text-white shadow-sm transition hover:brightness-110 active:scale-95"
+            title="Logout"
+            className="flex items-center gap-1.5 rounded-sm border border-[#a33] bg-gradient-to-b from-[#f5dede] to-[#e4b8b8] px-2.5 py-2 text-[12px] font-bold text-[#7a1f1f] shadow-sm transition hover:brightness-105 active:scale-95"
           >
-            <LogOut size={14} /> Logout
+            <LogOut size={15} /> Logout
           </button>
           <button
             type="button"
             onClick={() => setNavOpen((v) => !v)}
             aria-label="Toggle menu"
-            className="rounded-sm bg-[#3b74b8] p-1.5 text-white transition active:scale-95 sm:hidden"
+            className="rounded-sm border border-slate-400 bg-gradient-to-b from-slate-100 to-slate-300 p-2 text-slate-700 shadow-sm transition active:scale-95 sm:hidden"
           >
             {navOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
         </div>
       </header>
 
-      {/* Grey tab strip like the old app */}
-      <div className="flex shrink-0 gap-px overflow-x-auto border-b border-slate-300 bg-[#7a8288] px-2 pt-1.5">
-        {TABS.map(({ tab: t, label, icon: Icon }) => (
-          <NavLink
-            key={t}
-            to={`/${t}`}
-            className={({ isActive }) =>
-              `flex shrink-0 items-center gap-1.5 rounded-t-md border border-b-0 px-4 py-1.5 text-[13px] font-semibold transition ${
-                // eslint-disable-next-line no-unneeded-ternary
-                isActive
-                  ? 'border-slate-300 bg-[#e2ddd3] text-slate-900'
-                  : 'border-[#5e666c] bg-[#9aa1a7] text-white hover:bg-[#8a9096]'
-              }`
-            }
-          >
-            <Icon size={15} />
-            {label}
-          </NavLink>
-        ))}
-      </div>
-
       {navOpen && (
         <button
           type="button"
           aria-label="Close menu"
           onClick={() => setNavOpen(false)}
-          className="fixed inset-0 z-30 bg-slate-950/50 backdrop-blur-[2px] sm:hidden"
+          className="fixed inset-0 top-[92px] z-30 bg-slate-950/50 backdrop-blur-[2px] sm:hidden"
         />
       )}
 
       <div className="flex min-h-0 flex-1">
-        {/* Steel-blue accordion sidebar */}
+        {/* Solid-blue medapp sidebar — starts directly under the banner */}
         <aside
-          className={`fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col bg-[#3b74b8] shadow-2xl transition-transform duration-200 sm:static sm:z-auto sm:w-60 sm:translate-x-0 sm:shadow-none lg:w-64 ${
+          className={`fixed inset-y-0 left-0 top-[92px] z-40 flex w-64 shrink-0 flex-col bg-[#1e63c5] shadow-2xl transition-transform duration-200 sm:static sm:top-auto sm:z-auto sm:w-60 sm:translate-x-0 sm:shadow-none lg:w-64 ${
             navOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
         >
-          <div className="flex items-center justify-between gap-2 bg-[#27538a] px-3 py-2 text-white sm:hidden">
+          <div className="flex items-center justify-between gap-2 bg-[#123c7c] px-3 py-2 text-white sm:hidden">
             <span className="truncate text-sm font-bold">{settings.shopName.toUpperCase()}</span>
             <button
               type="button"
@@ -307,19 +354,41 @@ export default function ErpApp() {
               <X size={18} />
             </button>
           </div>
-          {groups.length === 0 && (
-            <div className="flex items-center gap-2 bg-[#27538a] px-3 py-2 text-[12px] font-bold uppercase tracking-wide text-white">
-              QUICK LINKS
-            </div>
-          )}
-          <Sidebar groups={groups.length ? groups : [{ label: 'DAILY', items: [{ label: 'To-Do & Quick Access', to: '/home' }, { label: 'OTC Medicine Issued/Bill', to: '/sell' }, { label: 'Sales Register', to: '/sales' }, { label: 'Open / Close Shift', to: '/shift' }] }]} onNavigate={() => setNavOpen(false)} />
-          <div className="border-t border-[#27538a] bg-[#27538a] px-3 py-2 text-[11px] text-white/80">
+          <Sidebar
+            groups={groups.length ? groups : [{ label: 'DAILY', items: [{ label: 'To-Do & Quick Access', to: '/home' }, { label: 'OTC Medicine Issued/Bill', to: '/sell' }, { label: 'Sales Register', to: '/sales' }, { label: 'Open / Close Shift', to: '/shift' }] }]}
+            variant={tab === 'reports' ? 'stack' : 'groups'}
+            activePath={path}
+            onNavigate={() => setNavOpen(false)}
+          />
+          <div className="mt-auto border-t border-[#123c7c] bg-[#123c7c] px-3 py-2 text-[11px] text-white/80">
             {user.name} · <span className="capitalize">{user.role}</span>
           </div>
         </aside>
 
-        {/* Beige work area like the medapp content pane */}
-        <main className="erp-scroll min-h-0 flex-1 overflow-auto bg-[#e2ddd3]">
+        {/* Right column: grey tab strip (only over the work area, never over
+            the sidebar) plus the beige content pane */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex shrink-0 items-end gap-1.5 overflow-x-auto border-b border-[#b6b1a8] bg-gradient-to-b from-[#f2efe9] to-[#dedbd4] px-3 pt-2">
+            {TABS.map(({ tab: t, label, icon: Icon }) => (
+              <NavLink
+                key={t}
+                to={`/${t}`}
+                className={({ isActive }) =>
+                  `flex shrink-0 items-center gap-1.5 rounded-[3px] border px-4 py-1.5 text-[13px] font-bold transition ${
+                    isActive
+                      ? 'border-[#8f8b84] bg-gradient-to-b from-[#f7f5f1] to-[#e6e2da] text-slate-900 shadow-[inset_0_1px_0_#fff]'
+                      : 'border-[#6d6a66] bg-[linear-gradient(to_bottom,#c2bfb9,#8e8b86)] text-[#2c2a27] hover:brightness-110'
+                  }`
+                }
+              >
+                <Icon size={15} />
+                {label}
+              </NavLink>
+            ))}
+          </div>
+
+          {/* Beige work area like the medapp content pane */}
+          <main className="erp-scroll min-h-0 flex-1 overflow-auto bg-[#e2ddd3]">
           <Routes>
             <Route path="/" element={<Navigate to="/home" replace />} />
             <Route path="/home" element={<ErpHomePage />} />
@@ -350,7 +419,8 @@ export default function ErpApp() {
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/home" replace />} />
           </Routes>
-        </main>
+          </main>
+        </div>
       </div>
     </div>
   )
