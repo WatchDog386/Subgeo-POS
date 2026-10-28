@@ -180,7 +180,7 @@ function Sidebar({
                 onClick={onNavigate}
                 className={({ isActive }) =>
                   `block border-b border-[#5b93dd] px-3 py-3 text-[13.5px] font-semibold transition ${
-                    isActive ? 'bg-[#f0a848] text-slate-900' : 'bg-[#1e63c5] text-white hover:bg-[#2a70d2]'
+                    isActive ? 'bg-white text-[#2e5c9a]' : 'hover:bg-[#1e4e8c] hover:text-white'
                   }`
                 }
               >
@@ -218,7 +218,7 @@ function Sidebar({
                       onClick={onNavigate}
                       className={({ isActive }) =>
                         `flex items-center gap-2 px-4 py-2 text-[15px] text-[#2b3337] transition ${
-                          isActive ? 'bg-white font-semibold text-[#2b3337]' : 'hover:bg-slate-100'
+                          isActive ? 'bg-white font-semibold text-[#2e5c9a]' : 'hover:bg-[#1e4e8c] hover:text-white'
                         }`
                       }
                     >
@@ -241,7 +241,7 @@ function Sidebar({
                 onClick={onNavigate}
                 className={({ isActive }) =>
                   `flex items-center gap-2 px-4 py-2 text-[15px] text-[#2b3337] transition ${
-                    isActive ? 'bg-white font-semibold text-[#2b3337]' : 'hover:bg-slate-100'
+                    isActive ? 'bg-white font-semibold text-[#2e5c9a]' : 'hover:bg-[#1e4e8c] hover:text-white'
                   }`
                 }
               >
@@ -371,7 +371,7 @@ export default function ErpApp() {
       <div className="flex min-h-0 flex-1">
         {/* Medapp sidebar — blue only where there is content, white filler below */}
         <aside
-          className={`fixed inset-y-0 left-0 top-[92px] z-40 flex w-64 shrink-0 flex-col border-r border-slate-200 bg-white shadow-sm transition-transform duration-200 sm:static sm:top-auto sm:z-auto sm:w-60 sm:translate-x-0 sm:shadow-none lg:w-64 ${
+          className={`fixed inset-y-0 left-0 top-[92px] z-40 flex w-64 shrink-0 flex-col border-r border-slate-200 bg-[#2e5c9a] shadow-sm transition-transform duration-200 sm:static sm:top-auto sm:z-auto sm:w-60 sm:translate-x-0 sm:shadow-none lg:w-64 ${
             navOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
         >
@@ -392,7 +392,7 @@ export default function ErpApp() {
             activePath={path}
             onNavigate={() => setNavOpen(false)}
           />
-          <div className="mt-auto border-t border-[#123c7c] bg-[#123c7c] px-3 py-2 text-[11px] text-white/80">
+          <div className="mt-auto border-t border-[#1e4e8c] bg-[#1e4e8c] px-3 py-2 text-[11px] text-blue-100">
             {user.name} · <span className="capitalize">{user.role}</span>
           </div>
         </aside>
@@ -418,8 +418,8 @@ export default function ErpApp() {
             ))}
           </div>
 
-          {/* Beige medapp work area */}
-          <main className="erp-scroll min-h-0 flex-1 overflow-auto bg-[#e4e7e9]">
+          {/* White work area matching the top bar */}
+          <main className="erp-scroll min-h-0 flex-1 overflow-auto bg-white">
           <Routes>
             <Route path="/" element={<Navigate to="/home" replace />} />
             <Route path="/home" element={<ErpHomePage />} />
