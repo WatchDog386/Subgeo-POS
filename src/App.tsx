@@ -129,9 +129,6 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [navOpen, setNavOpen] = useState(false)
 
-  if (restoring) return <LoadingScreen />
-  if (!user) return <LoginPage />
-
   // Brief loading screen after a successful login, before the dashboard shell.
   useEffect(() => {
     if (!user) return
@@ -140,6 +137,10 @@ export default function App() {
     return () => clearTimeout(t)
   }, [user])
 
+  // All hooks above are called unconditionally every render, so it is safe to
+  // branch on their results here.
+  if (restoring) return <LoadingScreen />
+  if (!user) return <LoginPage />
   if (booting) return <LoadingScreen />
 
   // Owner lands in the medapp-style ERP shell (medapp header, tabs and
