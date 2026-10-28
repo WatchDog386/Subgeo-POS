@@ -11,6 +11,7 @@ interface SessionValue {
   /** Lock the till: signs the user out and returns to the sign-in page. */
   lock: () => void
   can: (action: Permission) => boolean
+  restoring: boolean
 }
 
 export type Permission = 'refund' | 'discount' | 'inventory' | 'reports' | 'settings' | 'purchasing' | 'users' | 'logs'
@@ -26,6 +27,7 @@ export const PIN_LENGTH = 4
 const SessionContext = createContext<SessionValue | null>(null)
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [authUser, setAuthUser] = useState<User | null>(null)
+  const [restoring, setRestoring] = useState(true)
   const shift = useLiveQuery(() => db.shifts.filter((s) => !s.closedAt).last(), [])
   // Keep the signed-in user live so profile edits (name, photo) show everywhere.
   const liveUser = useLiveQuery(
@@ -34,10 +36,26 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   )
   const user = liveUser ?? authUser
 
+  // Restore the signed-in user across reloads so staff stay in the system.
+  useEffect(() => {
+    let cancelled = false
+    const id = localStorage.getItem('authUserId')
+    if (!id) {
+      setRestoring(false)
+      return
+    }
+    db.users.get(Number(id)).then((u) => {
+      if (!cancelled && u && u.active) setAuthUser(u)
+      setRestoring(false)
+    })
+    return () => { cancelled = true }
+  }, [])
+
   const login = useCallback(async (pin: string) => {
     const u = await db.users.where('pin').equals(pin).filter((x) => x.active).first()
     if (u) {
       setAuthUser(u)
+      localStorage.setItem('authUserId', String(u.id))
       await logActivity('auth', 'Signed in', { userId: u.id, userName: u.name })
     }
     return !!u
@@ -47,6 +65,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (!user) return
     void logActivity('auth', 'Till locked', { userId: user.id, userName: user.name })
     setAuthUser(null)
+    localStorage.removeItem('authUserId')
   }, [user])
   const can = useCallback((a: Permission) => !!user && PERMS[user.role].includes(a), [user])
 
@@ -66,7 +85,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, [user, lock])
 
-  return <SessionContext.Provider value={{ user, shift, login, lock, can }}>{children}</SessionContext.Provider>
+  return <SessionContext.Provider value={{ user, shift, login, lock, can, restoring }}>{children}</SessionContext.Provider>
 }
 
 export function useSession(): SessionValue {

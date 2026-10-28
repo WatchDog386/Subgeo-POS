@@ -20,15 +20,16 @@ const lineFor = (p: Product, qty = 1): SaleLine => ({
 /** Fixture products replacing the removed demo catalog. */
 async function seedFixture(): Promise<void> {
   await db.products.bulkAdd([
-    { sku: 'BRK-PAD-F', name: 'Front brake pads', cost: 600_00, price: 850_00, stock: 10, reorderLevel: 3, fitment: [], taxable: true, serialized: false, trackStock: true, active: true, createdAt: 0, updatedAt: 0 },
-    { sku: 'LAB-FIT', name: 'Fitting labour', cost: 0, price: 300_00, stock: 0, reorderLevel: 0, fitment: [], taxable: false, serialized: false, trackStock: false, active: true, createdAt: 0, updatedAt: 0 },
-    { sku: 'ACC-HLM', name: 'Helmet', cost: 700_00, price: 1_200_00, stock: 8, reorderLevel: 2, fitment: [], taxable: true, serialized: false, trackStock: true, active: true, createdAt: 0, updatedAt: 0 },
-    { sku: 'ELC-CTRL', name: 'Controller', cost: 14_000_00, price: 21_000_00, stock: 5, reorderLevel: 1, fitment: [], taxable: true, serialized: true, trackStock: true, active: true, createdAt: 0, updatedAt: 0 },
-    { sku: 'TUB-17', name: 'Tube 17 inch', cost: 350_00, price: 650_00, stock: 10, reorderLevel: 4, fitment: [], taxable: true, serialized: false, trackStock: true, active: true, createdAt: 0, updatedAt: 0 },
-    { sku: 'BRK-LEV-L', name: 'Left brake lever', cost: 400_00, price: 700_00, stock: 6, reorderLevel: 5, fitment: [], taxable: true, serialized: false, trackStock: true, active: true, createdAt: 0, updatedAt: 0 },
+    { sku: 'MED-PARA-500', name: 'Paracetamol 500mg', cost: 150_00, price: 350_00, stock: 100, reorderLevel: 20, fitment: [], taxable: true, serialized: false, trackStock: true, active: true, createdAt: 0, updatedAt: 0 },
+    { sku: 'MED-AMOX-250', name: 'Amoxicillin 250mg', cost: 400_00, price: 900_00, stock: 50, reorderLevel: 10, fitment: [], taxable: true, serialized: false, trackStock: true, active: true, createdAt: 0, updatedAt: 0 },
+    { sku: 'MED-CETIRIZINE', name: 'Cetirizine 10mg', cost: 200_00, price: 500_00, stock: 80, reorderLevel: 15, fitment: [], taxable: true, serialized: false, trackStock: true, active: true, createdAt: 0, updatedAt: 0 },
+    { sku: 'MED-ORS', name: 'ORS Sachet', cost: 100_00, price: 250_00, stock: 120, reorderLevel: 25, fitment: [], taxable: false, serialized: false, trackStock: true, active: true, createdAt: 0, updatedAt: 0 },
+    { sku: 'MED-VIT-C', name: 'Vitamin C 500mg', cost: 250_00, price: 600_00, stock: 60, reorderLevel: 12, fitment: [], taxable: true, serialized: false, trackStock: true, active: true, createdAt: 0, updatedAt: 0 },
+    { sku: 'MED-IBUPROFEN-400', name: 'Ibuprofen 400mg', cost: 180_00, price: 450_00, stock: 45, reorderLevel: 8, fitment: [], taxable: true, serialized: false, trackStock: true, active: true, createdAt: 0, updatedAt: 0 },
+    { sku: 'SVC-CONSULT', name: 'Consultation fee', cost: 0, price: 1_000_00, stock: 0, reorderLevel: 0, fitment: [], taxable: false, serialized: false, trackStock: false, active: true, createdAt: 0, updatedAt: 0 },
   ])
   await db.customers.add({
-    name: 'Boda Fleet Ltd',
+    name: 'City Clinic Ltd',
     balance: 0,
     creditLimit: 50_000_00,
     createdAt: 0,
@@ -44,40 +45,40 @@ beforeEach(async () => {
 
 describe('sales', () => {
   it('completes a sale, deducts stock and numbers receipts', async () => {
-    const pads = (await db.products.where('sku').equals('BRK-PAD-F').first())!
-    const sale = await completeSale({ lines: [lineFor(pads, 2)], discount: 0, payments: [{ method: 'cash', amount: 2_000_00 }], userId: 1 })
+    const para = (await db.products.where('sku').equals('MED-PARA-500').first())!
+    const sale = await completeSale({ lines: [lineFor(para, 2)], discount: 0, payments: [{ method: 'cash', amount: 2_000_00 }], userId: 1 })
     expect(sale.receiptNo).toBe('R-000001')
-    expect(sale.total).toBe(1_700_00)
-    expect(sale.change).toBe(300_00)
-    expect((await db.products.get(pads.id!))!.stock).toBe(pads.stock - 2)
-    expect(await db.movements.where('productId').equals(pads.id!).count()).toBe(1)
+    expect(sale.total).toBe(700_00)
+    expect(sale.change).toBe(1_300_00)
+    expect((await db.products.get(para.id!))!.stock).toBe(para.stock - 2)
+    expect(await db.movements.where('productId').equals(para.id!).count()).toBe(1)
   })
 
   it('does not touch stock for labour', async () => {
-    const labour = (await db.products.where('sku').equals('LAB-FIT').first())!
-    await completeSale({ lines: [lineFor(labour)], discount: 0, payments: [{ method: 'mpesa', amount: 300_00, reference: 'ABC1234567' }], userId: 1 })
-    expect((await db.products.get(labour.id!))!.stock).toBe(0)
+    const consult = (await db.products.where('sku').equals('SVC-CONSULT').first())!
+    await completeSale({ lines: [lineFor(consult)], discount: 0, payments: [{ method: 'mpesa', amount: 1_000_00, reference: 'ABC1234567' }], userId: 1 })
+    expect((await db.products.get(consult.id!))!.stock).toBe(0)
   })
 
   it('rejects underpayment and enforces credit limits', async () => {
-    const helmet = (await db.products.where('sku').equals('ACC-HLM').first())!
-    await expect(completeSale({ lines: [lineFor(helmet)], discount: 0, payments: [{ method: 'cash', amount: 100 }], userId: 1 })).rejects.toThrow(SaleError)
-    const fleet = (await db.customers.where('name').startsWith('Boda').first())!
-    const ctrl = (await db.products.where('sku').equals('ELC-CTRL').first())!
+    const ibu = (await db.products.where('sku').equals('MED-IBUPROFEN-400').first())!
+    await expect(completeSale({ lines: [lineFor(ibu)], discount: 0, payments: [{ method: 'cash', amount: 100 }], userId: 1 })).rejects.toThrow(SaleError)
+    const clinic = (await db.customers.where('name').startsWith('City').first())!
+    const amox = (await db.products.where('sku').equals('MED-AMOX-250').first())!
     await expect(
-      completeSale({ lines: [lineFor(ctrl, 3)], discount: 0, payments: [{ method: 'account', amount: 63_000_00 }], customerId: fleet.id, userId: 1 }),
+      completeSale({ lines: [lineFor(amox, 3)], discount: 0, payments: [{ method: 'account', amount: 63_000_00 }], customerId: clinic.id, userId: 1 }),
     ).rejects.toThrow(/Credit limit/)
-    await completeSale({ lines: [lineFor(helmet)], discount: 0, payments: [{ method: 'account', amount: 3_000_00 }], customerId: fleet.id, userId: 1 })
-    expect((await db.customers.get(fleet.id!))!.balance).toBe(3_000_00)
+    await completeSale({ lines: [lineFor(ibu)], discount: 0, payments: [{ method: 'account', amount: 3_000_00 }], customerId: clinic.id, userId: 1 })
+    expect((await db.customers.get(clinic.id!))!.balance).toBe(3_000_00)
   })
 
   it('partially refunds and restocks', async () => {
-    const tube = (await db.products.where('sku').equals('TUB-17').first())!
-    const sale = await completeSale({ lines: [lineFor(tube, 3)], discount: 0, payments: [{ method: 'cash', amount: 1_950_00 }], userId: 1 })
+    const vit = (await db.products.where('sku').equals('MED-VIT-C').first())!
+    const sale = await completeSale({ lines: [lineFor(vit, 3)], discount: 0, payments: [{ method: 'cash', amount: 1_950_00 }], userId: 1 })
     const refund = await refundSale(sale.id!, { qtyByLine: { 0: 1 }, restock: true, method: 'cash', userId: 1 })
-    expect(refund.total).toBe(-650_00)
+    expect(refund.total).toBe(-600_00)
     expect((await db.sales.get(sale.id!))!.status).toBe('partially_refunded')
-    expect((await db.products.get(tube.id!))!.stock).toBe(tube.stock - 2)
+    expect((await db.products.get(vit.id!))!.stock).toBe(vit.stock - 2)
     await expect(refundSale(sale.id!, { qtyByLine: { 0: 3 }, restock: true, method: 'cash', userId: 1 })).rejects.toThrow(/Only 2/)
     await refundSale(sale.id!, { qtyByLine: { 0: 2 }, restock: false, method: 'cash', userId: 1 })
     expect((await db.sales.get(sale.id!))!.status).toBe('refunded')
@@ -87,27 +88,27 @@ describe('sales', () => {
 describe('shifts', () => {
   it('computes expected cash net of change and refunds', async () => {
     const shift = await openShift(1, 5_000_00)
-    const tube = (await db.products.where('sku').equals('TUB-17').first())!
-    const sale = await completeSale({ lines: [lineFor(tube, 2)], discount: 0, payments: [{ method: 'cash', amount: 2_000_00 }], userId: 1, shiftId: shift.id })
-    await completeSale({ lines: [lineFor(tube)], discount: 0, payments: [{ method: 'mpesa', amount: 650_00, reference: 'QWE1234567' }], userId: 1, shiftId: shift.id })
+    const ibu = (await db.products.where('sku').equals('MED-IBUPROFEN-400').first())!
+    const sale = await completeSale({ lines: [lineFor(ibu, 2)], discount: 0, payments: [{ method: 'cash', amount: 2_000_00 }], userId: 1, shiftId: shift.id })
+    await completeSale({ lines: [lineFor(ibu)], discount: 0, payments: [{ method: 'mpesa', amount: 450_00, reference: 'QWE1234567' }], userId: 1, shiftId: shift.id })
     await refundSale(sale.id!, { qtyByLine: { 0: 1 }, restock: true, method: 'cash', userId: 1, shiftId: shift.id })
-    const summary = await closeShift(shift.id!, 5_650_00)
-    expect(summary.byMethod.cash).toBe(650_00)
-    expect(summary.byMethod.mpesa).toBe(650_00)
-    expect(summary.expectedCash).toBe(5_650_00)
+    const summary = await closeShift(shift.id!, 5_450_00)
+    expect(summary.byMethod.cash).toBe(450_00)
+    expect(summary.byMethod.mpesa).toBe(450_00)
+    expect(summary.expectedCash).toBe(5_450_00)
   })
 })
 
 describe('purchasing', () => {
   it('drafts a reorder for low stock and receives it', async () => {
-    const lever = (await db.products.where('sku').equals('BRK-LEV-L').first())!
-    await db.products.update(lever.id!, { stock: 1 })
+    const ibu = (await db.products.where('sku').equals('MED-IBUPROFEN-400').first())!
+    await db.products.update(ibu.id!, { stock: 1 })
     const po = (await draftReorder())!
-    const idx = po.lines.findIndex((l) => l.productId === lever.id)
+    const idx = po.lines.findIndex((l) => l.productId === ibu.id)
     expect(idx).toBeGreaterThanOrEqual(0)
-    expect(po.lines[idx].qty).toBe(lever.reorderLevel * 2 - 1)
+    expect(po.lines[idx].qty).toBe(ibu.reorderLevel * 2 - 1)
     await receivePurchaseOrder(po.id!, { [idx]: po.lines[idx].qty })
-    expect((await db.products.get(lever.id!))!.stock).toBe(lever.reorderLevel * 2)
+    expect((await db.products.get(ibu.id!))!.stock).toBe(ibu.reorderLevel * 2)
     expect((await db.purchaseOrders.get(po.id!))!.status).toBe('partial')
   })
 })

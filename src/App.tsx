@@ -1,4 +1,4 @@
-﻿import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import {
   Bell,
   BarChart3,
@@ -122,12 +122,15 @@ function Guard({ perm, children }: { perm?: Permission; children: ReactNode }) {
 }
 
 export default function App() {
-  const { user, shift, lock, can } = useSession()
+  const { user, shift, lock, can, restoring } = useSession()
   const settings = useSettings()
   const online = useOnline()
   const [booting, setBooting] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [navOpen, setNavOpen] = useState(false)
+
+  if (restoring) return <LoadingScreen />
+  if (!user) return <LoginPage />
 
   // Brief loading screen after a successful login, before the dashboard shell.
   useEffect(() => {
@@ -137,7 +140,6 @@ export default function App() {
     return () => clearTimeout(t)
   }, [user])
 
-  if (!user) return <LoginPage />
   if (booting) return <LoadingScreen />
 
   // Owner lands in the medapp-style ERP shell (medapp header, tabs and
@@ -380,3 +382,4 @@ export default function App() {
     </div>
   )
 }
+

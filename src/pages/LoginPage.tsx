@@ -49,8 +49,6 @@ export default function LoginPage() {
   return (
     <div className="flex h-full items-center justify-center overflow-y-auto bg-white px-4 py-8">
       <div className="w-full max-w-[340px] text-center">
-        <h1 className="font-serif text-[40px] font-medium leading-tight text-[#1b4332]">Login</h1>
-
         {/* Brand badge + name */}
         <img
           src="logo.png"

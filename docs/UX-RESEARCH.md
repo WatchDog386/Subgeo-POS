@@ -2,7 +2,7 @@
 
 Subgeo POS does not copy any vendor's code, branding, names, logos or assets. Instead, it adopts the **workflow patterns** that well-known retail POS products have converged on. These are documented publicly in their help centres and visible in their product demos. The main references were:
 
-- **Lightspeed Retail**: widely used by bicycle and powersports parts shops. It added work orders, serialized items and special orders.
+- **Lightspeed Retail / pharmacy POS systems**: widely used by pharmacies. It added work orders, serialized items and special orders.
 - **Square for Retail**: tap-tile register, split tender, simple receipts.
 - **Loyverse**: popular with small shops in East Africa. Offline-first, shifts with cash-up, PIN login.
 - **Shopify POS / Vend (Lightspeed X)**: park/retrieve sales, stock-take, purchase orders.
@@ -14,7 +14,7 @@ Subgeo POS does not copy any vendor's code, branding, names, logos or assets. In
 | **Two-pane register**: product grid on the left, ticket/cart on the right, one large "Charge" button | All of the above | `SellPage`. The Charge button always shows the live total. |
 | **Category tabs plus colour-coded tiles** | Square, Loyverse | Category chips and a coloured bar on each tile. Stock badge goes amber when low and red when out. |
 | **Scan anywhere** | Lightspeed, Shopify | `useBarcodeScanner` detects HID-scanner bursts globally, so no field needs focus. |
-| **Vehicle fitment lookup** | Lightspeed (bike shops), auto-parts systems | "Fits [bike model]" filter and per-part fitment list. Attaching a customer auto-selects their bike. |
+| **Medication interaction lookup** | Pharmacy POS systems | "Interacts with [medication]" filter and per-item interaction list. Attaching a patient auto-selects their care history. |
 | **Serialized items** | Lightspeed | Batteries, controllers and chargers prompt for a serial number. Serials print on receipts and can be searched in history (for warranty claims). |
 | **Work orders → till** | Lightspeed | Service board with status columns. "Bill at till" moves the parts and labour into the cart. |
 | **Park / retrieve sale** | Vend, Shopify | Park button (F8) and a parked-sales list. |

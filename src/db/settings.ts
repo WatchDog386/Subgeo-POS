@@ -15,7 +15,7 @@ export const DEFAULT_SETTINGS: Settings = {
   mpesaTill: '',
   mpesaMode: 'stk',
   apiUrl: '/api',
-  bikeModels: ['Ekon 450', 'Ekon 500', 'Commando', 'Universal / other e-bike'],
+  bikeModels: [],
   paperWidth: 80,
   autoPrint: false,
   openDrawerOnCash: true,

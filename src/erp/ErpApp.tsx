@@ -218,7 +218,7 @@ function Sidebar({
                       onClick={onNavigate}
                       className={({ isActive }) =>
                         `flex items-center gap-2 px-4 py-2 text-[15px] text-[#2b3337] transition ${
-                          isActive ? 'bg-[#f0a848] font-semibold text-slate-900' : 'hover:bg-amber-200'
+                          isActive ? 'bg-white font-semibold text-[#2b3337]' : 'hover:bg-slate-100'
                         }`
                       }
                     >
@@ -459,3 +459,4 @@ export default function ErpApp() {
     </div>
   )
 }
+
