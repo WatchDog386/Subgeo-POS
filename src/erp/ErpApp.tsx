@@ -369,9 +369,9 @@ export default function ErpApp() {
       )}
 
       <div className="flex min-h-0 flex-1">
-        {/* Dull-blue sidebar (no dividing line — distinct from the page bg) */}
+        {/* Dull page-tone sidebar — blue only where there is content */}
         <aside
-          className={`fixed inset-y-0 left-0 top-[92px] z-40 flex w-64 shrink-0 flex-col bg-[#2e5c9a] shadow-sm transition-transform duration-200 sm:static sm:top-auto sm:z-auto sm:w-60 sm:translate-x-0 sm:shadow-none lg:w-64 ${
+          className={`fixed inset-y-0 left-0 top-[92px] z-40 flex w-64 shrink-0 flex-col bg-[#f5f6f8] shadow-sm transition-transform duration-200 sm:static sm:top-auto sm:z-auto sm:w-60 sm:translate-x-0 sm:shadow-none lg:w-64 ${
             navOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
         >
