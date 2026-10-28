@@ -48,13 +48,18 @@ import { FAVOURITES, MODULE_GROUPS, REPORT_ITEMS, REPORT_TREE, UTILITY_ITEMS } f
 // grey tab strip (Home | Modules | Reports | Charts | Utilities | HelpDocs),
 // steel-blue accordion sidebar with Favourites, beige work area.
 
-const TABS: { tab: ErpTab; label: string; icon: typeof LayoutDashboard; color: { text: string; border: string } }[] = [
-  { tab: 'home', label: 'Home', icon: LayoutDashboard, color: { text: 'text-orange-600', border: 'border-orange-500' } },
-  { tab: 'modules', label: 'Modules', icon: Blocks, color: { text: 'text-emerald-600', border: 'border-emerald-500' } },
-  { tab: 'reports', label: 'Reports', icon: BarChart3, color: { text: 'text-indigo-600', border: 'border-indigo-500' } },
-  { tab: 'charts', label: 'Charts', icon: PieChart, color: { text: 'text-violet-600', border: 'border-violet-500' } },
-  { tab: 'utilities', label: 'Utilities', icon: Wrench, color: { text: 'text-teal-600', border: 'border-teal-500' } },
-  { tab: 'helpdocs', label: 'HelpDocs', icon: BookOpen, color: { text: 'text-sky-600', border: 'border-sky-500' } },
+const TABS: {
+  tab: ErpTab
+  label: string
+  icon: typeof LayoutDashboard
+  color: { text: string; border: string; bg: string }
+}[] = [
+  { tab: 'home', label: 'Home', icon: LayoutDashboard, color: { text: 'text-orange-700', border: 'border-orange-400', bg: 'bg-orange-50' } },
+  { tab: 'modules', label: 'Modules', icon: Blocks, color: { text: 'text-emerald-700', border: 'border-emerald-400', bg: 'bg-emerald-50' } },
+  { tab: 'reports', label: 'Reports', icon: BarChart3, color: { text: 'text-indigo-700', border: 'border-indigo-400', bg: 'bg-indigo-50' } },
+  { tab: 'charts', label: 'Charts', icon: PieChart, color: { text: 'text-violet-700', border: 'border-violet-400', bg: 'bg-violet-50' } },
+  { tab: 'utilities', label: 'Utilities', icon: Wrench, color: { text: 'text-teal-700', border: 'border-teal-400', bg: 'bg-teal-50' } },
+  { tab: 'helpdocs', label: 'HelpDocs', icon: BookOpen, color: { text: 'text-sky-700', border: 'border-sky-400', bg: 'bg-sky-50' } },
 ]
 
 /** Build the accordion groups shown for the active top tab. */
@@ -300,20 +305,17 @@ export default function ErpApp() {
             {online ? 'Online' : 'Offline'}
           </span>
 
-          {/* User account dropdown, far right */}
+          {/* User dropdown, far right — plain avatar + name, no wrapper box */}
           <div className="relative flex items-center">
             <button
               type="button"
               onClick={() => setMenuOpen((m) => !m)}
-              className="flex items-center gap-2 rounded-full border border-slate-200 bg-white py-1 pl-1 pr-2.5 shadow-sm transition hover:border-slate-300 hover:shadow"
+              className="flex items-center gap-2 rounded-full py-1 pl-1 pr-2 transition hover:bg-slate-50"
             >
               <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 ring-1 ring-slate-200">
                 <img src={user.image ?? 'avatar.svg'} alt={user.name} className="h-full w-full object-cover" />
               </span>
-              <span className="hidden text-left leading-tight sm:block">
-                <span className="block text-[12px] text-slate-400">Welcome</span>
-                <span className="block text-[14px] font-bold text-slate-800">{user.name}</span>
-              </span>
+              <span className="hidden text-[14px] font-bold text-slate-800 sm:block">{user.name}</span>
               <ChevronDown size={15} className={`text-slate-400 transition ${menuOpen ? 'rotate-180' : ''}`} />
             </button>
             {menuOpen && (
@@ -375,9 +377,9 @@ export default function ErpApp() {
       )}
 
       <div className="flex min-h-0 flex-1">
-        {/* Solid-blue medapp sidebar — starts directly under the banner */}
+        {/* Medapp sidebar — blue only where there is content, white filler below */}
         <aside
-          className={`fixed inset-y-0 left-0 top-[92px] z-40 flex w-64 shrink-0 flex-col bg-[#1e63c5] shadow-2xl transition-transform duration-200 sm:static sm:top-auto sm:z-auto sm:w-60 sm:translate-x-0 sm:shadow-none lg:w-64 ${
+          className={`fixed inset-y-0 left-0 top-[92px] z-40 flex w-64 shrink-0 flex-col border-r border-slate-200 bg-white shadow-sm transition-transform duration-200 sm:static sm:top-auto sm:z-auto sm:w-60 sm:translate-x-0 sm:shadow-none lg:w-64 ${
             navOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
         >
@@ -406,16 +408,16 @@ export default function ErpApp() {
         {/* Right column: colored tab strip (only over the work area, never
             over the sidebar) plus the white content pane */}
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex shrink-0 items-end gap-1 overflow-x-auto border-b border-slate-200 bg-white px-4">
+          <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-slate-200 bg-white px-4 py-2.5">
             {TABS.map(({ tab: t, label, icon: Icon, color }) => (
               <NavLink
                 key={t}
                 to={`/${t}`}
                 className={({ isActive }) =>
-                  `flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-[14px] font-semibold transition ${
+                  `flex shrink-0 items-center gap-2 rounded-lg border px-4 py-2 text-[13.5px] font-semibold transition ${
                     isActive
-                      ? `${color.text} ${color.border}`
-                      : 'border-transparent text-slate-400 hover:text-slate-700'
+                      ? `${color.text} ${color.border} ${color.bg} shadow-sm`
+                      : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-800'
                   }`
                 }
               >
