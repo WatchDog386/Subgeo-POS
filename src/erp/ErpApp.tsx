@@ -48,13 +48,13 @@ import { FAVOURITES, MODULE_GROUPS, REPORT_ITEMS, REPORT_TREE, UTILITY_ITEMS } f
 // grey tab strip (Home | Modules | Reports | Charts | Utilities | HelpDocs),
 // steel-blue accordion sidebar with Favourites, beige work area.
 
-const TABS: { tab: ErpTab; label: string; icon: typeof LayoutDashboard }[] = [
-  { tab: 'home', label: 'Home', icon: LayoutDashboard },
-  { tab: 'modules', label: 'Modules', icon: Blocks },
-  { tab: 'reports', label: 'Reports', icon: BarChart3 },
-  { tab: 'charts', label: 'Charts', icon: PieChart },
-  { tab: 'utilities', label: 'Utilities', icon: Wrench },
-  { tab: 'helpdocs', label: 'HelpDocs', icon: BookOpen },
+const TABS: { tab: ErpTab; label: string; icon: typeof LayoutDashboard; bg: string; border: string }[] = [
+  { tab: 'home', label: 'Home', icon: LayoutDashboard, bg: '#76b043', border: '#5c8f31' },
+  { tab: 'modules', label: 'Modules', icon: Blocks, bg: '#4a9fd8', border: '#2e8fc4' },
+  { tab: 'reports', label: 'Reports', icon: BarChart3, bg: '#f2891d', border: '#cc7010' },
+  { tab: 'charts', label: 'Charts', icon: PieChart, bg: '#0c8586', border: '#086c70' },
+  { tab: 'utilities', label: 'Utilities', icon: Wrench, bg: '#64748b', border: '#475569' },
+  { tab: 'helpdocs', label: 'HelpDocs', icon: BookOpen, bg: '#1b3a46', border: '#0f2931' },
 ]
 
 /** Build the accordion groups shown for the active top tab. */
@@ -403,20 +403,19 @@ export default function ErpApp() {
         {/* Right column: colored tab strip (only over the work area, never
             over the sidebar) plus the white content pane */}
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex shrink-0 items-end gap-1.5 overflow-x-auto border-b border-[#b6b1a8] bg-gradient-to-b from-[#f2efe9] to-[#dedbd4] px-3 pt-2">
-            {TABS.map(({ tab: t, label, icon: Icon }) => (
+          <div className="flex shrink-0 items-center gap-2 overflow-x-auto px-3 py-2">
+            {TABS.map(({ tab: t, label, icon: Icon, bg, border }) => (
               <NavLink
                 key={t}
                 to={`/${t}`}
+                style={{ background: bg, borderColor: border }}
                 className={({ isActive }) =>
-                  `flex shrink-0 items-center gap-1.5 rounded-[3px] border px-4 py-1.5 text-[13px] font-bold transition ${
-                    isActive
-                      ? 'border-[#8f8b84] bg-gradient-to-b from-[#f7f5f1] to-[#e6e2da] text-slate-900 shadow-[inset_0_1px_0_#fff]'
-                      : 'border-[#6d6a66] bg-[linear-gradient(to_bottom,#c2bfb9,#8e8b86)] text-[#2c2a27] hover:brightness-110'
+                  `flex h-11 shrink-0 items-center gap-2 rounded-[4px] border px-5 text-sm font-semibold text-white shadow-sm transition ${
+                    isActive ? 'brightness-110' : 'hover:brightness-105'
                   }`
                 }
               >
-                <Icon size={15} />
+                <Icon size={16} />
                 {label}
               </NavLink>
             ))}

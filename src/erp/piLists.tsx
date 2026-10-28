@@ -68,7 +68,7 @@ function ListPicker({
                     onSelect(isOn ? selected.filter((x) => x !== item) : [...selected, item])
                   }
                   className={`w-full px-2 py-1 text-left text-[15px] transition ${
-                    isOn ? 'bg-[#f0a848] text-[#1f272b]' : i % 2 ? 'bg-white hover:bg-[#f3f4f5]' : 'bg-[#f2f4f5] hover:bg-[#f3f4f5]'
+                    isOn ? 'bg-[#f0a848] text-[#1f272b]' : i % 2 ? 'bg-white hover:bg-[#eef2a8]' : 'bg-[#f0ede2] hover:bg-[#eef2a8]'
                   }`}
                 >
                   {render ? render(item) : item}
@@ -174,14 +174,14 @@ export function ErpTable({
   className?: string
 }) {
   return (
-    <div className={`overflow-x-auto rounded-[4px] border border-[#c7ccd0] bg-white shadow-sm ${className}`}>
-      <table className="w-full border-collapse text-[15px] text-[#2b3337]">
+    <div className={`overflow-x-auto rounded-[4px] border border-[#b6b1a8] bg-white shadow-sm ${className}`}>
+      <table className="w-full border-collapse text-[12.5px] text-[#2c2a27]">
         <thead>
-          <tr className="bg-gradient-to-b from-slate-50 to-slate-300 text-left text-[12px] font-bold text-slate-600">
+          <tr className="bg-[#dcdcd2] text-left text-[12px] font-semibold text-[#2c2a27]">
             {columns.map((c) => (
               <th
                 key={c.label}
-                className={`whitespace-nowrap border-b border-slate-300 px-2 py-1.5 ${
+                className={`whitespace-nowrap border-b border-[#b6b1a8] px-2 py-1.5 ${
                   c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left'
                 }`}
               >

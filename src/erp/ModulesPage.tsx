@@ -106,7 +106,7 @@ function ModuleSales({
     <div className="overflow-x-auto rounded-sm border border-slate-300 bg-white shadow-sm">
       <table className="w-full border-collapse text-[13px] text-slate-700">
         <thead>
-          <tr className="bg-gradient-to-b from-slate-50 to-slate-300 text-left text-[12px] font-bold text-slate-600">
+          <tr className="bg-[#dcdcd2] text-left text-[12px] font-semibold text-[#2c2a27]">
             <th className="border-b border-slate-300 px-2 py-1.5">Bill No</th>
             <th className="border-b border-slate-300 px-2 py-1.5">Date</th>
             <th className="border-b border-slate-300 px-2 py-1.5">Patient Category</th>
@@ -124,7 +124,7 @@ function ModuleSales({
               <tr
                 key={s.id}
                 onClick={() => nav('/sales')}
-                className={`cursor-pointer border-b border-slate-100 transition hover:bg-sky-50 ${i % 2 ? 'bg-white' : 'bg-[#f2f4f5]'}`}
+                className={`cursor-pointer border-b border-[#d6d2c8] transition hover:bg-[#eef2a8] ${i % 2 ? 'bg-white' : 'bg-[#f0ede2]'}`}
               >
                 <td className="px-2 py-1.5 font-mono text-[12px]">{prefix}-{String(s.id ?? 0).padStart(3, '0')}</td>
                 <td className="px-2 py-1.5">{new Date(s.createdAt).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
@@ -171,7 +171,7 @@ function ModuleJobs({ jobs }: { jobs: ServiceJob[] }) {
     <div className="overflow-x-auto rounded-sm border border-slate-300 bg-white shadow-sm">
       <table className="w-full border-collapse text-[13px] text-slate-700">
         <thead>
-          <tr className="bg-gradient-to-b from-slate-50 to-slate-300 text-left text-[12px] font-bold text-slate-600">
+          <tr className="bg-[#dcdcd2] text-left text-[12px] font-semibold text-[#2c2a27]">
             <th className="border-b border-slate-300 px-2 py-1.5">Request No</th>
             <th className="border-b border-slate-300 px-2 py-1.5">Party</th>
             <th className="border-b border-slate-300 px-2 py-1.5">Service Request</th>
@@ -181,7 +181,7 @@ function ModuleJobs({ jobs }: { jobs: ServiceJob[] }) {
         </thead>
         <tbody>
           {jobs.map((j, i) => (
-            <tr key={j.id} onClick={() => nav('/service')} className={`cursor-pointer border-b border-slate-100 transition hover:bg-sky-50 ${i % 2 ? 'bg-white' : 'bg-[#f2f4f5]'}`}>
+            <tr key={j.id} onClick={() => nav('/service')} className={`cursor-pointer border-b border-[#d6d2c8] transition hover:bg-[#eef2a8] ${i % 2 ? 'bg-white' : 'bg-[#f0ede2]'}`}>
               <td className="px-2 py-1.5 font-mono text-[12px]">{j.jobNo}</td>
               <td className="px-2 py-1.5">{j.customerName}</td>
               <td className="px-2 py-1.5">{j.complaint}</td>
@@ -201,7 +201,7 @@ function ModuleParty({ parties }: { parties: (Customer | Supplier)[] }) {
     <div className="overflow-x-auto rounded-sm border border-slate-300 bg-white shadow-sm">
       <table className="w-full border-collapse text-[13px] text-slate-700">
         <thead>
-          <tr className="bg-gradient-to-b from-slate-50 to-slate-300 text-left text-[12px] font-bold text-slate-600">
+          <tr className="bg-[#dcdcd2] text-left text-[12px] font-semibold text-[#2c2a27]">
             <th className="border-b border-slate-300 px-2 py-1.5">Party Code</th>
             <th className="border-b border-slate-300 px-2 py-1.5">Party Name</th>
             <th className="border-b border-slate-300 px-2 py-1.5">Phone</th>
@@ -213,7 +213,7 @@ function ModuleParty({ parties }: { parties: (Customer | Supplier)[] }) {
             <ErpEmptyRow cols={4} />
           ) : (
             parties.map((p, i) => (
-              <tr key={p.id} onClick={() => nav('/customers')} className={`cursor-pointer border-b border-slate-100 transition hover:bg-sky-50 ${i % 2 ? 'bg-white' : 'bg-[#f2f4f5]'}`}>
+              <tr key={p.id} onClick={() => nav('/customers')} className={`cursor-pointer border-b border-[#d6d2c8] transition hover:bg-[#eef2a8] ${i % 2 ? 'bg-white' : 'bg-[#f0ede2]'}`}>
                 <td className="px-2 py-1.5 font-mono text-[12px]">{p.id ? `PTY${String(p.id).padStart(4, '0')}` : '—'}</td>
                 <td className="px-2 py-1.5 font-semibold">{p.name}</td>
                 <td className="px-2 py-1.5">{p.phone ?? '—'}</td>

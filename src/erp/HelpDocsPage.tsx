@@ -26,7 +26,7 @@ export default function ErpHelpDocsPage() {
       <div className="overflow-x-auto rounded-sm border border-slate-300 bg-white shadow-sm">
         <table className="w-full border-collapse text-[13px] text-slate-700">
           <thead>
-            <tr className="bg-gradient-to-b from-slate-50 to-slate-300 text-left text-[12px] font-bold text-slate-600">
+            <tr className="bg-[#dcdcd2] text-left text-[12px] font-semibold text-[#2c2a27]">
               <th className="w-10 border-b border-slate-300 px-2 py-2 text-center">
                 <input type="checkbox" className="h-4 w-4 accent-[#3b74b8]" />
               </th>
@@ -38,7 +38,7 @@ export default function ErpHelpDocsPage() {
           </thead>
           <tbody>
             {DOCS.map((d, i) => (
-              <tr key={d.type} className={`border-b border-slate-100 ${i % 2 ? 'bg-white' : 'bg-[#f2f4f5]'}`}>
+              <tr key={d.type} className={`border-b border-[#d6d2c8] ${i % 2 ? 'bg-white' : 'bg-[#f0ede2]'}`}>
                 <td className="px-2 py-1.5 text-center">
                   <input type="checkbox" className="h-3.5 w-3.5 accent-[#3b74b8]" />
                 </td>
