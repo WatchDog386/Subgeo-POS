@@ -72,7 +72,7 @@ export default function ErpUtilitiesPage() {
       <ErpPanel title={`Utilities - ${settings.shopName.toUpperCase()}`}>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {cards.map((c) => (
-            <button key={c.title} type="button" onClick={c.action} className="flex items-start gap-3 rounded-sm border border-slate-300 bg-white px-3 py-3 text-left shadow-sm transition hover:border-[#3b74b8] hover:bg-sky-50">
+            <button key={c.title} type="button" onClick={c.action} className="flex items-start gap-3 rounded-[4px] border border-[#c7ccd0] bg-white px-3 py-3 text-left shadow-sm transition hover:border-[#969ea4] hover:bg-[#f3f4f5]">
               <c.icon size={20} className="mt-0.5 shrink-0 text-[#3b74b8]" />
               <span className="min-w-0">
                 <span className="block text-[14px] font-bold text-slate-800">{c.title}</span>

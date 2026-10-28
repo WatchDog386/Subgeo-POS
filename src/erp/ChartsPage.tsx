@@ -149,13 +149,13 @@ export default function ErpChartsPage() {
           <button type="button" onClick={() => setView(true)} className="rounded-sm bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">
             View
           </button>
-          <button type="button" onClick={() => setZoom((z) => Math.max(0.6, Math.round((z - 0.2) * 10) / 10))} title="Zoom out" className="rounded-sm border border-slate-300 bg-white p-1.5 text-slate-600 shadow-sm hover:bg-slate-100">
+          <button type="button" onClick={() => setZoom((z) => Math.max(0.6, Math.round((z - 0.2) * 10) / 10))} title="Zoom out" className="rounded-sm border border-[#969ea4] bg-gradient-to-b from-[#d3d9dc] to-[#bcc3c8] p-1.5 text-[#333b3f] hover:brightness-105">
             <ZoomOut size={14} />
           </button>
-          <button type="button" onClick={() => setZoom((z) => Math.min(2.2, Math.round((z + 0.2) * 10) / 10))} title="Zoom in" className="rounded-sm border border-slate-300 bg-white p-1.5 text-slate-600 shadow-sm hover:bg-slate-100">
+          <button type="button" onClick={() => setZoom((z) => Math.min(2.2, Math.round((z + 0.2) * 10) / 10))} title="Zoom in" className="rounded-sm border border-[#969ea4] bg-gradient-to-b from-[#d3d9dc] to-[#bcc3c8] p-1.5 text-[#333b3f] hover:brightness-105">
             <ZoomIn size={14} />
           </button>
-          <button type="button" onClick={() => window.print()} title="Print — username/admin, Excel, PDF, HTML" className="rounded-sm border border-slate-300 bg-white p-1.5 text-slate-600 shadow-sm hover:bg-slate-100">
+          <button type="button" onClick={() => window.print()} title="Print — username/admin, Excel, PDF, HTML" className="rounded-sm border border-[#969ea4] bg-gradient-to-b from-[#d3d9dc] to-[#bcc3c8] p-1.5 text-[#333b3f] hover:brightness-105">
             <Printer size={14} />
           </button>
         </div>

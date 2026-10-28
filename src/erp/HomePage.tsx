@@ -73,7 +73,7 @@ export default function ErpHomePage() {
               <li key={t.label}>
                 <Link
                   to={t.to}
-                  className="block rounded-sm border border-slate-300 bg-slate-50 px-3 py-2 text-[13px] shadow-sm transition hover:bg-amber-200"
+                  className="block rounded-sm border border-slate-300 bg-[#f3ece2] px-3 py-2 text-[13px] shadow-sm transition hover:bg-amber-200"
                 >
                   <div className="font-semibold text-slate-800">{t.label}</div>
                   <div className="text-slate-500">{t.detail}</div>
@@ -117,21 +117,21 @@ export default function ErpHomePage() {
         <ErpPanel title="Today at a Glance">
           <div className="grid grid-cols-2 gap-2 text-center">
             <div className="rounded-sm border border-slate-300 bg-white p-3 shadow-sm">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">OTC Bills Today</div>
+              <div className="text-[13px] font-bold text-[#5d676c]">OTC Bills Today</div>
               <div className="text-2xl font-bold text-slate-800">{todayBills}</div>
             </div>
             <div className="rounded-sm border border-slate-300 bg-white p-3 shadow-sm">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Collections Today</div>
+              <div className="text-[13px] font-bold text-[#5d676c]">Collections Today</div>
               <div className="text-2xl font-bold text-slate-800">{moneyShort(todayTotal)}</div>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2 text-center">
             <Link to="/reports/stock" className="rounded-sm border border-slate-300 bg-white p-3 shadow-sm transition hover:bg-sky-50">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Stock Value</div>
+              <div className="text-[13px] font-bold text-[#5d676c]">Stock Value</div>
               <div className="text-2xl font-bold text-slate-800">{moneyShort((products ?? []).reduce((s, p) => s + p.stock * p.cost, 0))}</div>
             </Link>
             <Link to="/reports/receivables" className="rounded-sm border border-slate-300 bg-white p-3 shadow-sm transition hover:bg-sky-50">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Outstanding A/C</div>
+              <div className="text-[13px] font-bold text-[#5d676c]">Outstanding A/C</div>
               <div className="text-2xl font-bold text-slate-800">{moneyShort((customers ?? []).reduce((s, c) => s + c.balance, 0))}</div>
             </Link>
           </div>
@@ -149,7 +149,7 @@ export default function ErpHomePage() {
         {QUICK_ACCESS.map((q, i) => (
           <tr
             key={q.transaction}
-            className={`cursor-pointer border-b border-slate-100 transition hover:bg-sky-50 ${i % 2 ? 'bg-white' : 'bg-slate-50'}`}
+            className={`cursor-pointer border-b border-slate-100 transition hover:bg-sky-50 ${i % 2 ? 'bg-white' : 'bg-[#f3ece2]'}`}
             onClick={() => nav(q.to)}
           >
             <td className="px-2 py-1.5">{q.module}</td>
