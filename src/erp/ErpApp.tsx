@@ -233,9 +233,6 @@ function Sidebar({
         )
       })}
       <div className="mt-0">
-        <div className="flex items-center gap-2 border-b border-[#8a6d1d] bg-[#c9a227] px-3 py-2.5 text-[13px] font-bold uppercase tracking-wide text-slate-900">
-          <Star size={15} className="shrink-0 fill-slate-900" /> Favourites
-        </div>
         <ul className="bg-white pb-1">
           {FAVOURITES.map((f) => (
             <li key={f.to + f.label}>
@@ -244,7 +241,7 @@ function Sidebar({
                 onClick={onNavigate}
                 className={({ isActive }) =>
                   `flex items-center gap-2 px-4 py-2 text-[15px] text-[#2b3337] transition ${
-                    isActive ? 'bg-[#f0a848] font-semibold text-slate-900' : 'hover:bg-amber-200'
+                    isActive ? 'bg-white font-semibold text-[#2b3337]' : 'hover:bg-slate-100'
                   }`
                 }
               >
