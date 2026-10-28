@@ -73,7 +73,7 @@ export default function ErpHomePage() {
               <li key={t.label}>
                 <Link
                   to={t.to}
-                  className="block rounded-sm border border-slate-300 bg-[#f2f4f5] px-3 py-2 text-[13px] shadow-sm transition hover:bg-amber-200"
+                  className="block rounded-none border border-slate-300 bg-[#f2f4f5] px-3 py-2 text-[13px] shadow-sm transition hover:bg-amber-200"
                 >
                   <div className="font-semibold text-slate-800">{t.label}</div>
                   <div className="text-slate-500">{t.detail}</div>
@@ -89,7 +89,7 @@ export default function ErpHomePage() {
             <select
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value as typeof roleFilter)}
-              className="rounded-sm border border-slate-300 bg-white px-2 py-1 text-[13px]"
+              className="rounded-none border border-slate-300 bg-white px-2 py-1 text-[13px]"
             >
               <option>All</option>
               <option>Manager</option>
@@ -103,7 +103,7 @@ export default function ErpHomePage() {
                 <button
                   type="button"
                   onClick={() => nav(q.to)}
-                  className="flex w-full items-center gap-2.5 rounded-sm border border-slate-200 bg-white px-3 py-2 text-left text-[13px] shadow-sm transition hover:border-[#3b74b8] hover:bg-[#eef2a8]"
+                  className="flex w-full items-center gap-2.5 rounded-none border border-slate-200 bg-white px-3 py-2 text-left text-[13px] shadow-sm transition hover:border-[#3b74b8] hover:bg-[#eef2a8]"
                 >
                   <q.icon size={16} className="shrink-0 text-[#3b74b8]" />
                   <span className="min-w-0 flex-1 truncate font-semibold text-slate-700">{q.transaction}</span>
@@ -116,21 +116,21 @@ export default function ErpHomePage() {
 
         <ErpPanel title="Today at a Glance">
           <div className="grid grid-cols-2 gap-2 text-center">
-            <div className="rounded-sm border border-slate-300 bg-white p-3 shadow-sm">
+            <div className="rounded-none border border-slate-300 bg-white p-3 shadow-sm">
               <div className="text-[13px] font-bold text-[#5d676c]">OTC Bills Today</div>
               <div className="text-2xl font-bold text-slate-800">{todayBills}</div>
             </div>
-            <div className="rounded-sm border border-slate-300 bg-white p-3 shadow-sm">
+            <div className="rounded-none border border-slate-300 bg-white p-3 shadow-sm">
               <div className="text-[13px] font-bold text-[#5d676c]">Collections Today</div>
               <div className="text-2xl font-bold text-slate-800">{moneyShort(todayTotal)}</div>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2 text-center">
-            <Link to="/reports/stock" className="rounded-sm border border-slate-300 bg-white p-3 shadow-sm transition hover:bg-[#eef2a8]">
+            <Link to="/reports/stock" className="rounded-none border border-slate-300 bg-white p-3 shadow-sm transition hover:bg-[#eef2a8]">
               <div className="text-[13px] font-bold text-[#5d676c]">Stock Value</div>
               <div className="text-2xl font-bold text-slate-800">{moneyShort((products ?? []).reduce((s, p) => s + p.stock * p.cost, 0))}</div>
             </Link>
-            <Link to="/reports/receivables" className="rounded-sm border border-slate-300 bg-white p-3 shadow-sm transition hover:bg-[#eef2a8]">
+            <Link to="/reports/receivables" className="rounded-none border border-slate-300 bg-white p-3 shadow-sm transition hover:bg-[#eef2a8]">
               <div className="text-[13px] font-bold text-[#5d676c]">Outstanding A/C</div>
               <div className="text-2xl font-bold text-slate-800">{moneyShort((customers ?? []).reduce((s, c) => s + c.balance, 0))}</div>
             </Link>

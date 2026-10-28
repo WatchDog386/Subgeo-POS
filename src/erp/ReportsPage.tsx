@@ -30,7 +30,7 @@ function ReportOverview() {
             key={r.to}
             type="button"
             onClick={() => nav(r.to)}
-            className="flex items-center justify-between rounded-[4px] border border-[#c7ccd0] bg-white px-3 py-2.5 text-left text-[15px] font-semibold text-[#2b3337] shadow-sm transition hover:border-[#969ea4] hover:bg-[#f3f4f5]"
+            className="flex items-center justify-between rounded-none border border-[#c7ccd0] bg-white px-3 py-2.5 text-left text-[15px] font-semibold text-[#2b3337] shadow-sm transition hover:border-[#969ea4] hover:bg-[#f3f4f5]"
           >
             {r.label}
           </button>
@@ -58,11 +58,11 @@ function DateRange({
     <div className="flex flex-wrap items-end gap-3 text-[12px] font-bold text-slate-600">
       <label className="flex flex-col gap-1">
         From
-        <input type="date" value={from} onChange={(e) => onChange(e.target.value, to)} className="erp-field w-36 rounded-sm border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal" />
+        <input type="date" value={from} onChange={(e) => onChange(e.target.value, to)} className="erp-field w-36 rounded-none border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal" />
       </label>
       <label className="flex flex-col gap-1">
         To
-        <input type="date" value={to} onChange={(e) => onChange(from, e.target.value)} className="erp-field w-36 rounded-sm border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal" />
+        <input type="date" value={to} onChange={(e) => onChange(from, e.target.value)} className="erp-field w-36 rounded-none border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal" />
       </label>
     </div>
   )
@@ -71,10 +71,10 @@ function DateRange({
 function ReportActions({ onExport, rows }: { onExport: () => void; rows: number }) {
   return (
     <div className="flex items-center gap-2">
-      <button type="button" onClick={() => window.print()} className="flex items-center gap-1 rounded-sm min-h-[52px] border border-[#969ea4] bg-gradient-to-b from-[#d3d9dc] to-[#bcc3c8] px-5 text-[16px] font-bold text-[#333b3f] shadow-sm transition hover:brightness-105">
+      <button type="button" onClick={() => window.print()} className="flex items-center gap-1 rounded-none min-h-[56px] border border-[#969ea4] bg-gradient-to-b from-[#d3d9dc] to-[#bcc3c8] px-6 text-[17px] font-bold text-[#333b3f] shadow-sm transition hover:brightness-105">
         <Printer size={14} /> Print
       </button>
-      <button type="button" onClick={onExport} disabled={rows === 0} className="flex items-center gap-1 rounded-sm bg-[#2e8fc4] px-2.5 py-1.5 text-[12px] font-bold text-white shadow-sm transition enabled:hover:brightness-105 disabled:opacity-40">
+      <button type="button" onClick={onExport} disabled={rows === 0} className="flex items-center gap-1 rounded-none bg-[#2e8fc4] px-2.5 py-1.5 text-[12px] font-bold text-white shadow-sm transition enabled:hover:brightness-105 disabled:opacity-40">
         <FileSpreadsheet size={14} /> Export CSV
       </button>
       <SearchResultNote count={rows} />
@@ -134,7 +134,7 @@ function MonthWiseAnalysis() {
     <ErpPanel title="Template Name: Month-Wise Analysis">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <DateRange from={dr.from} to={dr.to} onChange={dr.set} />
-        <button type="button" onClick={() => setView(true)} className="rounded-sm bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
+        <button type="button" onClick={() => setView(true)} className="rounded-none bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
       </div>
       {view && (
         <>
@@ -200,7 +200,7 @@ function StockReport() {
         <PickTwo title="Locations" options={locations.length ? locations : ['Main Store', 'SCL UMOJA 3']} value={selLocations} onChange={setSelLocations} />
       </div>
       <div className="flex items-center justify-between">
-        <button type="button" onClick={() => setView(true)} className="rounded-sm bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
+        <button type="button" onClick={() => setView(true)} className="rounded-none bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
         <SearchResultNote count={rows.length} />
       </div>
       {view && (
@@ -252,7 +252,7 @@ function StockReorder() {
   return (
     <ErpPanel title="Template Name: Stock Reorders / EOQ Analysis">
       <div className="flex items-center justify-between">
-        <button type="button" onClick={() => setView(true)} className="rounded-sm bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
+        <button type="button" onClick={() => setView(true)} className="rounded-none bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
       </div>
       {view && (
         <>
@@ -310,15 +310,15 @@ function AbcAnalysis() {
         <div className="flex gap-4 text-[12px] font-bold text-slate-600">
           <label className="flex flex-col gap-1">
             Class A up to (% cumulative)
-            <input type="number" value={pct.a} min={1} max={100} onChange={(e) => setPct({ ...pct, a: Number(e.target.value) })} className="erp-field w-32 rounded-sm border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal" />
+            <input type="number" value={pct.a} min={1} max={100} onChange={(e) => setPct({ ...pct, a: Number(e.target.value) })} className="erp-field w-32 rounded-none border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal" />
           </label>
           <label className="flex flex-col gap-1">
             Class B next (%)
-            <input type="number" value={pct.b} min={0} max={99} onChange={(e) => setPct({ ...pct, b: Number(e.target.value) })} className="erp-field w-32 rounded-sm border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal" />
+            <input type="number" value={pct.b} min={0} max={99} onChange={(e) => setPct({ ...pct, b: Number(e.target.value) })} className="erp-field w-32 rounded-none border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal" />
           </label>
         </div>
         <div className="flex items-center justify-center gap-2">
-          <button type="button" onClick={() => { setViewRows(rows); setView(true) }} className="rounded-sm bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
+          <button type="button" onClick={() => { setViewRows(rows); setView(true) }} className="rounded-none bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
         </div>
       </div>
       {view && (
@@ -373,12 +373,12 @@ function AgeingReport() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <label className="flex items-center gap-2 text-[12px] font-bold text-slate-600">
           Format
-          <select value={sum} onChange={(e) => setSum(e.target.value as 'summary' | 'details')} className="erp-field rounded-sm border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal">
+          <select value={sum} onChange={(e) => setSum(e.target.value as 'summary' | 'details')} className="erp-field rounded-none border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal">
             <option value="summary">Summary (buckets)</option>
             <option value="details">Details</option>
           </select>
         </label>
-        <button type="button" onClick={() => setView(true)} className="rounded-sm bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
+        <button type="button" onClick={() => setView(true)} className="rounded-none bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
       </div>
       {view && (
         <AgeingRows rows={rows} sum={sum} onCsv={csv} />
@@ -456,7 +456,7 @@ function ReceivablesReport() {
   return (
     <ErpPanel title="Template Name: Receivables Report">
       <div className="flex items-center justify-between">
-        <button type="button" onClick={() => setView(true)} className="rounded-sm bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
+        <button type="button" onClick={() => setView(true)} className="rounded-none bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
       </div>
       {view && (
         <>
@@ -506,7 +506,7 @@ function PayablesReport() {
   return (
     <ErpPanel title="Template Name: Payables Report">
       <div className="flex items-center justify-between">
-        <button type="button" onClick={() => setView(true)} className="rounded-sm bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
+        <button type="button" onClick={() => setView(true)} className="rounded-none bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
       </div>
       {view && (
         <>
@@ -548,7 +548,7 @@ function OutstandingReport() {
           <input type="checkbox" checked={limitBreach} onChange={(e) => setLimitBreach(e.target.checked)} className="h-4 w-4 accent-[#3b74b8]" />
           Only credit-limit breaches
         </label>
-        <button type="button" onClick={() => setView(true)} className="rounded-sm bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
+        <button type="button" onClick={() => setView(true)} className="rounded-none bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
       </div>
       {view && (
         <>
@@ -596,20 +596,20 @@ function AuditTrail() {
         <div className="flex flex-wrap items-end gap-3 text-[12px] font-bold text-slate-600">
           <label className="flex flex-col gap-1">
             User
-            <select value={user_} onChange={(e) => setUser_(e.target.value)} className="erp-field rounded-sm border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal">
+            <select value={user_} onChange={(e) => setUser_(e.target.value)} className="erp-field rounded-none border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal">
               <option value="">All</option>
               {users.map((u) => <option key={u}>{u}</option>)}
             </select>
           </label>
           <label className="flex flex-col gap-1">
             Transaction
-            <select value={kind} onChange={(e) => setKind(e.target.value)} className="erp-field rounded-sm border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal">
+            <select value={kind} onChange={(e) => setKind(e.target.value)} className="erp-field rounded-none border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal">
               <option>All</option>
               {kinds.map((k) => <option key={k}>{k}</option>)}
             </select>
           </label>
         </div>
-        <button type="button" onClick={() => setView(true)} className="rounded-sm bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
+        <button type="button" onClick={() => setView(true)} className="rounded-none bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
       </div>
       {view && (
         <>
@@ -653,7 +653,7 @@ function ExceptionReport() {
     <ErpPanel title="Template Name: Exception Report">
       <div className="flex items-center justify-between">
         <span className="text-[12px] text-slate-500">Refunds, negative stock and credit-limit breaches</span>
-        <button type="button" onClick={() => setView(true)} className="rounded-sm bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
+        <button type="button" onClick={() => setView(true)} className="rounded-none bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
       </div>
       {view && (
         <>
@@ -689,7 +689,7 @@ function PriceComparison() {
     <ErpPanel title="Template Name: Price Comparison Statement">
       <div className="flex items-center justify-between">
         <span className="text-[12px] text-slate-500">Lowest margins first — review repricing</span>
-        <button type="button" onClick={() => setView(true)} className="rounded-sm bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
+        <button type="button" onClick={() => setView(true)} className="rounded-none bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
       </div>
       {view && (
         <>
@@ -733,7 +733,7 @@ function LocationMIS() {
   return (
     <ErpPanel title="Template Name: MIS Location-wise">
       <div className="flex items-center justify-between">
-        <button type="button" onClick={() => setView(true)} className="rounded-sm bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
+        <button type="button" onClick={() => setView(true)} className="rounded-none bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
       </div>
       {view && (
         <>
@@ -785,14 +785,14 @@ function BudgetAnalysis() {
         <div className="flex gap-4 text-[12px] font-bold text-slate-600">
           <label className="flex flex-col gap-1">
             Year
-            <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} className="erp-field w-28 rounded-sm border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal" />
+            <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} className="erp-field w-28 rounded-none border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal" />
           </label>
           <label className="flex flex-col gap-1">
             Annual budget (KES)
-            <input type="number" min={0} value={budget} onChange={(e) => setBudget(Number(e.target.value))} className="erp-field w-40 rounded-sm border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal" />
+            <input type="number" min={0} value={budget} onChange={(e) => setBudget(Number(e.target.value))} className="erp-field w-40 rounded-none border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal" />
           </label>
         </div>
-        <button type="button" onClick={() => setView(true)} className="rounded-sm bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
+        <button type="button" onClick={() => setView(true)} className="rounded-none bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
       </div>
       {view && (
         <>
@@ -832,12 +832,12 @@ function PartyStockLedger() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <label className="flex items-center gap-2 text-[12px] font-bold text-slate-600">
           Movement Reason
-          <select value={reason} onChange={(e) => setReason(e.target.value)} className="erp-field rounded-sm border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal">
+          <select value={reason} onChange={(e) => setReason(e.target.value)} className="erp-field rounded-none border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal">
             <option>All</option>
             {kinds.map((k) => <option key={k}>{k}</option>)}
           </select>
         </label>
-        <button type="button" onClick={() => setView(true)} className="rounded-sm bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
+        <button type="button" onClick={() => setView(true)} className="rounded-none bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
       </div>
       {view && (
         <>
@@ -876,7 +876,7 @@ function NonCompliance() {
     <ErpPanel title="Template Name: Non-Compliance Report">
       <div className="flex items-center justify-between">
         <span className="text-[12px] text-slate-500">Bills without narration and untaxed service lines</span>
-        <button type="button" onClick={() => setView(true)} className="rounded-sm bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
+        <button type="button" onClick={() => setView(true)} className="rounded-none bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
       </div>
       {view && (
         <>
@@ -938,7 +938,7 @@ function GenericScaffold({ slug }: { slug: string }) {
         are wired; results will list here once data is captured from live usage.
       </p>
       <div className="flex items-center justify-between">
-        <button type="button" className="rounded-sm bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
+        <button type="button" className="rounded-none bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">View</button>
         <SearchResultNote count={0} />
       </div>
     </ErpPanel>

@@ -43,7 +43,7 @@ function ListPicker({
     [items, query],
   )
   return (
-    <div className="flex min-w-0 flex-1 flex-col rounded-sm border border-slate-300 bg-white shadow-sm">
+    <div className="flex min-w-0 flex-1 flex-col rounded-none border border-slate-300 bg-white shadow-sm">
       <div className="flex items-center gap-1.5 border-b border-slate-300 bg-slate-100 px-2 py-1.5">
         <Search size={14} className="shrink-0 text-slate-400" />
         <input
@@ -122,7 +122,7 @@ export function PickTwo({
             setSel(rightSel)
           }}
           title="Add selected"
-          className="rounded-sm bg-amber-500 p-1 text-white shadow enabled:hover:brightness-110 disabled:opacity-40"
+          className="rounded-none bg-amber-500 p-1 text-white shadow enabled:hover:brightness-110 disabled:opacity-40"
         >
           <ArrowRight size={16} />
         </button>
@@ -145,7 +145,7 @@ export function PickTwo({
             setSel(leftSel)
           }}
           title="Remove selected"
-          className="rounded-sm bg-orange-600 p-1 text-white shadow enabled:hover:brightness-110 disabled:opacity-40"
+          className="rounded-none bg-orange-600 p-1 text-white shadow enabled:hover:brightness-110 disabled:opacity-40"
         >
           <ArrowLeft size={16} />
         </button>
@@ -174,7 +174,7 @@ export function ErpTable({
   className?: string
 }) {
   return (
-    <div className={`overflow-x-auto rounded-[4px] border border-[#b6b1a8] bg-white shadow-sm ${className}`}>
+    <div className={`overflow-x-auto rounded-none border border-[#b6b1a8] bg-white shadow-sm ${className}`}>
       <table className="w-full border-collapse text-[15px] text-[#2b3337]">
         <thead>
           <tr className="bg-[#dcdcd2] text-left text-[14px] font-semibold text-[#2c2a27]">
@@ -208,7 +208,7 @@ export function ErpEmptyRow({ cols }: { cols: number }) {
 
 export function ErpPanel({ title, children, actions }: { title: ReactNode; children: ReactNode; actions?: ReactNode }) {
   return (
-    <section className="rounded-[4px] border border-[#c7ccd0] bg-white shadow-sm">
+    <section className="rounded-none border border-[#c7ccd0] bg-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e6e9ea] bg-white px-3 py-2">
         <h2 className="text-[17px] font-bold text-[#1f272b]">{title}</h2>
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}

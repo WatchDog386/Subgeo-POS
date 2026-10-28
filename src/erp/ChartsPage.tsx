@@ -25,7 +25,7 @@ function ChartFrame({ title, bars, type, zoom }: ChartFrameProps) {
   const slot = 90
   const width = Math.max(620, bars.length * slot) * zoom
   return (
-    <div className="overflow-x-auto rounded-sm border border-slate-300 bg-white p-4 shadow-sm">
+    <div className="overflow-x-auto rounded-none border border-slate-300 bg-white p-4 shadow-sm">
       <div className="mb-3 text-center text-[15px] font-bold text-slate-800">{title}</div>
       <svg width={width} height={(plotH + 60) * zoom} viewBox={`0 0 ${Math.max(620, bars.length * slot)} ${plotH + 60}`}>
         {[0, 0.25, 0.5, 0.75, 1].map((g) => (
@@ -128,7 +128,7 @@ export default function ErpChartsPage() {
       <div className="grid gap-3 md:grid-cols-3">
         <label className="flex flex-col gap-1 text-[12px] font-bold text-slate-600">
           Chart Type
-          <select value={type} onChange={(e) => setType(e.target.value as typeof type)} className="rounded-sm border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal">
+          <select value={type} onChange={(e) => setType(e.target.value as typeof type)} className="rounded-none border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal">
             {CHART_TYPES.map((t) => (
               <option key={t}>{t}</option>
             ))}
@@ -136,26 +136,26 @@ export default function ErpChartsPage() {
         </label>
         <label className="flex flex-col gap-1 text-[12px] font-bold text-slate-600">
           Period From
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="rounded-sm border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal" />
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="rounded-none border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal" />
         </label>
         <label className="flex flex-col gap-1 text-[12px] font-bold text-slate-600">
           Period To
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="rounded-sm border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal" />
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="rounded-none border border-slate-300 bg-white px-2 py-1.5 text-[13px] font-normal" />
         </label>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => setView(true)} className="rounded-sm bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">
+          <button type="button" onClick={() => setView(true)} className="rounded-none bg-[#3b74b8] px-3 py-1.5 text-[12px] font-bold text-white shadow-sm hover:brightness-110">
             View
           </button>
-          <button type="button" onClick={() => setZoom((z) => Math.max(0.6, Math.round((z - 0.2) * 10) / 10))} title="Zoom out" className="rounded-sm border border-[#969ea4] bg-gradient-to-b from-[#d3d9dc] to-[#bcc3c8] p-1.5 text-[#333b3f] hover:brightness-105">
+          <button type="button" onClick={() => setZoom((z) => Math.max(0.6, Math.round((z - 0.2) * 10) / 10))} title="Zoom out" className="rounded-none border border-[#969ea4] bg-gradient-to-b from-[#d3d9dc] to-[#bcc3c8] p-1.5 text-[#333b3f] hover:brightness-105">
             <ZoomOut size={14} />
           </button>
-          <button type="button" onClick={() => setZoom((z) => Math.min(2.2, Math.round((z + 0.2) * 10) / 10))} title="Zoom in" className="rounded-sm border border-[#969ea4] bg-gradient-to-b from-[#d3d9dc] to-[#bcc3c8] p-1.5 text-[#333b3f] hover:brightness-105">
+          <button type="button" onClick={() => setZoom((z) => Math.min(2.2, Math.round((z + 0.2) * 10) / 10))} title="Zoom in" className="rounded-none border border-[#969ea4] bg-gradient-to-b from-[#d3d9dc] to-[#bcc3c8] p-1.5 text-[#333b3f] hover:brightness-105">
             <ZoomIn size={14} />
           </button>
-          <button type="button" onClick={() => window.print()} title="Print — username/admin, Excel, PDF, HTML" className="rounded-sm border border-[#969ea4] bg-gradient-to-b from-[#d3d9dc] to-[#bcc3c8] p-1.5 text-[#333b3f] hover:brightness-105">
+          <button type="button" onClick={() => window.print()} title="Print — username/admin, Excel, PDF, HTML" className="rounded-none border border-[#969ea4] bg-gradient-to-b from-[#d3d9dc] to-[#bcc3c8] p-1.5 text-[#333b3f] hover:brightness-105">
             <Printer size={14} />
           </button>
         </div>
@@ -165,7 +165,7 @@ export default function ErpChartsPage() {
       {view ? (
         <ChartFrame title={`${title} - ${type}`} bars={bars} type={type} zoom={zoom} />
       ) : (
-        <div className="rounded-sm border border-dashed border-slate-300 bg-white py-16 text-center text-[13px] text-slate-400 shadow-sm">
+        <div className="rounded-none border border-dashed border-slate-300 bg-white py-16 text-center text-[13px] text-slate-400 shadow-sm">
           Choose filters and press <b className="text-slate-600">View</b> to draw the chart
         </div>
       )}

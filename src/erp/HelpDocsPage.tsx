@@ -23,7 +23,7 @@ const DOCS: Doc[] = [
 export default function ErpHelpDocsPage() {
   return (
     <ErpPanel title="HelpDocs - Document Center">
-      <div className="overflow-x-auto rounded-sm border border-slate-300 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-none border border-slate-300 bg-white shadow-sm">
         <table className="w-full border-collapse text-[15px] text-[#2b3337]">
           <thead>
             <tr className="bg-[#dcdcd2] text-left text-[14px] font-semibold text-[#2c2a27]">
@@ -53,7 +53,7 @@ export default function ErpHelpDocsPage() {
       </div>
       <div className="flex flex-wrap items-center gap-1 px-1 py-1.5 text-slate-600">
         {['View', 'New Doc', 'Add Attachment', 'Delete', 'Checkin', 'Checkout', 'Save'].map((a) => (
-          <button key={a} type="button" className="rounded-sm bg-gradient-to-b from-[#f6b352] to-[#e08c1a] px-2.5 py-1 text-[11px] font-bold text-slate-900 shadow-sm transition hover:brightness-105 active:scale-95">
+          <button key={a} type="button" className="rounded-none bg-gradient-to-b from-[#f6b352] to-[#e08c1a] px-2.5 py-1 text-[11px] font-bold text-slate-900 shadow-sm transition hover:brightness-105 active:scale-95">
             {a}
           </button>
         ))}
