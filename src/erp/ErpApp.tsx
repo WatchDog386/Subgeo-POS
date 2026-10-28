@@ -202,14 +202,14 @@ function Sidebar({
             <button
               type="button"
               onClick={() => setOpen({ ...open, [group.label]: !isOpen })}
-              className="flex w-full items-center gap-2 border-b border-[#123c7c] bg-[#1857b0] px-3 py-3.5 text-left text-[15px] font-bold uppercase tracking-wide text-white transition hover:bg-[#1a5fc0]"
+              className="flex w-full items-center gap-2 bg-[#1857b0] px-3 py-3.5 text-left text-[15px] font-bold uppercase tracking-wide text-white transition hover:bg-[#1a5fc0]"
             >
               <Globe size={16} className="shrink-0 text-[#9cc0f0]" />
               <span className="truncate">{group.label}</span>
               {isOpen ? <ChevronDown size={14} className="ml-auto shrink-0" /> : <ChevronRight size={14} className="ml-auto shrink-0" />}
             </button>
-            {isOpen && (
-              <ul className="border-b-4 border-[#1857b0] bg-white py-1">
+          {isOpen && (
+              <ul className="bg-white py-1">
                 {group.items.map((item) => (
                   <li key={item.to + item.label}>
                     <NavLink
@@ -369,9 +369,9 @@ export default function ErpApp() {
       )}
 
       <div className="flex min-h-0 flex-1">
-        {/* Medapp sidebar — blue only where there is content, white filler below */}
+        {/* Dull-blue sidebar (no dividing line — distinct from the page bg) */}
         <aside
-          className={`fixed inset-y-0 left-0 top-[92px] z-40 flex w-64 shrink-0 flex-col border-r border-slate-200 bg-[#2e5c9a] shadow-sm transition-transform duration-200 sm:static sm:top-auto sm:z-auto sm:w-60 sm:translate-x-0 sm:shadow-none lg:w-64 ${
+          className={`fixed inset-y-0 left-0 top-[92px] z-40 flex w-64 shrink-0 flex-col bg-[#2e5c9a] shadow-sm transition-transform duration-200 sm:static sm:top-auto sm:z-auto sm:w-60 sm:translate-x-0 sm:shadow-none lg:w-64 ${
             navOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
         >
@@ -392,14 +392,11 @@ export default function ErpApp() {
             activePath={path}
             onNavigate={() => setNavOpen(false)}
           />
-          <div className="mt-auto border-t border-[#1e4e8c] bg-[#1e4e8c] px-3 py-2 text-[11px] text-blue-100">
-            {user.name} · <span className="capitalize">{user.role}</span>
-          </div>
         </aside>
 
         {/* Right column: colored tab strip (only over the work area, never
             over the sidebar) plus the white content pane */}
-        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex shrink-0 items-center gap-2 overflow-x-auto px-3 py-2">
             {TABS.map(({ tab: t, label, icon: Icon, bg, border }) => (
               <NavLink
@@ -418,8 +415,8 @@ export default function ErpApp() {
             ))}
           </div>
 
-          {/* White work area matching the top bar */}
-          <main className="erp-scroll min-h-0 flex-1 overflow-auto bg-white">
+          {/* Dull work area, distinct from the sidebar without a divider line */}
+          <main className="erp-scroll min-h-0 flex-1 overflow-auto bg-[#f5f6f8]">
           <Routes>
             <Route path="/" element={<Navigate to="/home" replace />} />
             <Route path="/home" element={<ErpHomePage />} />
