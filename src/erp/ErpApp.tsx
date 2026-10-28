@@ -14,6 +14,7 @@ import {
   Menu,
   PieChart,
   Star,
+  UserRound,
   Wrench,
   X,
 } from 'lucide-react'
@@ -47,13 +48,13 @@ import { FAVOURITES, MODULE_GROUPS, REPORT_ITEMS, REPORT_TREE, UTILITY_ITEMS } f
 // grey tab strip (Home | Modules | Reports | Charts | Utilities | HelpDocs),
 // steel-blue accordion sidebar with Favourites, beige work area.
 
-const TABS: { tab: ErpTab; label: string; icon: typeof LayoutDashboard }[] = [
-  { tab: 'home', label: 'Home', icon: LayoutDashboard },
-  { tab: 'modules', label: 'Modules', icon: Blocks },
-  { tab: 'reports', label: 'Reports', icon: BarChart3 },
-  { tab: 'charts', label: 'Charts', icon: PieChart },
-  { tab: 'utilities', label: 'Utilities', icon: Wrench },
-  { tab: 'helpdocs', label: 'HelpDocs', icon: BookOpen },
+const TABS: { tab: ErpTab; label: string; icon: typeof LayoutDashboard; color: { text: string; border: string } }[] = [
+  { tab: 'home', label: 'Home', icon: LayoutDashboard, color: { text: 'text-orange-600', border: 'border-orange-500' } },
+  { tab: 'modules', label: 'Modules', icon: Blocks, color: { text: 'text-emerald-600', border: 'border-emerald-500' } },
+  { tab: 'reports', label: 'Reports', icon: BarChart3, color: { text: 'text-indigo-600', border: 'border-indigo-500' } },
+  { tab: 'charts', label: 'Charts', icon: PieChart, color: { text: 'text-violet-600', border: 'border-violet-500' } },
+  { tab: 'utilities', label: 'Utilities', icon: Wrench, color: { text: 'text-teal-600', border: 'border-teal-500' } },
+  { tab: 'helpdocs', label: 'HelpDocs', icon: BookOpen, color: { text: 'text-sky-600', border: 'border-sky-500' } },
 ]
 
 /** Build the accordion groups shown for the active top tab. */
@@ -152,7 +153,7 @@ function Sidebar({
         >
           Report List
         </NavLink>
-        <div className="border-b-4 border-[#1857b0] bg-[#efe9df] px-2 py-2">
+        <div className="border-b-4 border-[#1857b0] bg-white px-2 py-2">
           <div className="flex items-center gap-1.5 px-1 py-1 text-[13.5px] font-semibold text-slate-700">
             <Folder size={15} className="shrink-0 text-amber-500" /> Report List
           </div>
@@ -162,7 +163,7 @@ function Sidebar({
                 <NavLink
                   to="/reports/list"
                   onClick={onNavigate}
-                  className="flex items-center gap-1.5 px-5 py-1.5 text-[13px] text-slate-700 transition hover:bg-amber-200"
+                  className="flex items-center gap-1.5 px-5 py-1.5 text-[13px] text-slate-700 transition hover:bg-orange-50"
                 >
                   <FileText size={14} className="shrink-0 text-slate-400" />
                   <span className="truncate">{doc}</span>
@@ -179,7 +180,7 @@ function Sidebar({
                 onClick={onNavigate}
                 className={({ isActive }) =>
                   `block border-b border-[#5b93dd] px-3 py-3 text-[13.5px] font-semibold transition ${
-                    isActive ? 'bg-[#f0a848] text-slate-900' : 'bg-[#1e63c5] text-white hover:bg-[#2a70d2]'
+                    isActive ? 'bg-amber-100 text-amber-900' : 'bg-[#1e63c5] text-white hover:bg-[#2a70d2]'
                   }`
                 }
               >
@@ -208,7 +209,7 @@ function Sidebar({
               {isOpen ? <ChevronDown size={14} className="ml-auto shrink-0" /> : <ChevronRight size={14} className="ml-auto shrink-0" />}
             </button>
             {isOpen && (
-              <ul className="border-b-4 border-[#1857b0] bg-[#efe9df] py-1">
+              <ul className="border-b-4 border-[#1857b0] bg-white py-1">
                 {group.items.map((item) => (
                   <li key={item.to + item.label}>
                     <NavLink
@@ -217,7 +218,7 @@ function Sidebar({
                       onClick={onNavigate}
                       className={({ isActive }) =>
                         `flex items-center gap-2 px-4 py-2 text-[13.5px] text-slate-700 transition ${
-                          isActive ? 'bg-[#f0a848] font-semibold text-slate-900' : 'hover:bg-amber-200'
+                          isActive ? 'bg-amber-100 font-semibold text-amber-900' : 'hover:bg-orange-50'
                         }`
                       }
                     >
@@ -235,7 +236,7 @@ function Sidebar({
         <div className="flex items-center gap-2 border-b border-[#8a6d1d] bg-[#c9a227] px-3 py-2.5 text-[13px] font-bold uppercase tracking-wide text-slate-900">
           <Star size={15} className="shrink-0 fill-slate-900" /> Favourites
         </div>
-        <ul className="bg-[#efe9df] pb-1">
+        <ul className="bg-white pb-1">
           {FAVOURITES.map((f) => (
             <li key={f.to + f.label}>
               <NavLink
@@ -243,7 +244,7 @@ function Sidebar({
                 onClick={onNavigate}
                 className={({ isActive }) =>
                   `flex items-center gap-2 px-4 py-2 text-[13.5px] text-slate-700 transition ${
-                    isActive ? 'bg-[#f0a848] font-semibold text-slate-900' : 'hover:bg-amber-200'
+                    isActive ? 'bg-amber-100 font-semibold text-amber-900' : 'hover:bg-orange-50'
                   }`
                 }
               >
@@ -264,6 +265,7 @@ export default function ErpApp() {
   const online = useOnline()
   const path = useLocation().pathname
   const [navOpen, setNavOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   if (!user) return <LoginPage />
 
   const tab: ErpTab = path.startsWith('/modules')
@@ -280,47 +282,83 @@ export default function ErpApp() {
   const groups = sidebarFor(tab)
 
   return (
-    <div className="flex h-full flex-col">
-      {/* Header banner: exactly like the medapp — tall silver strip with the
-          round SUBGEO cross badge, version, welcome block, company + license,
-          logout and offline icons, closed by the double blue rule. */}
-      <header className="relative flex h-[92px] shrink-0 items-center gap-4 border-b border-[#2f63a8] bg-gradient-to-b from-white via-[#fdfcfa] to-[#eae7e1] px-3 shadow-sm">
-        <div aria-hidden className="absolute bottom-0 left-0 h-[3px] w-full bg-gradient-to-r from-[#3a76c4] via-[#7fb0e8] to-[#3a76c4]" />
-        <div className="flex min-w-0 items-center gap-2">
+    <div className="flex h-full flex-col bg-white">
+      {/* Header banner: tall clean white strip — logo + version, company,
+          and the welcome/user dropdown at the far right. */}
+      <header className="flex h-[92px] shrink-0 items-center gap-4 bg-white px-4">
+        <div className="flex min-w-0 items-center gap-3">
           <img src="logo.png" alt="SUBGEO" className="h-[72px] w-[72px] shrink-0 object-contain" />
           <span className="text-[17px] font-bold text-slate-700">{APP_VERSION}</span>
         </div>
-        <div className="flex items-center gap-2 pl-2 sm:pl-6">
-          <span className="hidden h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-b from-amber-400 to-orange-600 shadow-inner sm:flex">
-            <img src={user.image ?? 'avatar.svg'} alt="" className="h-full w-full object-cover" />
-          </span>
-          <span className="leading-tight">
-            <span className="block text-[15px] text-slate-600">Welcome</span>
-            <span className="block text-[15px] font-semibold tracking-wide text-slate-800">{user.name.toUpperCase()}</span>
-          </span>
-        </div>
         <div className="hidden min-w-0 flex-1 text-center md:block">
           <span className="block truncate text-[21px] font-bold tracking-[0.06em] text-slate-800">{COMPANY_LABEL}</span>
-          <span className="block font-mono text-[11px] font-bold text-slate-500">{LICENSE_PERIOD}</span>
+          <span className="block font-mono text-[11px] font-semibold text-slate-400">{LICENSE_PERIOD}</span>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <span className="flex items-center gap-1.5 rounded-sm border border-slate-300 bg-white/70 px-2 py-1 text-[12px] text-slate-600" title={online ? 'Online' : 'Offline'}>
+        <div className="ml-auto flex shrink-0 items-center gap-3">
+          <span className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[12px] font-medium text-slate-600" title={online ? 'Online' : 'Offline'}>
             <span className={`h-2 w-2 rounded-full ${online ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-            {online ? 'On' : 'Off'}
+            {online ? 'Online' : 'Offline'}
           </span>
-          <button
-            type="button"
-            onClick={lock}
-            title="Logout"
-            className="flex items-center gap-1.5 rounded-sm border border-[#a33] bg-gradient-to-b from-[#f5dede] to-[#e4b8b8] px-2.5 py-2 text-[12px] font-bold text-[#7a1f1f] shadow-sm transition hover:brightness-105 active:scale-95"
-          >
-            <LogOut size={15} /> Logout
-          </button>
+
+          {/* User account dropdown, far right */}
+          <div className="relative flex items-center">
+            <button
+              type="button"
+              onClick={() => setMenuOpen((m) => !m)}
+              className="flex items-center gap-2 rounded-full border border-slate-200 bg-white py-1 pl-1 pr-2.5 shadow-sm transition hover:border-slate-300 hover:shadow"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 ring-1 ring-slate-200">
+                <img src={user.image ?? 'avatar.svg'} alt={user.name} className="h-full w-full object-cover" />
+              </span>
+              <span className="hidden text-left leading-tight sm:block">
+                <span className="block text-[12px] text-slate-400">Welcome</span>
+                <span className="block text-[14px] font-bold text-slate-800">{user.name}</span>
+              </span>
+              <ChevronDown size={15} className={`text-slate-400 transition ${menuOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {menuOpen && (
+              <>
+                <button
+                  type="button"
+                  aria-hidden
+                  tabIndex={-1}
+                  className="fixed inset-0 z-10 cursor-default"
+                  onClick={() => setMenuOpen(false)}
+                />
+                <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl border border-slate-200 bg-white py-1.5 shadow-lg">
+                  <div className="border-b border-slate-100 px-4 py-2.5">
+                    <div className="truncate text-sm font-bold text-slate-900">{user.name}</div>
+                    <div className="text-xs capitalize text-slate-400">{user.role}</div>
+                  </div>
+                  <NavLink
+                    to="/profile"
+                    onClick={() => setMenuOpen(false)}
+                    className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+                  >
+                    <UserRound size={15} />
+                    My profile
+                  </NavLink>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      lock()
+                    }}
+                    className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-red-600 transition hover:bg-red-50"
+                  >
+                    <LogOut size={15} />
+                    Logout
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
           <button
             type="button"
             onClick={() => setNavOpen((v) => !v)}
             aria-label="Toggle menu"
-            className="rounded-sm border border-slate-400 bg-gradient-to-b from-slate-100 to-slate-300 p-2 text-slate-700 shadow-sm transition active:scale-95 sm:hidden"
+            className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 shadow-sm transition active:scale-95 sm:hidden"
           >
             {navOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
@@ -332,7 +370,7 @@ export default function ErpApp() {
           type="button"
           aria-label="Close menu"
           onClick={() => setNavOpen(false)}
-          className="fixed inset-0 top-[92px] z-30 bg-slate-950/50 backdrop-blur-[2px] sm:hidden"
+          className="fixed inset-0 top-[92px] z-30 bg-slate-950/40 sm:hidden"
         />
       )}
 
@@ -365,30 +403,30 @@ export default function ErpApp() {
           </div>
         </aside>
 
-        {/* Right column: grey tab strip (only over the work area, never over
-            the sidebar) plus the beige content pane */}
+        {/* Right column: colored tab strip (only over the work area, never
+            over the sidebar) plus the white content pane */}
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex shrink-0 items-end gap-1.5 overflow-x-auto border-b border-[#b6b1a8] bg-gradient-to-b from-[#f2efe9] to-[#dedbd4] px-3 pt-2">
-            {TABS.map(({ tab: t, label, icon: Icon }) => (
+          <div className="flex shrink-0 items-end gap-1 overflow-x-auto border-b border-slate-200 bg-white px-4">
+            {TABS.map(({ tab: t, label, icon: Icon, color }) => (
               <NavLink
                 key={t}
                 to={`/${t}`}
                 className={({ isActive }) =>
-                  `flex shrink-0 items-center gap-1.5 rounded-[3px] border px-4 py-1.5 text-[13px] font-bold transition ${
+                  `flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-[14px] font-semibold transition ${
                     isActive
-                      ? 'border-[#8f8b84] bg-gradient-to-b from-[#f7f5f1] to-[#e6e2da] text-slate-900 shadow-[inset_0_1px_0_#fff]'
-                      : 'border-[#6d6a66] bg-[linear-gradient(to_bottom,#c2bfb9,#8e8b86)] text-[#2c2a27] hover:brightness-110'
+                      ? `${color.text} ${color.border}`
+                      : 'border-transparent text-slate-400 hover:text-slate-700'
                   }`
                 }
               >
-                <Icon size={15} />
+                <Icon size={16} />
                 {label}
               </NavLink>
             ))}
           </div>
 
-          {/* Beige work area like the medapp content pane */}
-          <main className="erp-scroll min-h-0 flex-1 overflow-auto bg-[#e2ddd3]">
+          {/* Crisp white work area */}
+          <main className="erp-scroll min-h-0 flex-1 overflow-auto bg-white">
           <Routes>
             <Route path="/" element={<Navigate to="/home" replace />} />
             <Route path="/home" element={<ErpHomePage />} />

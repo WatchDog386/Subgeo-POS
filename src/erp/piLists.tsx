@@ -68,7 +68,7 @@ function ListPicker({
                     onSelect(isOn ? selected.filter((x) => x !== item) : [...selected, item])
                   }
                   className={`w-full px-2 py-1 text-left text-[13px] transition ${
-                    isOn ? 'bg-amber-200 text-slate-900' : i % 2 ? 'bg-white hover:bg-sky-100' : 'bg-[#f3ece2] hover:bg-sky-100'
+                    isOn ? 'bg-amber-100 text-slate-900' : i % 2 ? 'bg-white hover:bg-sky-50' : 'bg-slate-50 hover:bg-sky-50'
                   }`}
                 >
                   {render ? render(item) : item}
@@ -177,11 +177,11 @@ export function ErpTable({
     <div className={`overflow-x-auto rounded-sm border border-slate-300 bg-white shadow-sm ${className}`}>
       <table className="w-full border-collapse text-[13px] text-slate-700">
         <thead>
-          <tr className="bg-gradient-to-b from-slate-50 to-slate-300 text-left text-[12px] font-bold text-slate-600">
+          <tr className="bg-slate-50 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
             {columns.map((c) => (
               <th
                 key={c.label}
-                className={`whitespace-nowrap border-b border-slate-300 px-2 py-1.5 ${
+                className={`whitespace-nowrap border-b border-slate-200 px-2 py-2 ${
                   c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left'
                 }`}
               >
@@ -208,12 +208,12 @@ export function ErpEmptyRow({ cols }: { cols: number }) {
 
 export function ErpPanel({ title, children, actions }: { title: ReactNode; children: ReactNode; actions?: ReactNode }) {
   return (
-    <section className="rounded-sm border border-slate-300 bg-white shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-300 bg-white px-3 py-2">
+    <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
         <h2 className="text-[15px] font-bold tracking-wide text-slate-800">{title}</h2>
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </div>
-      <div className="space-y-3 bg-[#e2ddd3] p-3">{children}</div>
+      <div className="space-y-3 p-4">{children}</div>
     </section>
   )
 }

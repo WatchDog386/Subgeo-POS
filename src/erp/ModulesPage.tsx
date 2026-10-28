@@ -124,7 +124,7 @@ function ModuleSales({
               <tr
                 key={s.id}
                 onClick={() => nav('/sales')}
-                className={`cursor-pointer border-b border-slate-100 transition hover:bg-sky-50 ${i % 2 ? 'bg-white' : 'bg-[#f3ece2]'}`}
+                className={`cursor-pointer border-b border-slate-100 transition hover:bg-sky-50 ${i % 2 ? 'bg-white' : 'bg-slate-50'}`}
               >
                 <td className="px-2 py-1.5 font-mono text-[12px]">{prefix}-{String(s.id ?? 0).padStart(3, '0')}</td>
                 <td className="px-2 py-1.5">{new Date(s.createdAt).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
@@ -138,7 +138,7 @@ function ModuleSales({
           )}
         </tbody>
       </table>
-      <div className="flex flex-wrap items-center gap-1 border-t border-slate-300 bg-[#e2ddd3] px-2 py-1.5 text-slate-600">
+      <div className="flex flex-wrap items-center gap-1 border-t border-slate-200 bg-slate-50 px-2 py-1.5 text-slate-600">
         {['Delete', 'New', 'Edit', 'View', 'Copy', 'Print', 'Export'].map((a) => (
           <button
             key={a}
@@ -181,7 +181,7 @@ function ModuleJobs({ jobs }: { jobs: ServiceJob[] }) {
         </thead>
         <tbody>
           {jobs.map((j, i) => (
-            <tr key={j.id} onClick={() => nav('/service')} className={`cursor-pointer border-b border-slate-100 transition hover:bg-sky-50 ${i % 2 ? 'bg-white' : 'bg-[#f3ece2]'}`}>
+            <tr key={j.id} onClick={() => nav('/service')} className={`cursor-pointer border-b border-slate-100 transition hover:bg-sky-50 ${i % 2 ? 'bg-white' : 'bg-slate-50'}`}>
               <td className="px-2 py-1.5 font-mono text-[12px]">{j.jobNo}</td>
               <td className="px-2 py-1.5">{j.customerName}</td>
               <td className="px-2 py-1.5">{j.complaint}</td>
@@ -213,7 +213,7 @@ function ModuleParty({ parties }: { parties: (Customer | Supplier)[] }) {
             <ErpEmptyRow cols={4} />
           ) : (
             parties.map((p, i) => (
-              <tr key={p.id} onClick={() => nav('/customers')} className={`cursor-pointer border-b border-slate-100 transition hover:bg-sky-50 ${i % 2 ? 'bg-white' : 'bg-[#f3ece2]'}`}>
+              <tr key={p.id} onClick={() => nav('/customers')} className={`cursor-pointer border-b border-slate-100 transition hover:bg-sky-50 ${i % 2 ? 'bg-white' : 'bg-slate-50'}`}>
                 <td className="px-2 py-1.5 font-mono text-[12px]">{p.id ? `PTY${String(p.id).padStart(4, '0')}` : '—'}</td>
                 <td className="px-2 py-1.5 font-semibold">{p.name}</td>
                 <td className="px-2 py-1.5">{p.phone ?? '—'}</td>
