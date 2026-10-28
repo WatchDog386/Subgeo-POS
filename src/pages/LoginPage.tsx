@@ -8,7 +8,6 @@ export default function LoginPage() {
   const [name, setName] = useState('')
   const [error, setError] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [help, setHelp] = useState(false)
 
   const press = (k: string) => {
     setError(false)
@@ -96,45 +95,23 @@ export default function LoginPage() {
           />
           {error ? (
             <p className="mt-1.5 text-[12px] font-medium text-red-500">Wrong PIN, try again</p>
-          ) : help ? (
+          ) : (
             <p className="mt-1.5 text-[12px] leading-relaxed text-slate-500">
               Enter your {PIN_LENGTH}-digit staff PIN. Ask the owner to create one in Staff.
             </p>
-          ) : null}
+          )}
         </div>
 
-        {/* Didn't have account ? */}
-        <p className="mt-3 text-right text-[12px] font-bold text-slate-700">
-          Didn&apos;t have account ?
-        </p>
-
-        {/* Login / Sign up */}
-        <div className="mt-1 flex items-center justify-center gap-4">
+        {/* Login — white pill with green border, matching the old Home button */}
+        <div className="mt-4 flex justify-center">
           <button
             type="button"
             onClick={submit}
             disabled={pin.length !== PIN_LENGTH || busy}
-            className="w-[104px] rounded-full bg-[#2f9e44] py-2 text-[13px] font-semibold text-white transition hover:bg-[#288a3b] active:scale-[0.98] disabled:opacity-50"
+            className="inline-block w-[104px] rounded-full border-2 border-[#2f9e44] bg-white py-2 text-[13px] font-semibold text-[#2f9e44] transition hover:bg-[#eef9f0] disabled:opacity-50"
           >
             Login
           </button>
-          <button
-            type="button"
-            onClick={() => setHelp((h) => !h)}
-            className="w-[104px] rounded-full bg-[#2f9e44] py-2 text-[13px] font-semibold text-white transition hover:bg-[#288a3b] active:scale-[0.98]"
-          >
-            Sign up
-          </button>
-        </div>
-
-        {/* Home */}
-        <div className="mt-5 flex justify-center">
-          <a
-            href="/"
-            className="inline-block w-[104px] rounded-full border border-[#2f9e44] bg-white py-2 text-[13px] font-semibold text-slate-700 transition hover:bg-[#2f9e44]/5"
-          >
-            Home
-          </a>
         </div>
       </div>
     </div>
