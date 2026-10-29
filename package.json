@@ -12,7 +12,9 @@
     "test": "vitest run",
     "server": "tsx watch server/index.ts",
     "server:start": "tsx server/index.ts",
-    "db:migrate": "tsx scripts/migrate.ts"
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:status": "tsx scripts/db-status.ts",
+    "db:backup": "tsx scripts/backup-db.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

@@ -4,6 +4,7 @@ dist
 *.local
 
 data
+backups
 *.db
 *.db-*
 
