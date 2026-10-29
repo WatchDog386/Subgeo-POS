@@ -1,14 +1,15 @@
 import { useState } from 'react'
 import { PIN_LENGTH, useSession } from '../session'
 import { APP_VERSION, DEFAULTS } from './data'
+import { db } from '../db/db'
 import { EmrLiteLogo, LogoutIcon, NotepadIcon, UsersIcon } from './icons'
 
-/** Medapp login screen: top bar (company centred, no branch), then the red
- * SUBGEO CHEMIST LTD brand centred on the page with the User Name / Pass /
- * Log In row beneath it.
+/** Medapp login screen: grey page with the red SUBGEO CHEMIST LTD brand
+ * centred, then the User Name / Pass / Log In row beneath the top bar.
  *
- * Cashier sign-in (every chemist): User Name = "subgeo", Pass = "0000".
- * Owner sign-in: Pass = "1234". */
+ * Cashier (every chemist): User Name "subgeo", Pass "0000".
+ * Admin: User Name "admin", Pass "subgeo22".
+ * Owner: Pass "1234". */
 export default function MedLogin() {
   const { login } = useSession()
   const [name, setName] = useState('')
@@ -21,9 +22,20 @@ export default function MedLogin() {
     setBusy(true)
     setMsg(null)
     let ok = false
-    if (name.trim().toLowerCase() === 'subgeo' && pass === '0000') {
+    const userName = name.trim().toLowerCase()
+    if (userName === 'subgeo' && pass === '0000') {
       ok = await login('0000') // cashier PIN
       if (!ok) setMsg('Cashier account not found')
+    } else if (userName === 'admin' && pass === 'subgeo22') {
+      // Ensure the admin account exists, then log in with its PIN.
+      try {
+        const existing = await db.users.where('pin').equals('subgeo22').filter((u) => u.name.toUpperCase() === 'ADMIN').first()
+        if (!existing) {
+          await db.users.add({ name: 'ADMIN', pin: 'subgeo22', role: 'owner', active: true })
+        }
+      } catch {}
+      ok = await login('subgeo22')
+      if (!ok) setMsg('Admin account not found')
     } else if (pass === '1234') {
       ok = await login('1234') // owner PIN
       if (!ok) setMsg('Owner account not found')
@@ -49,7 +61,7 @@ export default function MedLogin() {
             <div>-</div>
           </div>
         </div>
-        <div className="ma-company ma-company-center">{DEFAULTS.companyName}</div>
+        <div className="ma-company">{DEFAULTS.companyName}</div>
         <button type="button" className="ma-logout" title="Log Out" aria-label="Log Out" tabIndex={-1} disabled>
           <LogoutIcon />
         </button>
@@ -63,7 +75,7 @@ export default function MedLogin() {
         </div>
       </header>
 
-      <div className="ma-login-card">
+      <div className="ma-login-bar">
         <div className="ma-login-brand">SUBGEO CHEMIST LTD</div>
         <form className="ma-login-form" onSubmit={(e) => e.preventDefault()}>
           <div className="ma-row">
@@ -85,7 +97,6 @@ export default function MedLogin() {
             <input
               id="ma-login-pass"
               className="ma-input"
-              type="password"
               style={{ width: 150 }}
               value={pass}
               maxLength={PIN_LENGTH}

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useSession } from './session'
 import LoadingScreen from './components/LoadingScreen'
 import MedApp from './medapp/MedApp'
+import AdminApp from './medapp/AdminApp'
 import MedLogin from './medapp/MedLogin'
 
 export default function App() {
@@ -22,8 +23,7 @@ export default function App() {
   if (!user) return <MedLogin />
   if (booting) return <LoadingScreen />
 
-  // Single till shell for every logged-in role (cashier, manager, owner).
-  // A dedicated admin dashboard does not exist yet — it will be built when
-  // requested.
-  return <MedApp />
+  // Admin signs in to the admin shell (To-Do List home); everyone else
+  // (cashier / owner) uses the medapp shell.
+  return user.name.toUpperCase() === 'ADMIN' ? <AdminApp /> : <MedApp />
 }
