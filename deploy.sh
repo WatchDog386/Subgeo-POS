@@ -38,4 +38,4 @@ echo "==> health check"
 sleep 2
 curl -s http://localhost:8787/api/health || echo "server not answering yet — check: pm2 logs subgeo-pos --lines 30"
 echo
-echo "==> Done: https://pos.subgeo.com"
+echo "==> Done: https://pos.subgeoholding.com"
