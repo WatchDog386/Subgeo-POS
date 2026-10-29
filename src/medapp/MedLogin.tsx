@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { PIN_LENGTH, useSession } from '../session'
+import { useSession } from '../session'
 import { APP_VERSION, DEFAULTS } from './data'
 import { db } from '../db/db'
 import { EmrLiteLogo, LogoutIcon, NotepadIcon, UsersIcon } from './icons'
 
-/** Medapp login screen: grey page with the red SUBGEO CHEMIST LTD brand
- * centred, then the User Name / Pass / Log In row beneath the top bar.
+/** Medapp login screen: grey page, top bar, then User Name / Pass / Log In
+ * row, and the red SUBGEO CHEMIST LTD brand centred below the fields.
  *
  * Cashier (every chemist): User Name "subgeo", Pass "0000".
  * Admin: User Name "admin", Pass "subgeo22".
@@ -27,7 +27,6 @@ export default function MedLogin() {
       ok = await login('0000') // cashier PIN
       if (!ok) setMsg('Cashier account not found')
     } else if (userName === 'admin' && pass === 'subgeo22') {
-      // Ensure the admin account exists, then log in with its PIN.
       try {
         const existing = await db.users.where('pin').equals('subgeo22').filter((u) => u.name.toUpperCase() === 'ADMIN').first()
         if (!existing) {
@@ -75,8 +74,7 @@ export default function MedLogin() {
         </div>
       </header>
 
-      <div className="ma-login-bar">
-        <div className="ma-login-brand">SUBGEO CHEMIST LTD</div>
+      <div className="ma-login-card">
         <form className="ma-login-form" onSubmit={(e) => e.preventDefault()}>
           <div className="ma-row">
             <label className="ma-login-label" htmlFor="ma-login-name">
@@ -97,14 +95,14 @@ export default function MedLogin() {
             <input
               id="ma-login-pass"
               className="ma-input"
+              type="password"
               style={{ width: 150 }}
               value={pass}
-              maxLength={PIN_LENGTH}
-              onChange={(e) => setPass(e.target.value.replace(/\D/g, '').slice(0, PIN_LENGTH))}
+              onChange={(e) => setPass(e.target.value.slice(0, 32))}
               onKeyDown={(e) => e.key === 'Enter' && void submit()}
               autoComplete="off"
             />
-            <button type="button" className="ma-btn ma-login-btn" onClick={() => void submit()} disabled={busy || pass.length !== PIN_LENGTH}>
+            <button type="button" className="ma-btn ma-login-btn" onClick={() => void submit()} disabled={busy || pass.length === 0}>
               Log In
             </button>
           </div>
@@ -114,6 +112,7 @@ export default function MedLogin() {
             {msg}
           </div>
         )}
+        <div className="ma-login-brand">SUBGEO CHEMIST LTD</div>
       </div>
     </div>
   )
