@@ -68,23 +68,20 @@
   line-height: 22px;
   color: #111;
 }
-.ma-company {
+/* Company name centred at the top of the dashboard. */
+.ma-company-center {
   position: absolute;
-  left: 330px;
+  left: 50%;
   top: 14px;
-  font-family: Arial, Helvetica, sans-serif;
+  transform: translateX(-50%);
+  font-size: 20px;
+  font-weight: bold;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
   color: #111;
 }
-.ma-company b {
-  display: block;
-  font-weight: normal;
-  font-size: 16px;
-  letter-spacing: 0.2px;
-}
-.ma-company small {
-  display: block;
-  margin-top: 4px;
-  font-size: 9px;
+.ma-company {
+  display: none;
 }
 .ma-logout {
   position: absolute;

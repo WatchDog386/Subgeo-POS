@@ -103,14 +103,7 @@ export default function MedApp() {
             <div>{user.name.toUpperCase()}</div>
           </div>
         </div>
-        <div className="ma-company">
-          <b>
-            {defaults.companyName} - {defaults.branchCode}
-          </b>
-          <small>
-            ( {defaults.licenceFrom} TO {defaults.licenceTo} )
-          </small>
-        </div>
+        <div className="ma-company ma-company-center">{defaults.companyName}</div>
         <button type="button" className="ma-logout" title="Log Out" aria-label="Log Out" onClick={lock}>
           <LogoutIcon />
         </button>
