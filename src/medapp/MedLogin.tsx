@@ -95,8 +95,8 @@ export default function MedLogin() {
             <input
               id="ma-login-pass"
               className="ma-input"
-              type="password"
               style={{ width: 150 }}
+              type="password"
               value={pass}
               onChange={(e) => setPass(e.target.value.slice(0, 32))}
               onKeyDown={(e) => e.key === 'Enter' && void submit()}
