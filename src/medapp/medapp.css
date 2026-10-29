@@ -910,52 +910,70 @@
 }
 
 /* Login page */
-.ma-login-form {
-  position: absolute;
-  top: 18px;
-  left: 50%;
-  transform: translateX(-140px);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.ma-login-form label {
-  font-size: 11px;
-  color: #5c8a21;
-}
-.ma-login-form .ma-input {
-  width: 103px;
-  height: 24px;
-  margin-right: 6px;
-}
-.ma-login-brand {
-  position: absolute;
-  top: 210px;
-  left: 50%;
-  transform: translateX(-260px);
-  font-family: 'Rockwell Extra Bold', 'Rockwell', 'Bookman Old Style', 'Clarendon', Georgia, serif;
-  font-weight: 900;
-  font-size: 37px;
-  letter-spacing: 0.5px;
-  color: #e0242c;
-  white-space: nowrap;
-  text-shadow: 0.5px 0 0 #e0242c;
-}
 .ma-login {
   min-height: 100vh;
   background: #c8c8c8;
 }
+.ma-login-bar {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 40px;
+}
+.ma-login-form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ma-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ma-login-label {
+  font-size: 11px;
+  color: #5c8a21;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ma-login-form .ma-input {
+  height: 24px;
+  margin-right: 0;
+  padding: 2px 6px;
+}
+.ma-login-btn {
+  height: 28px;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 0 12px;
+}
 .ma-login-msg {
-  position: absolute;
-  top: 74px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 4px 14px;
+  margin-top: 8px;
   font-size: 11px;
   font-weight: bold;
   color: #8a1010;
   background: #ffe1e1;
   border: 1px solid #c66;
+  padding: 4px 14px;
+  border-radius: 3px;
+}
+
+/* Company name centred and enlarged in the top bar (no branch suffix). */
+.ma-company-center {
+  position: absolute;
+  left: 50%;
+  top: 14px;
+  transform: translateX(-50%);
+  font-size: 20px;
+  font-weight: bold;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  color: #111;
 }
 
 /* Column chart */
