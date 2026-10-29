@@ -69,19 +69,17 @@
   color: #111;
 }
 /* Company name centred at the top of the dashboard. */
-.ma-company-center {
+.ma-company {
   position: absolute;
   left: 50%;
   top: 14px;
   transform: translateX(-50%);
+  font-family: Arial, Helvetica, sans-serif;
   font-size: 20px;
   font-weight: bold;
   letter-spacing: 0.3px;
   white-space: nowrap;
   color: #111;
-}
-.ma-company {
-  display: none;
 }
 .ma-logout {
   position: absolute;
