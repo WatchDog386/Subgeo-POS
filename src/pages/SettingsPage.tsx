@@ -782,12 +782,14 @@ function AboutSettings() {
   )
 
   const reset = async () => {
-    if (!confirm('Erase ALL data on this till — products, sales, customers, jobs, staff, settings?')) return
-    if (!confirm('This cannot be undone (take a backup first). Reset everything?')) return
+    if (!confirm('Erase ALL data on this till — products, categories, sales, customers, jobs, movements and settings.\n\nStaff accounts are KEPT. Cannot be undone (take a backup first). Reset?')) return
+    if (!confirm('Sure? Reset everything except staff now?')) return
     try {
       await db.transaction('rw', db.tables, async () => {
-        for (const t of db.tables) await t.clear()
+        for (const t of db.tables) if (t.name !== 'users') await t.clear()
       })
+      // Mirror the wipe to the server (products table); harmless if offline.
+      void fetch('/api/products', { method: 'DELETE' }).catch(() => {})
       window.location.reload()
     } catch (e) {
       toast(`Reset failed: ${errorText(e)}`, 'error')
@@ -850,10 +852,10 @@ function AboutSettings() {
           <AlertTriangle size={17} /> Factory reset
         </div>
         <p className="mt-1 text-sm text-red-600">
-          Wipes every table and reloads. No demo data is re-added — start by adding your own real products in Inventory.
+          Wipes products, categories, sales, customers and settings, then reloads. Staff accounts are kept. No demo data is re-added — start by adding your own real products in Inventory.
         </p>
         <button className="btn-ghost mt-3 border-red-300 text-red-600 hover:bg-red-100" onClick={reset}>
-          Reset all data…
+          Reset all data (keeps staff)…
         </button>
       </div>
     </>

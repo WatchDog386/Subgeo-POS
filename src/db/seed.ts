@@ -1,15 +1,7 @@
 import { db } from './db'
 import { sampleImageFor } from './sampleImages'
 
-const PHARMACY_CATEGORIES = [
-  { name: 'Medicines', color: '#0f766e' },
-  { name: 'Services', color: '#2563eb' },
-  { name: 'Medical Supplies', color: '#7c3aed' },
-  { name: 'Vitamins & Supplements', color: '#b45309' },
-  { name: 'Personal Care', color: '#be185d' },
-]
-
-/** Default staff so the till can be used on day one. Change their PINs in Staff. No products are pre-loaded. */
+/** Default staff so the till can be used on day one. Change their PINs in Staff. No products or categories are pre-loaded (production-ready blank). */
 export async function seedIfEmpty(): Promise<void> {
   if ((await db.users.count()) > 0) return
 
@@ -17,7 +9,6 @@ export async function seedIfEmpty(): Promise<void> {
     { name: 'Owner', pin: '1234', role: 'owner', active: true },
     { name: 'Cashier', pin: '0000', role: 'cashier', active: true },
   ])
-  await db.categories.bulkAdd(PHARMACY_CATEGORIES.map((c) => ({ name: c.name, color: c.color })))
 }
 
 /** Backfill sample Unsplash photos on products that have none (existing installs). */
