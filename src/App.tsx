@@ -24,9 +24,9 @@ import {
 import { useEffect, useState, type ReactNode } from 'react'
 import { useSession, type Permission } from './session'
 import { useSettings } from './db/settings'
-import LoginPage from './pages/LoginPage'
 import LoadingScreen from './components/LoadingScreen'
-import ErpApp from './erp/ErpApp'
+import MedApp from './medapp/MedApp'
+import MedLogin from './medapp/MedLogin'
 import StaffDashboardPage from './pages/StaffDashboardPage'
 import StaffProductsPage from './pages/StaffProductsPage'
 import CustomerDisplayPage from './pages/CustomerDisplayPage'
@@ -140,12 +140,12 @@ export default function App() {
   // All hooks above are called unconditionally every render, so it is safe to
   // branch on their results here.
   if (restoring) return <LoadingScreen />
-  if (!user) return <LoginPage />
+  if (!user) return <MedLogin />
   if (booting) return <LoadingScreen />
 
-  // Owner lands in the medapp-style ERP shell (medapp header, tabs and
-  // accordion sidebar). Managers and cashiers keep the register shell.
-  if (can('users')) return <ErpApp />
+  // Owner lands in the faithful medapp replica shell (medapp header, tabs and
+  // sidebars). Managers and cashiers keep the register shell.
+  if (can('users')) return <MedApp />
 
   const isCashier = user.role === 'cashier'
   const visibleGroups = NAV_GROUPS.map((g) => ({
