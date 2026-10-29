@@ -913,6 +913,26 @@
 .ma-login {
   min-height: 100vh;
   background: #c8c8c8;
+  display: flex;
+  flex-direction: column;
+}
+.ma-login-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+}
+.ma-login-brand {
+  font-family: 'Rockwell Extra Bold', 'Rockwell', 'Bookman Old Style', 'Clarendon', Georgia, serif;
+  font-weight: 900;
+  font-size: 37px;
+  letter-spacing: 0.5px;
+  color: #e0242c;
+  white-space: nowrap;
+  text-shadow: 0.5px 0 0 #e0242c;
 }
 .ma-login-bar {
   margin-top: 10px;
@@ -943,14 +963,27 @@
 }
 .ma-login-form .ma-input {
   height: 24px;
+  width: 150px;
   margin-right: 0;
   padding: 2px 6px;
+  border: 1px solid #8f8f8f;
+  border-radius: 3px;
+  background: #fff;
 }
 .ma-login-btn {
+  width: 104px;
   height: 28px;
   font-size: 12px;
   font-weight: bold;
-  padding: 0 12px;
+  cursor: pointer;
+  border: 1px solid #7da3bf;
+  border-radius: 3px;
+  background: linear-gradient(to bottom, #ffffff, #d3e7f6 52%, #b7d9f2);
+  color: #1c4d75;
+}
+.ma-login-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .ma-login-msg {
   margin-top: 8px;
