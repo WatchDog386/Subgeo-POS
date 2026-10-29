@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ComponentType, ReactNode } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useSearchParams } from 'react-router-dom'
-import { Download, History, Package, Pencil, Plus, Printer, Search, SlidersHorizontal, Tag, Trash2, Upload } from 'lucide-react'
+import { Download, FileText, History, Package, Pencil, Plus, Printer, Search, SlidersHorizontal, Tag, Trash2, Upload } from 'lucide-react'
 import { db } from '../db/db'
 import { useSettings } from '../db/settings'
 import { adjustStock } from '../db/sales'
 import type { Product } from '../db/types'
 import { money, toCents } from '../lib/money'
 import { download, parseCsv, toCsv } from '../lib/csv'
+import { parsePdf } from '../lib/pdf'
 import { printBarcodeLabel } from '../lib/printReceipt'
 import { useSession } from '../session'
 import { Badge, Empty, ListPanel, Modal, PageHeader, errorText, useToast } from '../components/ui'
@@ -22,6 +23,7 @@ export default function InventoryPage() {
   const settings = useSettings()
   const toast = useToast()
   const fileRef = useRef<HTMLInputElement>(null)
+  const pdfRef = useRef<HTMLInputElement>(null)
   const [q, setQ] = useState(searchParams.get('q') ?? '')
   const [cat, setCat] = useState<number | 'all'>('all')
   const [lowOnly, setLowOnly] = useState(false)
@@ -139,6 +141,53 @@ export default function InventoryPage() {
     }
   }
 
+  const importPdf = async (file: File) => {
+    try {
+      const medicines = await parsePdf(file)
+      if (!medicines.length) throw new Error('No medicine rows detected in the PDF')
+      let added = 0
+      let updated = 0
+      await db.transaction('rw', db.products, db.categories, async () => {
+        for (const m of medicines) {
+          let categoryId: number | undefined
+          if (m.category) {
+            const existing = await db.categories.where('name').equalsIgnoreCase(m.category).first()
+            categoryId = existing?.id ?? ((await db.categories.add({ name: m.category, color: '#64748b' })) as number)
+          }
+          const sku = m.sku ?? `MED-${Date.now()}-${added + updated}`
+          const prev = await db.products.where('sku').equals(sku).first()
+          const now = Date.now()
+          const p: Product = {
+            ...prev,
+            sku,
+            name: m.name || sku,
+            barcode: m.barcode || prev?.barcode,
+            brand: m.brand || prev?.brand,
+            categoryId: categoryId ?? prev?.categoryId,
+            cost: m.cost !== undefined ? toCents(m.cost) : prev?.cost ?? 0,
+            price: m.price !== undefined ? toCents(m.price) : prev?.price ?? 0,
+            stock: m.stock ?? prev?.stock ?? 0,
+            reorderLevel: m.reorderLevel ?? prev?.reorderLevel ?? 0,
+            location: m.location || prev?.location,
+            taxable: m.taxable ?? prev?.taxable ?? true,
+            serialized: m.serialized ?? prev?.serialized ?? false,
+            trackStock: m.trackStock ?? prev?.trackStock ?? true,
+            active: prev?.active ?? true,
+            fitment: [],
+            createdAt: prev?.createdAt ?? now,
+            updatedAt: now,
+          }
+          await db.products.put(p)
+          if (prev) updated++
+          else added++
+        }
+      })
+      toast(`PDF imported: ${added} new, ${updated} updated`)
+    } catch (e) {
+      toast(errorText(e), 'error')
+    }
+  }
+
   return (
     <div className="p-4 lg:p-6">
       <PageHeader
@@ -147,8 +196,12 @@ export default function InventoryPage() {
         actions={
           <>
             <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={(e) => e.target.files?.[0] && importCsv(e.target.files[0])} />
+            <input ref={pdfRef} type="file" accept=".pdf" className="hidden" onChange={(e) => e.target.files?.[0] && importPdf(e.target.files[0])} />
             <button className="btn-ghost" onClick={() => fileRef.current?.click()}>
               <Upload size={16} /> Import CSV
+            </button>
+            <button className="btn-ghost" onClick={() => pdfRef.current?.click()}>
+              <FileText size={16} /> Import PDF
             </button>
             <button className="btn-ghost" onClick={exportCsv}>
               <Download size={16} /> Export

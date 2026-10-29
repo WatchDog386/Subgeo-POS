@@ -84,10 +84,10 @@ export function Badge({ children, tone = 'slate' }: { children: ReactNode; tone?
 
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) {
   return (
-    <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+    <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="text-sm font-medium leading-tight tracking-tight text-ink sm:text-[34px]">{title}</h1>
-        {subtitle && <p className="mt-1 text-[11px] text-ink-muted sm:text-sm">{subtitle}</p>}
+        <h1 className="text-[15px] font-bold leading-tight tracking-tight text-ink">{title}</h1>
+        {subtitle && <p className="mt-1 text-[12px] text-ink-muted">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </div>
@@ -119,7 +119,7 @@ export function ListPanel({
   return (
     <div className="overflow-hidden rounded-none border border-hairline bg-white shadow-card">
       <div className={`flex flex-wrap items-center justify-between gap-2 bg-ink px-4 py-3 ${barClassName}`}>
-        <h2 className="text-sm font-bold tracking-wider text-white normal-case sm:uppercase">{title}</h2>
+        <h2 className="text-[13px] font-bold tracking-wider text-white normal-case uppercase">{title}</h2>
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </div>
       {toolbar && (

@@ -320,7 +320,7 @@ export default function App() {
               : `${navOpen ? 'translate-x-0' : '-translate-x-full'} sm:static sm:z-auto sm:w-56 sm:translate-x-0 sm:shadow-none lg:w-60`
           }`}
         >
-          <div className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-3 sm:hidden">
+          <div className="flex items-center justify-between gap-2 px-4 py-3 sm:hidden">
             <span className="truncate text-sm font-bold text-white">{settings.shopName}</span>
             <button
               type="button"
