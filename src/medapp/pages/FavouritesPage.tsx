@@ -3,9 +3,10 @@ import { useToast } from '../../components/ui'
 import { setKv, useFavourites, type Favourite } from '../data'
 import { TRANSACTIONS } from '../nav'
 import { Btn, Check, TransferArrows } from '../ui'
+import { ADMIN_FAVOURITE_CATALOGUE } from '../nav-admin'
 
-/** Modules → FAVOURITES → "Set Favorites" (screenshot 11.27.37 (1)). */
-export default function FavouritesPage() {
+/** Modules → FAVOURITES → "Set Favorites" (screenshot 11.27.37 (1)). Admin uses its own catalogue (14.40.06 (11)). */
+export default function FavouritesPage({ admin }: { admin?: boolean }) {
   const toast = useToast()
   const stored = useFavourites()
   const [favs, setFavs] = useState<Favourite[]>(stored)
@@ -13,10 +14,8 @@ export default function FavouritesPage() {
   const [rightSel, setRightSel] = useState<Set<string>>(new Set())
   useEffect(() => setFavs(stored), [stored])
 
-  const labels = [...new Set(TRANSACTIONS.map((t) => t.label))]
-  // The old list starts with these entries, then the rest of the catalogue.
-  const head = ['MOLECULAR NAME', 'Services Master', 'IP Ambulance Bill', 'Consolidate Bills Credit', 'Consult', 'Medicine Issue Note', 'Medicine Returns', 'Miscellanious', 'Movie Issue', 'Movie Request', 'Movie Issue...', 'Movie Return...']
-  const ordered = [...head, ...labels.filter((l) => !head.includes(l))]
+  const labels = admin ? [...ADMIN_FAVOURITE_CATALOGUE] : [...new Set(TRANSACTIONS.map((t) => t.label))]
+  const ordered = admin ? labels : [...ADMIN_FAVOURITE_CATALOGUE.filter((l) => labels.includes(l)), ...labels.filter((l) => !ADMIN_FAVOURITE_CATALOGUE.includes(l))]
   const left = ordered.filter((l) => !favs.some((f) => f.label === l))
 
   const toggle = (set: Set<string>, v: string, apply: (s: Set<string>) => void) => {

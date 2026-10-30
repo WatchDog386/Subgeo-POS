@@ -110,6 +110,20 @@
   align-items: center;
   gap: 14px;
 }
+/* Legacy tile-icon strip between the company block and the EMR-lite mark. */
+.ma-header-tools {
+  position: absolute;
+  right: 192px;
+  top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+.ma-header-tools .ma-ibtn {
+  width: auto;
+  height: auto;
+  padding: 0;
+}
 .ma-notes {
   border: 0;
   background: transparent;
@@ -1013,6 +1027,49 @@
   letter-spacing: 0.3px;
   white-space: nowrap;
   color: #111;
+}
+
+/* ── Admin header (ma-admin only): title pushed left, compact icon strip ── */
+.ma-admin .ma-header {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+.ma-admin .ma-welcome {
+  position: static;
+  margin-left: 180px;
+  flex-shrink: 0;
+}
+.ma-admin .ma-brand {
+  display: flex;
+  flex-direction: column;
+  margin-left: 120px;
+  flex-shrink: 0;
+  line-height: 1.1;
+}
+.ma-admin .ma-company,
+.ma-admin .ma-company-dates {
+  position: static;
+  transform: none;
+}
+.ma-hspacer {
+  flex: 1 1 0;
+  min-width: 12px;
+}
+.ma-admin .ma-header-tools {
+  position: static;
+  right: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.ma-admin .ma-header-right {
+  position: static;
+  margin-left: 10px;
+  margin-right: 8px;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
 /* Column chart */

@@ -1690,9 +1690,106 @@ function UpdateAcBal() {
   )
 }
 
+/* ═══════════════════════ ROLE WISE TRANSACTION PROCESS ════════════════════ */
+function RoleWiseTxn() {
+  const [role, setRole] = useState('ADMIN')
+  const [group, setGroup] = useState<string>()
+  const all = Object.entries(MODULE_GROUP_MAP)
+  const items = group ? MODULE_GROUP_MAP[group] : []
+  return (
+    <Canvas height={560}>
+      <Title x={106} y={26}>Role Wise Transaction Tree</Title>
+      <Group title="" y={56} w={740} h={448}>
+        <div style={{ display: 'flex', gap: 16 }}>
+          <List items={['ADMIN']} width={140} height={330} value={role} onSelect={setRole} />
+          <List items={all.map(([g]) => g)} width={220} height={330} value={group} onSelect={setGroup} />
+          <List items={items} width={280} height={330} />
+        </div>
+      </Group>
+    </Canvas>
+  )
+}
+
+const MODULE_GROUP_MAP: Record<string, string[]> = {
+  'RETAIL SALES': ['OTC Medicine Issue/Bill', 'OTC Medicine Isse Return', 'Service Request/Bill'],
+  'WHOLE SALES': ['Sales Quotation', 'Delivery Note', 'Credit Note', 'Whole Sale Invoice', 'Credit Note - Direct Invoice', 'Final Bill Receipt', 'Supplier Payment'],
+  'PARTY MASTER': ['Party Master'],
+  PURCHASES: ['STEP 1: PURCHASE INDENT', 'STEP 2: LOCAL PURCHASE ORDER', 'STEP 3: GRN- Good Recived Note', 'Pur/GRN (Direct Invoice)', 'Medicine', 'Party Master'],
+}
+
+/* ═══════════════════════════ TALLY TO N360i ═══════════════════════════════ */
+const TALLY_TABLES = ['Bills', 'Bill Lines', 'Cash Collections', 'Debtors', 'Creditors', 'Stock', 'Stock Movements']
+function TallyDownload() {
+  const toast = useToast()
+  const [table, setTable] = useState('')
+  const dl = async () => {
+    if (!table) return toast('Select a table first', 'error')
+    await downloadCsv(`tally-${table.toLowerCase().replace(/\s/g, '-')}`, ['id'], [])
+    toast(`${table} exported for N360i`)
+  }
+  return (
+    <Canvas height={430}>
+      <Title x={118} y={26}>Tally to N360i</Title>
+      <Group title="Tally Tables Download" y={78} w={358}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: 300 }}>
+          <L bold>Table Name</L>
+          <Select value={table} onChange={setTable} options={['', ...TALLY_TABLES]} width={220} />
+          <div style={{ marginTop: 8 }}>
+            <Btn style={{ width: 108 }} onClick={dl}>Download</Btn>
+          </div>
+        </div>
+      </Group>
+    </Canvas>
+  )
+}
+
+/* ═══════════════════════════════ DB UTILITY ═══════════════════════════════ */
+function DbUtility() {
+  const toast = useToast()
+  const [tab, setTab] = useState('Template')
+  const [text, setText] = useState('')
+  const [rows, setRows] = useState<Row[]>([])
+  const run = () => {
+    if (!text.trim()) return toast('Enter a query or template first', 'error')
+    toast('No live SQL engine. Operation logged only.', 'error')
+    void logActivity('system', `DB Utility (${tab})`, { detail: text.trim() })
+    setRows([])
+  }
+  return (
+    <Canvas height={620}>
+      <Title x={128} y={26}>DB Utility</Title>
+      <At x={14} y={62}>
+        {['Template', 'Query', 'Update'].map((t) => (
+          <button key={t} type="button" className={`ma-blue${tab === t ? ' is-active' : ''}`} style={{ width: 98 }} onClick={() => setTab(t)}>
+            {t}
+          </button>
+        ))}
+      </At>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        spellCheck={false}
+        style={{ position: 'absolute', left: 14, top: 104, width: 700, height: 320, fontFamily: 'monospace', fontSize: 12, border: '1px solid #c3c3c3' }}
+      />
+      <At x={14} y={446}>
+        <Btn style={{ width: 108 }} onClick={run}>Execute</Btn>
+      </At>
+      <At x={14} y={486} top>
+        <Grid cols={[C('r', 'Row', 80), C('res', 'Result', 560)]} rows={rows} height={120} width={650} />
+      </At>
+    </Canvas>
+  )
+}
+
 export default function UtilityPage() {
   const { slug } = useParams()
   switch (slug) {
+    case 'role-wise-transaction-process':
+      return <RoleWiseTxn />
+    case 'tally-to-n360i':
+      return <TallyDownload />
+    case 'db-utility':
+      return <DbUtility />
     case 'auto-generate':
       return <AutoGenerate />
     case 'document-center':

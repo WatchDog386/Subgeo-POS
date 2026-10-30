@@ -501,3 +501,165 @@ export function ToolGlyph({ k }: { k: ToolKey }) {
       )
   }
 }
+
+/* ── Admin header toolbar glyphs (legacy 9.5.21 icon strip) ────────────── */
+export type HeaderToolKey =
+  | 'clipboard'
+  | 'alert'
+  | 'pos'
+  | 'calendar'
+  | 'camera'
+  | 'bell'
+  | 'refresh'
+  | 'house'
+  | 'exit'
+  | 'redo'
+  | 'stop'
+  | 'pdc'
+  | 'notepad'
+  | 'tools'
+  | 'globe'
+  | 'envelope'
+  | 'windows'
+
+export function HeaderToolGlyph({ k }: { k: HeaderToolKey }) {
+  switch (k) {
+    case 'clipboard':
+      return (
+        <svg width="20" height="22" viewBox="0 0 20 22" aria-hidden>
+          <rect x="3" y="2" width="14" height="18" rx="1.5" fill="#fbfbfb" stroke="#8a8a8a" />
+          <rect x="7" y="0.5" width="6" height="4" rx="1" fill="#c9c9c9" stroke="#777" />
+          <path d="M5.5 7.5h9M5.5 10h9M5.5 12.5h9M5.5 15h6" stroke="#b9c6d4" strokeWidth="1.1" />
+        </svg>
+      )
+    case 'alert':
+      return (
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden>
+          <circle cx="10" cy="10" r="8.5" fill="#f7c11c" stroke="#c8880a" />
+          <path d="M10 5.2l-.7 6h1.5l-.1-6z" fill="#fff" />
+          <circle cx="10" cy="13.6" r="1.1" fill="#fff" />
+        </svg>
+      )
+    case 'pos':
+      return (
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden>
+          <rect x="3" y="2" width="13" height="16" rx="1.5" fill="#f2f2f2" stroke="#6f7f8f" />
+          <rect x="5" y="4" width="9" height="4" fill="#9fb4c4" stroke="#5b6b7b" />
+          <path d="M5 10.5h3M10 10.5h3M5 13h3M10 13h3" stroke="#5b6b7b" strokeWidth="1.2" />
+        </svg>
+      )
+    case 'calendar':
+      return (
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden>
+          <rect x="2.5" y="3" width="15" height="14.5" rx="1.5" fill="#3c4a56" stroke="#222c33" />
+          <rect x="2.5" y="3" width="15" height="4" fill="#2b363f" />
+          <rect x="5" y="6" width="10" height="9" fill="#fff" opacity=".9" />
+          <path d="M7 3V1.5M13 3V1.5" stroke="#c9d2d8" strokeWidth="1.6" />
+        </svg>
+      )
+    case 'camera':
+      return (
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden>
+          <rect x="2" y="5" width="16" height="12" rx="2" fill="#3c4a56" stroke="#222c33" />
+          <rect x="7" y="3" width="6" height="3" rx="1" fill="#3c4a56" stroke="#222c33" />
+          <circle cx="10" cy="11" r="3.6" fill="#8aa2b2" stroke="#26323c" />
+          <circle cx="10" cy="11" r="1.6" fill="#26323c" />
+        </svg>
+      )
+    case 'bell':
+      return (
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden>
+          <path d="M10 2.5c3.4 0 5 2.4 5 5.4V12l1.6 2.6H3.4L5 12V7.9c0-3 1.6-5.4 5-5.4z" fill="#f2a43a" stroke="#b4702a" />
+          <circle cx="10" cy="16.4" r="1.4" fill="#5b3c10" />
+        </svg>
+      )
+    case 'refresh':
+      return (
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden>
+          <path d="M15.8 11.5A6 6 0 1 1 14 5.4" stroke="#2f9e1f" strokeWidth="2.4" fill="none" />
+          <path d="M17 2.8v4.4h-4.4" fill="none" stroke="#2f9e1f" strokeWidth="2.2" />
+        </svg>
+      )
+    case 'house':
+      return (
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden>
+          <path d="M10 2L1.8 9.4h2.4V18h4.6v-5h2.4v5h4.6V9.4h2.4z" fill="#39b0a2" stroke="#1d6e64" />
+          <path d="M8.4 2h3.2v3.4l-1.6-1.4-1.6 1.4z" fill="#37474f" />
+        </svg>
+      )
+    case 'exit':
+      return (
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden>
+          <rect x="2.5" y="4" width="4" height="12" fill="#d99a9a" stroke="#a03030" />
+          <path d="M18 10l-5.5-4.5v3H8v3h4.5v3z" fill="#e01b1b" stroke="#8b0b0b" />
+        </svg>
+      )
+    case 'redo':
+      return (
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden>
+          <path d="M2 14c0-4 3-7 7.5-7h3" fill="none" stroke="#e01b1b" strokeWidth="2.2" />
+          <path d="M10 4.5l4 2.5-4 2.5z" fill="#e01b1b" />
+          <path d="M8 18c0-3 2.5-5.5 6-5.5h2.5" fill="none" stroke="#e01b1b" strokeWidth="2.2" />
+          <path d="M14.5 10l4 2.4-4 2.4z" fill="#e01b1b" />
+        </svg>
+      )
+    case 'stop':
+      return (
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden>
+          <rect x="3.5" y="3.5" width="13" height="13" rx="2" fill="#e01b1b" stroke="#8b0b0b" />
+        </svg>
+      )
+    case 'pdc':
+      return (
+        <svg width="24" height="20" viewBox="0 0 24 20" aria-hidden>
+          <path d="M3 3h13a4 4 0 0 1 4 4v4a4 4 0 0 1-4 4H9l-4 3v-3.4A4 4 0 0 1 3 11z" fill="#1e88e5" stroke="#12528f" />
+          <rect x="10" y="4.5" width="10" height="5" rx="1" fill="#ffd400" stroke="#c7a600" />
+          <text x="15" y="8.4" textAnchor="middle" fontSize="4.4" fontWeight="bold" fill="#1d3d66" fontFamily="Arial">
+            PDC
+          </text>
+        </svg>
+      )
+    case 'notepad':
+      return (
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden>
+          <rect x="3.5" y="2" width="13" height="16" fill="#1e88e5" stroke="#12528f" />
+          <rect x="5.5" y="4" width="9" height="12" fill="#fff" />
+          <path d="M6.5 6.5h7M6.5 8.5h7M6.5 10.5h7M6.5 12.5h5" stroke="#1e88e5" strokeWidth=".9" />
+          <rect x="16.5" y="4" width="2" height="3" fill="#ffd400" />
+        </svg>
+      )
+    case 'tools':
+      return (
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden>
+          <rect x="1.5" y="12.5" width="15" height="2.2" rx=".6" transform="rotate(-45 9 13.6)" fill="#90caf9" stroke="#1d5ea8" strokeWidth=".8" />
+          <path d="M13.5 1.5l4 4-2.2 2.2-4-4z" fill="#1e88e5" stroke="#12528f" strokeWidth=".6" />
+          <path d="M2.5 13.5L12 4" stroke="#e8eef5" strokeWidth=".8" />
+        </svg>
+      )
+    case 'globe':
+      return (
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden>
+          <circle cx="10" cy="10" r="8" fill="#1e88e5" stroke="#12528f" />
+          <ellipse cx="10" cy="10" rx="3.4" ry="8" fill="none" stroke="#dce8f4" strokeWidth="1" />
+          <path d="M2.4 10h15.2M3.6 6h12.8M3.6 14h12.8" stroke="#dce8f4" strokeWidth="1" />
+        </svg>
+      )
+    case 'envelope':
+      return (
+        <svg width="26" height="20" viewBox="0 0 26 20" aria-hidden>
+          <rect x="2" y="3" width="20" height="13" rx="1" fill="#fdb813" stroke="#b06e00" />
+          <path d="M2.5 3.8l9.5 6.6 9.5-6.6" fill="none" stroke="#b06e00" strokeWidth="1.1" />
+          <rect x="20" y="6" width="5" height="9" fill="#fff" stroke="#8a8a8a" />
+          <path d="M21.5 8h2M21.5 10h2M21.5 12h2" stroke="#8a8a8a" />
+        </svg>
+      )
+    case 'windows':
+      return (
+        <svg width="24" height="22" viewBox="0 0 24 22" aria-hidden>
+          <rect x="4" y="2" width="14" height="11" fill="#fff" stroke="#8a8a8a" />
+          <rect x="6.5" y="7" width="14" height="11" fill="#fff" stroke="#8a8a8a" />
+          <rect x="6.5" y="7" width="14" height="2.4" fill="#d8d8d8" />
+        </svg>
+      )
+  }
+}

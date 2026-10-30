@@ -34,11 +34,8 @@ import CustomersPage from '../pages/CustomersPage'
 import CustomerDisplayPage from '../pages/CustomerDisplayPage'
 import ServicePage from '../pages/ServicePage'
 import ShiftPage from '../pages/ShiftPage'
-import SettingsPage from '../pages/SettingsPage'
 import NotificationsPage from '../pages/NotificationsPage'
 import MessagesPage from '../pages/MessagesPage'
-import StaffPage from '../pages/StaffPage'
-import LogsPage from '../pages/LogsPage'
 import ProfilePage from '../pages/ProfilePage'
 
 type Tab = 'home' | 'modules' | 'reports' | 'charts' | 'utilities' | 'helpdocs'
@@ -178,9 +175,6 @@ export default function MedApp() {
               <Route path="/notifications" element={<Legacy><NotificationsPage /></Legacy>} />
               <Route path="/messages" element={<Legacy><MessagesPage /></Legacy>} />
               <Route path="/profile" element={<Legacy><ProfilePage /></Legacy>} />
-              <Route path="/staff" element={<Legacy><StaffPage /></Legacy>} />
-              <Route path="/logs" element={<Legacy><LogsPage /></Legacy>} />
-              <Route path="/settings" element={<Legacy><SettingsPage /></Legacy>} />
               <Route path="*" element={<Navigate to="/home" replace />} />
             </Routes>
           </main>

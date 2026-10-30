@@ -176,3 +176,68 @@ export const DEFAULT_FAVOURITES: Favourite[] = [
 export function useFavourites(): Favourite[] {
   return useKv<Favourite[]>('medapp:favourites', DEFAULT_FAVOURITES)
 }
+
+// ── Admin register seeds (legacy admin screenshots 14.40.06 (2)-(9)) ────
+const D = (values: Record<string, string>, n: number, day: string, month: string, year: string): DocRecord => ({
+  id: n,
+  createdAt: new Date(Number(year), Number(month) - 1, Number(day), 9, 0).getTime(),
+  values,
+})
+const KENTONS = { vendorName: 'KENTONS LIMITED', address: 'P.O BOX KISUMU' }
+export const MED_DOC_SEEDS: Record<string, DocRecord[]> = {
+  'supplier-payment': [
+    D({ docNo: 'REM-1-24', voucherDate: '15-01-2024', supplierName: 'ADWEL PHARMACY', fromAccount: 'null', refNo: '-', ref: 'PAYMENT FOR OCT TO DEC INVOICES' }, 1, '15', '1', '2024'),
+  ],
+  'purchase-indent': [
+    D({ location: 'SCL UMOJA 3', docNo: 'PI-1-24', indentDate: '15-01-2024', indentor: 'ADMIN', status: 'INDENT APPROVED', purpose: 'reorder', approx: '2000.00' }, 1, '15', '1', '2024'),
+    D({ location: 'SCL UMOJA 3', docNo: 'PI-1-21', indentDate: '17-03-2021', indentor: 'PHARM', status: 'INDENT APPROVED', purpose: 'STOCK', approx: '0.00' }, 2, '17', '3', '2021'),
+    D({ location: 'SCL UMOJA 3', docNo: 'PI-1-20', indentDate: '24-07-2020', indentor: 'PURCHASE', status: 'INDENT APPROVED', purpose: 'REORDER', approx: '0.00' }, 3, '24', '7', '2020'),
+  ],
+  'local-purchase-order': [
+    D({ location: 'SCL UMOJA 3', poDate: '02-02-2024', indentDate: '', docNo: 'PO-11-24', ...KENTONS }, 1, '2', '2', '2024'),
+    D({ location: 'SCL UMOJA 3', poDate: '01-02-2024', indentDate: '', docNo: 'PO-10-24', ...KENTONS }, 2, '1', '2', '2024'),
+    D({ location: 'SCL UMOJA 3', poDate: '26-01-2024', indentDate: '', docNo: 'PO-9-24', ...KENTONS }, 3, '26', '1', '2024'),
+    D({ location: 'SCL UMOJA 3', indentNo: '006', poDate: '22-01-2024', indentDate: '', docNo: 'PO-8-24', ...KENTONS }, 4, '22', '1', '2024'),
+    D({ location: 'SCL UMOJA 3', poDate: '22-01-2024', indentDate: '', docNo: 'PO-7-24', vendorName: '', address: '' }, 5, '22', '1', '2024'),
+    D({ location: 'SCL UMOJA 3', indentNo: '005', poDate: '17-01-2024', indentDate: '17/1/2024', docNo: 'PO-6-24', ...KENTONS }, 6, '17', '1', '2024'),
+    D({ location: 'SCL UMOJA 3', poDate: '17-01-2024', indentDate: '', docNo: 'PO-5-24', vendorName: '', address: '' }, 7, '17', '1', '2024'),
+    D({ location: 'SCL UMOJA 3', indentNo: '004', poDate: '17-01-2024', indentDate: '', docNo: 'PO-4-24', ...KENTONS }, 8, '17', '1', '2024'),
+    D({ location: 'SCL UMOJA 3', indentNo: 'PI-1-24', poDate: '15-01-2024', indentDate: '15-01-2024', docNo: 'PO-3-24', vendorName: 'ADWEL PHARMACY', address: '' }, 9, '15', '1', '2024'),
+    D({ location: 'SCL UMOJA 3', indentNo: '003', poDate: '13-01-2024', indentDate: '', docNo: 'PO-2-23', ...KENTONS }, 10, '13', '1', '2024'),
+    D({ location: 'SCL UMOJA 3', indentNo: '1', poDate: '28-12-2023', indentDate: '', docNo: 'PO-1-23', ...KENTONS }, 11, '28', '12', '2023'),
+  ],
+  'pur-inv-grn': [
+    D({ location: 'SCL UMOJA 3', supInvDate: '15-01-2024', docNo: 'GRN-1-24', lpoNo: 'PO-3-24', lpoDate: '15-01-2024', vendorName: 'ADWEL PHARMACY', phoneNo: '', faxNo: '' }, 1, '15', '1', '2024'),
+  ],
+  'pur-grn-direct-invoice': [
+    D({ docNo: 'MRN-300-26', mrnDate: '20-10-2026', invoice: '174357', vendorName: 'TABACAN LTD', total: '166.00', expense: 'PURCHASES MEDICINE', receivedBy: 'PURCHASE', status: 'GOOD RECEIVED' }, 1, '20', '10', '2026'),
+    D({ docNo: 'MRN-299-26', mrnDate: '19-10-2026', invoice: '21436547', vendorName: 'TABACAN LTD', total: '626.00', expense: 'PURCHASES MEDICINE', receivedBy: 'PURCHASE', status: 'GOOD RECEIVED' }, 2, '19', '10', '2026'),
+    D({ docNo: 'MRN-298-26', mrnDate: '17-10-2026', invoice: '21111456', vendorName: 'TABACAN LTD', total: '400.00', expense: 'PURCHASES MEDICINE', receivedBy: 'PURCHASE', status: 'GOOD RECEIVED' }, 3, '17', '10', '2026'),
+    D({ docNo: 'MRN-297-26', mrnDate: '17-10-2026', invoice: '1212153', vendorName: 'TABACAN LTD', total: '645.00', expense: 'PURCHASES MEDICINE', receivedBy: 'PURCHASE', status: 'GOOD RECEIVED' }, 4, '17', '10', '2026'),
+    D({ docNo: 'MRN-296-26', mrnDate: '17-10-2026', invoice: '21435352', vendorName: 'VICTORIA HEALTHCARE LIMITED', total: '1746.00', expense: 'PURCHASES MEDICINE', receivedBy: 'PURCHASE', status: 'GOOD RECEIVED' }, 5, '17', '10', '2026'),
+    D({ docNo: 'MRN-295-26', mrnDate: '17-10-2026', invoice: '1325546', vendorName: 'TABACAN LTD', total: '532.00', expense: 'PURCHASES MEDICINE', receivedBy: 'PURCHASE', status: 'GOOD RECEIVED' }, 6, '17', '10', '2026'),
+    D({ docNo: 'MRN-294-26', mrnDate: '16-10-2026', invoice: '112345', vendorName: 'TABACAN LTD', total: '500.00', expense: 'PURCHASES MEDICINE', receivedBy: 'PURCHASE', status: 'GOOD RECEIVED' }, 7, '16', '10', '2026'),
+    D({ docNo: 'MRN-293-26', mrnDate: '15-10-2026', invoice: '12143643', vendorName: 'TABACAN LTD', total: '1000.00', expense: 'PURCHASES MEDICINE', receivedBy: 'PURCHASE', status: 'GOOD RECEIVED' }, 8, '15', '10', '2026'),
+    D({ docNo: 'MRN-292-26', mrnDate: '13-10-2026', invoice: '21124523', vendorName: 'TABACAN LTD', total: '325.00', expense: 'PURCHASES MEDICINE', receivedBy: 'PURCHASE', status: 'GOOD RECEIVED' }, 9, '13', '10', '2026'),
+    D({ docNo: 'MRN-291-26', mrnDate: '08-10-2026', invoice: '530087', vendorName: 'VICTORIA HEALTHCARE LIMITED', total: '2958.00', expense: 'PURCHASES MEDICINE', receivedBy: 'PURCHASE', status: 'GOOD RECEIVED' }, 10, '8', '10', '2026'),
+    D({ docNo: 'MRN-290-26', mrnDate: '07-10-2026', invoice: '12334546', vendorName: 'TABACAN LTD', total: '1500.00', expense: 'PURCHASES MEDICINE', receivedBy: 'PURCHASE', status: 'GOOD RECEIVED' }, 12, '7', '10', '2026'),
+  ],
+  medicine: [
+    D({ docNo: 'PRD00-34-26', name: 'COFANART SYP 60ML', group: 'SYRUPS', uom: 'ML', retail: '300.00', whole: '300.00', cost: '120.00', packSize: '1.00', type: 'S' }, 1, '20', '10', '2026'),
+    D({ docNo: 'PRD00-33-26', name: 'MICROMOL SYP 100ML', group: 'SYRUPS', uom: 'ML', retail: '150.00', whole: '150.00', cost: '25.00', packSize: '1.00', type: 'S' }, 2, '19', '10', '2026'),
+    D({ docNo: 'PRD00-32-26', name: 'SCALPEL', group: 'SURGICALS', uom: '20MG', retail: '20.00', whole: '20.00', cost: '15.00', packSize: '100.00', type: 'S' }, 3, '17', '10', '2026'),
+    D({ docNo: 'PRD00-31-25', name: 'OJEN OZ', group: 'TABS/CAPSULES', uom: 'MG', retail: '650.00', whole: '650.00', cost: '340.00', packSize: '1.00', type: 'S' }, 4, '17', '10', '2026'),
+    D({ docNo: 'PRD00-30-25', name: 'TRIDAHIST 100 MLS', group: 'SYRUPS', uom: 'ML', retail: '150.00', whole: '150.00', cost: '45.00', packSize: '1.00', type: 'S' }, 5, '17', '10', '2026'),
+    D({ docNo: 'PRD00-29-25', name: 'UNIVIR CREAM 10MG', group: 'CREAMS', uom: 'MG', retail: '300.00', whole: '300.00', cost: '0.00', packSize: '1.00', type: 'S' }, 6, '17', '10', '2026'),
+    D({ docNo: 'PRD00-28-25', name: 'HERBIGOR SYRP 100MLS', group: 'SYRUPS', uom: 'MLS', retail: '450.00', whole: '450.00', cost: '0.00', packSize: '1.00', type: 'S' }, 7, '17', '10', '2026'),
+    D({ docNo: 'PRD00-27-25', name: 'TRIPACOF EXP 60ML', group: 'SYRUPS', uom: 'MLS', retail: '100.00', whole: '100.00', cost: '0.00', packSize: '1.00', type: 'S' }, 8, '17', '10', '2026'),
+    D({ docNo: 'PRD00-26-25', name: 'PIRITON SYRP GEN 100MLS', group: 'SYRUPS', uom: 'MLS', retail: '150.00', whole: '150.00', cost: '0.00', packSize: '1.00', type: 'S' }, 9, '17', '10', '2026'),
+    D({ docNo: 'PRD00-25-25', name: 'ABZ ALTOA SUSP 10ML', group: 'SYRUPS', uom: 'MLS', retail: '70.00', whole: '70.00', cost: '0.00', packSize: '1.00', type: 'S' }, 10, '17', '10', '2026'),
+    D({ docNo: 'PRD00-24-25', name: 'ABZ NILWORM TABS', group: 'TABS/CAPSULES', uom: 'MG', retail: '50.00', whole: '50.00', cost: '0.00', packSize: '100.00', type: 'S' }, 11, '17', '10', '2026'),
+  ],
+}
+export async function seedAdminDocs(): Promise<void> {
+  for (const [slug, list] of Object.entries(MED_DOC_SEEDS)) {
+    if ((await getKv(docsKey(slug), [])).length === 0) await setKv(docsKey(slug), list)
+  }
+}

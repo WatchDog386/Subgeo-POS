@@ -255,6 +255,162 @@ const DEFS: Record<string, ModuleDef> = {
     tools: ['mail', 'add', 'list', 'note', 'chat', 'edit', 'copyAll', 'print', 'scanner', 'fax', 'download', 'docs'],
     cols: [C('name', 'Service Type', 400), C('charges', 'Service Charges', 190), C('outsource', 'Outsource?', 400)],
   },
+  /* Admin-only modules (screenshots 14.40.05 (4)-(6), 14.40.06 (2)-(4)). */
+  'supplier-payment': {
+    title: 'Supplier Payment',
+    source: 'docs',
+    prefix: 'REM',
+    tools: [...BASE_TOOLS, 'link'],
+    cols: [
+      C('docNo', 'Payment Vouche', 95),
+      C('voucherDate', 'Voucher Date', 100),
+      C('supplierName', 'Supplier Name', 215),
+      C('fromAccount', 'From Account', 250),
+      C('refNo', 'REF NO#', 100),
+      C('ref', 'REF', 250),
+    ],
+    fields: [
+      { key: 'docNo', kind: 'docno' },
+      { key: 'voucherDate', kind: 'date' },
+      { key: 'supplierName', kind: 'party' },
+      { key: 'fromAccount', kind: 'text' },
+      { key: 'refNo', kind: 'text' },
+      { key: 'ref', kind: 'text' },
+    ],
+  },
+  'purchase-indent': {
+    title: 'Purchase Indent',
+    source: 'docs',
+    prefix: 'PI',
+    hscroll: 0.7,
+    tools: BASE_TOOLS,
+    cols: [
+      C('location', 'Location', 160),
+      C('docNo', 'Indent No', 115),
+      C('indentDate', 'Indent Date', 125),
+      C('indentor', 'Indentor', 105),
+      C('status', 'Status', 215),
+      C('purpose', 'Purpose/Remarks', 230),
+      C('approx', 'Approx Cost', 105, 'right'),
+    ],
+    fields: [
+      { key: 'location', kind: 'location' },
+      { key: 'docNo', kind: 'docno' },
+      { key: 'indentDate', kind: 'date' },
+      { key: 'indentor', kind: 'text' },
+      { key: 'status', kind: 'text' },
+      { key: 'purpose', kind: 'text' },
+      { key: 'approx', kind: 'money' },
+    ],
+  },
+  'local-purchase-order': {
+    title: 'Local Purchase Order',
+    source: 'docs',
+    prefix: 'PO',
+    hscroll: 0.8,
+    tools: BASE_TOOLS,
+    cols: [
+      C('location', 'Location', 305),
+      C('indentNo', 'Indent No', 115),
+      C('poDate', 'PO Date', 205),
+      C('indentDate', 'Indent Date', 205),
+      C('docNo', 'PO No', 190),
+      C('vendorName', 'Vendor Name', 210),
+      C('address', 'Address', 220),
+    ],
+    fields: [
+      { key: 'location', kind: 'location' },
+      { key: 'indentNo', kind: 'text' },
+      { key: 'poDate', kind: 'date' },
+      { key: 'indentDate', kind: 'date' },
+      { key: 'docNo', kind: 'docno' },
+      { key: 'vendorName', kind: 'party' },
+      { key: 'address', kind: 'text' },
+    ],
+  },
+  'pur-inv-grn': {
+    title: 'Pur Inv/GRN',
+    source: 'docs',
+    prefix: 'GRN',
+    hscroll: 0.75,
+    tools: BASE_TOOLS,
+    cols: [
+      C('location', 'Location', 300),
+      C('supInvDate', 'Sup Inv. DATE', 205),
+      C('docNo', 'GRN No', 200),
+      C('lpoNo', 'LPO No', 200),
+      C('lpoDate', 'LPO Date', 210),
+      C('vendorName', 'Vendor Name', 210),
+      C('phoneNo', 'Phone No', 170),
+      C('faxNo', 'Fax No', 150),
+    ],
+    fields: [
+      { key: 'location', kind: 'location' },
+      { key: 'supInvDate', kind: 'date' },
+      { key: 'docNo', kind: 'docno' },
+      { key: 'lpoNo', kind: 'text' },
+      { key: 'lpoDate', kind: 'date' },
+      { key: 'vendorName', kind: 'party' },
+      { key: 'phoneNo', kind: 'text' },
+      { key: 'faxNo', kind: 'text' },
+    ],
+  },
+  'pur-grn-direct-invoice': {
+    title: 'Pur/GRN (Direct Invoice)',
+    source: 'docs',
+    prefix: 'MRN',
+    hscroll: 0.6,
+    tools: BASE_TOOLS,
+    cols: [
+      C('docNo', 'Mrn No', 115),
+      C('mrnDate', 'Mrn Date', 120),
+      C('invoice', 'Invoice/Receipt', 125),
+      C('vendorName', 'Vendor Name', 200),
+      C('total', 'TOTAL VALUE', 115, 'right'),
+      C('expense', 'Expense A/c', 200),
+      C('receivedBy', 'Received By', 115),
+      C('status', 'Status', 120),
+    ],
+    fields: [
+      { key: 'docNo', kind: 'docno' },
+      { key: 'mrnDate', kind: 'date' },
+      { key: 'invoice', kind: 'text' },
+      { key: 'vendorName', kind: 'party' },
+      { key: 'total', kind: 'money' },
+      { key: 'expense', kind: 'text' },
+      { key: 'receivedBy', kind: 'text' },
+      { key: 'status', kind: 'text' },
+    ],
+  },
+  'medicine': {
+    title: 'Medicine',
+    source: 'docs',
+    prefix: 'PRD00',
+    hscroll: 0.75,
+    tools: BASE_TOOLS,
+    cols: [
+      C('docNo', 'Product Code', 200),
+      C('name', 'Product Name', 200),
+      C('group', 'Product Group', 310),
+      C('uom', 'UOM', 100),
+      C('retail', 'Retail Sale', 130, 'right'),
+      C('whole', 'Whole sale', 140, 'right'),
+      C('cost', 'Cost Rate', 130, 'right'),
+      C('packSize', 'Pack Size', 110, 'right'),
+      C('type', 'Stock/Non-Stock', 80),
+    ],
+    fields: [
+      { key: 'docNo', kind: 'docno' },
+      { key: 'name', kind: 'text' },
+      { key: 'group', kind: 'text' },
+      { key: 'uom', kind: 'text' },
+      { key: 'retail', kind: 'money' },
+      { key: 'whole', kind: 'money' },
+      { key: 'cost', kind: 'money' },
+      { key: 'packSize', kind: 'money' },
+      { key: 'type', kind: 'text' },
+    ],
+  },
 }
 
 const TOOL_TITLES: Record<ToolKey, string> = {
@@ -446,7 +602,7 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
   const [op, setOp] = useState('WHERE')
   const [val, setVal] = useState('')
   const [applied, setApplied] = useState<{ col: string; op: string; val: string } | null>(null)
-  const [approval, setApproval] = useState('APPROVAL REQUEST')
+  const [approval, setApproval] = useState('SPECIMEN COLLECTED')
   const [asc, setAsc] = useState(false)
   const [page, setPage] = useState(0)
   const [checked, setChecked] = useState<Set<string | number>>(new Set())
@@ -618,7 +774,7 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
           </>
         )}
         <span style={{ borderLeft: '1px solid #c3c3c3', height: 20 }} />
-        <Select value={approval} onChange={setApproval} width={170} options={['APPROVAL REQUEST', 'APPROVED', 'PENDING', 'REJECTED']} />
+        <Select value={approval} onChange={setApproval} width={170} options={['SPECIMEN COLLECTED', 'APPROVED', 'PENDING', 'REJECTED']} />
         <IBtn
           title="Approve"
           onClick={() => {

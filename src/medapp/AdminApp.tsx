@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import './medapp.css'
 import { useSession } from '../session'
 import { APP_VERSION, useMedDefaults } from './data'
@@ -7,19 +7,29 @@ import {
   EmrLiteLogo,
   FileIcon,
   FolderIcon,
+  GearIcon,
   GroupGlobe,
+  HeaderToolGlyph,
+  HomeTabIcon,
   ItemGlobe,
-  LogoutIcon,
-  NotepadIcon,
+  ModulesTabIcon,
+  ReportsTabIcon,
   UsersIcon,
+  type HeaderToolKey,
 } from './icons'
-import { MODULE_GROUPS, REPORT_ITEMS, REPORT_TREE, UTILITY_EXPANDS, UTILITY_ITEMS, moduleGroupOf } from './nav'
+import {
+  ADMIN_MODULE_GROUPS,
+  ADMIN_REPORT_ITEMS,
+  ADMIN_REPORT_TREE,
+  ADMIN_UTILITY_ITEMS,
+  adminModuleGroupOf,
+} from './nav-admin'
+import { UTILITY_EXPANDS } from './nav'
 import AdminHomePage from './pages/AdminHomePage'
+import AdminReportListPage from './pages/AdminReportListPage'
 import { ModuleListPage, ModulesEmpty } from './pages/ModulesPage'
 import FavouritesPage from './pages/FavouritesPage'
-import ReportListPage from './pages/ReportListPage'
 import ReportPage from './pages/ReportPages'
-import ChartsPage from './pages/ChartsPage'
 import UtilityPage from './pages/UtilityPages'
 import HelpDocsPage, { HELP_DOCS } from './pages/HelpDocsPage'
 import SellPage from '../pages/SellPage'
@@ -38,6 +48,33 @@ import LogsPage from '../pages/LogsPage'
 import ProfilePage from '../pages/ProfilePage'
 
 type Tab = 'home' | 'modules' | 'reports' | 'charts' | 'utilities' | 'helpdocs'
+
+const TABS: { tab: Tab; label: string; icon: ReactNode }[] = [
+  { tab: 'home', label: 'Home', icon: <HomeTabIcon /> },
+  { tab: 'modules', label: 'Modules', icon: <ModulesTabIcon /> },
+  { tab: 'reports', label: 'Reports', icon: <ReportsTabIcon /> },
+  { tab: 'charts', label: 'Charts', icon: <GearIcon /> },
+  { tab: 'utilities', label: 'Utilities', icon: <GearIcon /> },
+  { tab: 'helpdocs', label: 'HelpDocs', icon: null },
+]
+
+const HEADER_TOOLS: { k: HeaderToolKey; title: string; onClick?: () => void }[] = [
+  { k: 'clipboard', title: 'Clipboard' },
+  { k: 'alert', title: 'Alerts' },
+  { k: 'pos', title: 'Point of Sale' },
+  { k: 'calendar', title: 'Calendar' },
+  { k: 'camera', title: 'Camera' },
+  { k: 'bell', title: 'Reminders' },
+  { k: 'refresh', title: 'Refresh' },
+  { k: 'house', title: 'Home' },
+  { k: 'exit', title: 'Log Out' },
+  { k: 'redo', title: 'Redo' },
+  { k: 'stop', title: 'Stop' },
+  { k: 'pdc', title: 'PDC' },
+  { k: 'notepad', title: 'Notepad' },
+  { k: 'tools', title: 'Tools' },
+  { k: 'globe', title: 'Browse' },
+]
 
 function tabOf(path: string): Tab {
   if (path.startsWith('/home')) return 'home'
@@ -81,7 +118,7 @@ export default function AdminApp() {
   if (!user) return null
 
   return (
-    <div className="ma">
+    <div className="ma ma-admin">
       <header className="ma-header">
         <img className="ma-logo" src="/logo.png" alt="SUBGEO" />
         <span className="ma-version">{APP_VERSION}</span>
@@ -92,14 +129,31 @@ export default function AdminApp() {
             <div>{user.name.toUpperCase()}</div>
           </div>
         </div>
-        <div className="ma-company">{defaults.companyName} - {defaults.branchCode}</div>
-        <div className="ma-company-dates">({defaults.licenceFrom} TO {defaults.licenceTo})</div>
-        <button type="button" className="ma-logout" title="Log Out" aria-label="Log Out" onClick={lock}>
-          <LogoutIcon />
-        </button>
+        <div className="ma-brand">
+          <div className="ma-company">{defaults.companyName}</div>
+          <div className="ma-company-dates">({defaults.licenceFrom} TO {defaults.licenceTo})</div>
+        </div>
+        <span className="ma-hspacer" />
+        <span className="ma-header-tools">
+          {HEADER_TOOLS.map((t) => (
+            <button
+              key={t.k}
+              type="button"
+              className="ma-ibtn is-bare"
+              title={t.title}
+              aria-label={t.title}
+              onClick={t.k === 'exit' ? lock : t.k === 'house' ? () => nav('/home') : undefined}
+            >
+              <HeaderToolGlyph k={t.k} />
+            </button>
+          ))}
+        </span>
         <div className="ma-header-right">
-          <button type="button" className="ma-notes" title="Notifications" onClick={() => nav('/notifications')}>
-            <NotepadIcon />
+          <button type="button" className="ma-ibtn is-bare" title="Mail">
+            <HeaderToolGlyph k="envelope" />
+          </button>
+          <button type="button" className="ma-ibtn is-bare" title="Cascade">
+            <HeaderToolGlyph k="windows" />
           </button>
           <div className="ma-emr">
             <EmrLiteLogo />
@@ -107,49 +161,68 @@ export default function AdminApp() {
         </div>
       </header>
 
-      <div className="ma-body" style={tab === 'home' ? { paddingLeft: 10 } : undefined}>
-        {tab !== 'home' && (
+      <div className="ma-body" style={tab === 'home' || tab === 'charts' ? { paddingLeft: 10 } : undefined}>
+        {tab !== 'home' && tab !== 'charts' && (
           <>
             <aside className="ma-side" style={{ width: sideW }}>
               <Sidebar tab={tab} path={path} />
             </aside>
-            <div className="ma-split ma-noprint" />
+            <div
+              className="ma-split ma-noprint"
+              onMouseDown={(e) => {
+                drag.current = { x: e.clientX, w: sideW }
+                e.preventDefault()
+              }}
+              title="Drag to resize"
+            >
+              <span />
+            </div>
           </>
         )}
-        <main className="ma-panel">
-          <Routes>
-            <Route path="/" element={<Navigate to="/home" replace />} />
-            <Route path="/home" element={<AdminHomePage />} />
-            <Route path="/modules" element={<ModulesEmpty />} />
-            <Route path="/modules/favourites" element={<FavouritesPage />} />
-            <Route path="/modules/:slug" element={<ModuleListPage />} />
-            <Route path="/reports" element={<Navigate to="/reports/list/account-statement" replace />} />
-            <Route path="/reports/list" element={<Navigate to="/reports/list/account-statement" replace />} />
-            <Route path="/reports/list/:slug" element={<ReportListPage />} />
-            <Route path="/reports/:slug" element={<ReportPage />} />
-            <Route path="/charts" element={<ChartsPage />} />
-            <Route path="/utilities" element={<Navigate to="/utilities/auto-generate" replace />} />
-            <Route path="/utilities/:slug" element={<UtilityPage />} />
-            <Route path="/helpdocs" element={<Navigate to={`/helpdocs/${HELP_DOCS[0].slug}`} replace />} />
-            <Route path="/helpdocs/:slug" element={<HelpDocsPage />} />
-            <Route path="/sell" element={<Legacy><SellPage /></Legacy>} />
-            <Route path="/sales" element={<Legacy><SalesPage /></Legacy>} />
-            <Route path="/products" element={<Legacy><InventoryPage /></Legacy>} />
-            <Route path="/inventory" element={<Legacy><InventoryPage /></Legacy>} />
-            <Route path="/purchasing" element={<Legacy><PurchasingPage /></Legacy>} />
-            <Route path="/customers" element={<Legacy><CustomersPage /></Legacy>} />
-            <Route path="/display" element={<Legacy><CustomerDisplayPage /></Legacy>} />
-            <Route path="/service" element={<Legacy><ServicePage /></Legacy>} />
-            <Route path="/shift" element={<Legacy><ShiftPage /></Legacy>} />
-            <Route path="/notifications" element={<Legacy><NotificationsPage /></Legacy>} />
-            <Route path="/messages" element={<Legacy><MessagesPage /></Legacy>} />
-            <Route path="/profile" element={<Legacy><ProfilePage /></Legacy>} />
-            <Route path="/staff" element={<Legacy><StaffPage /></Legacy>} />
-            <Route path="/logs" element={<Legacy><LogsPage /></Legacy>} />
-            <Route path="/settings" element={<Legacy><SettingsPage /></Legacy>} />
-            <Route path="*" element={<Navigate to="/home" replace />} />
-          </Routes>
-        </main>
+        <div className="ma-main">
+          <nav className="ma-tabs ma-noprint">
+            {TABS.map((t) => (
+              <Link key={t.tab} to={`/${t.tab}`} className={`ma-tab${tab === t.tab ? ' is-active' : ''}`}>
+                {t.icon}
+                {t.label}
+              </Link>
+            ))}
+          </nav>
+          <main className="ma-panel">
+            <Routes>
+              <Route path="/" element={<Navigate to="/home" replace />} />
+              <Route path="/home" element={<AdminHomePage />} />
+              <Route path="/modules" element={<ModulesEmpty />} />
+              <Route path="/modules/favourites" element={<FavouritesPage admin />} />
+              <Route path="/modules/:slug" element={<ModuleListPage />} />
+              <Route path="/reports" element={<Navigate to="/reports/list/account-statement" replace />} />
+              <Route path="/reports/list" element={<Navigate to="/reports/list/account-statement" replace />} />
+              <Route path="/reports/list/:slug" element={<AdminReportListPage />} />
+              <Route path="/reports/:slug" element={<ReportPage />} />
+              <Route path="/charts" element={<AdminHomePage />} />
+              <Route path="/utilities" element={<Navigate to="/utilities/auto-generate" replace />} />
+              <Route path="/utilities/:slug" element={<UtilityPage />} />
+              <Route path="/helpdocs" element={<Navigate to={`/helpdocs/${HELP_DOCS[0].slug}`} replace />} />
+              <Route path="/helpdocs/:slug" element={<HelpDocsPage />} />
+              <Route path="/sell" element={<Legacy><SellPage /></Legacy>} />
+              <Route path="/sales" element={<Legacy><SalesPage /></Legacy>} />
+              <Route path="/products" element={<Legacy><InventoryPage /></Legacy>} />
+              <Route path="/inventory" element={<Legacy><InventoryPage /></Legacy>} />
+              <Route path="/purchasing" element={<Legacy><PurchasingPage /></Legacy>} />
+              <Route path="/customers" element={<Legacy><CustomersPage /></Legacy>} />
+              <Route path="/display" element={<Legacy><CustomerDisplayPage /></Legacy>} />
+              <Route path="/service" element={<Legacy><ServicePage /></Legacy>} />
+              <Route path="/shift" element={<Legacy><ShiftPage /></Legacy>} />
+              <Route path="/notifications" element={<Legacy><NotificationsPage /></Legacy>} />
+              <Route path="/messages" element={<Legacy><MessagesPage /></Legacy>} />
+              <Route path="/profile" element={<Legacy><ProfilePage /></Legacy>} />
+              <Route path="/staff" element={<Legacy><StaffPage /></Legacy>} />
+              <Route path="/logs" element={<Legacy><LogsPage /></Legacy>} />
+              <Route path="/settings" element={<Legacy><SettingsPage /></Legacy>} />
+              <Route path="*" element={<Navigate to="/home" replace />} />
+            </Routes>
+          </main>
+        </div>
       </div>
     </div>
   )
@@ -174,14 +247,14 @@ function Sidebar({ tab, path }: { tab: Tab; path: string }) {
 function ModulesSidebar({ path }: { path: string }) {
   const nav = useNavigate()
   const activeSlug = path.startsWith('/modules/') ? path.slice('/modules/'.length) : ''
-  const [open, setOpen] = useState<string | undefined>(moduleGroupOf(activeSlug)?.label)
+  const [open, setOpen] = useState<string | undefined>(adminModuleGroupOf(activeSlug)?.label)
   useEffect(() => {
-    const g = moduleGroupOf(activeSlug)
+    const g = adminModuleGroupOf(activeSlug)
     if (g) setOpen(g.label)
   }, [activeSlug])
   return (
     <div className="ma-side-scroll">
-      {MODULE_GROUPS.map((g) => (
+      {ADMIN_MODULE_GROUPS.map((g) => (
         <div key={g.label}>
           <button
             type="button"
@@ -248,7 +321,7 @@ function ReportsSidebar({ path }: { path: string }) {
             <FolderIcon />
             Report List
           </div>
-          {REPORT_TREE.map((r) => (
+          {ADMIN_REPORT_TREE.map((r) => (
             <NavLink
               key={r.slug}
               to={`/reports/list/${r.slug}`}
@@ -261,7 +334,7 @@ function ReportsSidebar({ path }: { path: string }) {
           ))}
         </div>
       )}
-      {REPORT_ITEMS.map((r) => (
+      {ADMIN_REPORT_ITEMS.map((r) => (
         <button
           key={r.slug}
           type="button"
@@ -279,7 +352,7 @@ function UtilitiesSidebar({ path }: { path: string }) {
   const nav = useNavigate()
   return (
     <div className="ma-side-scroll">
-      {UTILITY_ITEMS.map((u) => {
+      {ADMIN_UTILITY_ITEMS.map((u) => {
         const active = path === `/utilities/${u.slug}`
         return (
           <div key={u.slug}>
