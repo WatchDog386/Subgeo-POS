@@ -45,6 +45,7 @@ const MOVEMENT_LABEL: Record<MovementReason, string> = {
   adjust: 'Adjusted',
   damage: 'Damaged',
   count: 'Counted',
+  transfer: 'Transferred',
 }
 
 function matches(kind: LogKind, f: KindFilter): boolean {

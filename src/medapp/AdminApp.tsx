@@ -25,6 +25,11 @@ import {
   adminModuleGroupOf,
 } from './nav-admin'
 import { UTILITY_EXPANDS } from './nav'
+import SyncBadge from './SyncBadge'
+import { syncNow } from '../db/sync'
+import { chemCode } from '../db/seedData'
+import { useToast } from '../components/ui'
+import { toggleFullscreen } from '../lib/fullscreen'
 import AdminHomePage from './pages/AdminHomePage'
 import AdminReportListPage from './pages/AdminReportListPage'
 import { ModuleListPage, ModulesEmpty } from './pages/ModulesPage'
@@ -58,22 +63,23 @@ const TABS: { tab: Tab; label: string; icon: ReactNode }[] = [
   { tab: 'helpdocs', label: 'HelpDocs', icon: null },
 ]
 
-const HEADER_TOOLS: { k: HeaderToolKey; title: string; onClick?: () => void }[] = [
-  { k: 'clipboard', title: 'Clipboard' },
-  { k: 'alert', title: 'Alerts' },
-  { k: 'pos', title: 'Point of Sale' },
-  { k: 'calendar', title: 'Calendar' },
-  { k: 'camera', title: 'Camera' },
-  { k: 'bell', title: 'Reminders' },
-  { k: 'refresh', title: 'Refresh' },
-  { k: 'house', title: 'Home' },
-  { k: 'exit', title: 'Log Out' },
-  { k: 'redo', title: 'Redo' },
-  { k: 'stop', title: 'Stop' },
-  { k: 'pdc', title: 'PDC' },
-  { k: 'notepad', title: 'Notepad' },
-  { k: 'tools', title: 'Tools' },
-  { k: 'globe', title: 'Browse' },
+/** Header shortcut icons. Each opens the matching screen (title = what it does). */
+const HEADER_TOOLS: { k: HeaderToolKey; title: string; to?: string; action?: 'lock' | 'sync' | 'back' | 'forward' | 'fullscreen' }[] = [
+  { k: 'clipboard', title: 'Chemists (all branches)', to: '/utilities/chemists' },
+  { k: 'alert', title: 'Alerts: low stock & owing', to: '/notifications' },
+  { k: 'pos', title: 'Point of Sale (this chemist)', to: '/sell' },
+  { k: 'calendar', title: 'Day Shift Open/Close', to: '/shift' },
+  { k: 'camera', title: 'Medicines (stock)', to: '/products' },
+  { k: 'bell', title: 'Notifications', to: '/notifications' },
+  { k: 'refresh', title: 'Sync now', action: 'sync' },
+  { k: 'house', title: 'Home', to: '/home' },
+  { k: 'exit', title: 'Log Out', action: 'lock' },
+  { k: 'redo', title: 'Forward', action: 'forward' },
+  { k: 'stop', title: 'Back', action: 'back' },
+  { k: 'pdc', title: 'Customers & credit', to: '/customers' },
+  { k: 'notepad', title: 'Audit Logs', to: '/logs' },
+  { k: 'tools', title: 'Settings', to: '/settings' },
+  { k: 'globe', title: 'OffLine/OnLine Synchronization', to: '/utilities/sync' },
 ]
 
 function tabOf(path: string): Tab {
@@ -93,7 +99,22 @@ function Legacy({ children }: { children: ReactNode }) {
 /** Admin shell: same medapp chrome, admin home (To-Do List), company name + branch centred
  * at the top with the licence dates. */
 export default function AdminApp() {
-  const { user, lock } = useSession()
+  const { user, lock, branch, branches, branchId, switchBranch } = useSession()
+  const toast = useToast()
+  const [switching, setSwitching] = useState(false)
+  const runTool = (t: (typeof HEADER_TOOLS)[number]) => {
+    if (t.to) nav(t.to)
+    else if (t.action === 'lock') lock()
+    else if (t.action === 'sync') void syncNow().then(() => toast('Sync finished'))
+    else if (t.action === 'back') nav(-1)
+    else if (t.action === 'forward') nav(1)
+  }
+  const openChemist = async (id: number) => {
+    setSwitching(true)
+    const r = await switchBranch(id)
+    setSwitching(false)
+    if (r.warning) toast(r.warning, 'error')
+  }
   const defaults = useMedDefaults()
   const nav = useNavigate()
   const path = useLocation().pathname
@@ -130,8 +151,22 @@ export default function AdminApp() {
           </div>
         </div>
         <div className="ma-brand">
-          <div className="ma-company">{defaults.companyName}</div>
-          <div className="ma-company-dates">({defaults.licenceFrom} TO {defaults.licenceTo})</div>
+          <div className="ma-company">
+            {defaults.companyName}
+            {branch && `-${chemCode(branch.number)}`}
+          </div>
+          <label className="ma-chem-switch" title="Open another chemist: every screen then shows that chemist's stock, sales and records">
+            Chemist
+            <select value={branchId} disabled={switching} onChange={(e) => void openChemist(Number(e.target.value))}>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {chemCode(b.number)} - {b.name}
+                  {b.active ? '' : ' (closed)'}
+                </option>
+              ))}
+            </select>
+            {switching && <span>Opening…</span>}
+          </label>
         </div>
         <span className="ma-hspacer" />
         <span className="ma-header-tools">
@@ -142,17 +177,18 @@ export default function AdminApp() {
               className="ma-ibtn is-bare"
               title={t.title}
               aria-label={t.title}
-              onClick={t.k === 'exit' ? lock : t.k === 'house' ? () => nav('/home') : undefined}
+              onClick={() => runTool(t)}
             >
               <HeaderToolGlyph k={t.k} />
             </button>
           ))}
         </span>
         <div className="ma-header-right">
-          <button type="button" className="ma-ibtn is-bare" title="Mail">
+          <SyncBadge />
+          <button type="button" className="ma-ibtn is-bare" title="Messages" onClick={() => nav('/messages')}>
             <HeaderToolGlyph k="envelope" />
           </button>
-          <button type="button" className="ma-ibtn is-bare" title="Cascade">
+          <button type="button" className="ma-ibtn is-bare" title="Full screen" onClick={() => void toggleFullscreen()}>
             <HeaderToolGlyph k="windows" />
           </button>
           <div className="ma-emr">

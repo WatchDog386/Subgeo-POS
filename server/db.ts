@@ -1,7 +1,7 @@
 // Server-side database (SQLite via better-sqlite3).
-// Holds the things the till needs shared/durable on the server: M-Pesa payment
-// prompts, staff users and shop settings. Sales/inventory stay in the browser's
-// IndexedDB — see docs/MPESA.md and the README section on hosting.
+// The company database: every chemist's records synced from the tills
+// (sync_records, see server/sync.ts) plus M-Pesa payment prompts. Each till also
+// keeps a local IndexedDB copy so it can keep selling while offline.
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -60,18 +60,4 @@ export function migrate(): string[] {
 export function isMigrated(version: string): boolean {
   const row = sql.prepare('SELECT 1 AS ok FROM schema_migrations WHERE version = ?').get(version)
   return !!row
-}
-
-/** Ensure the two default staff accounts exist so the till can log in on the server DB. */
-export function seedDefaultUsers(): void {
-  const count = sql.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }
-  if (count.n > 0) return
-  const insert = sql.prepare(
-    `INSERT INTO users (id, name, pin, role, active, updated_at)
-     VALUES (@id, @name, @pin, @role, @active, @updated_at)`
-  )
-  sql.transaction(() => {
-    insert.run({ id: 1, name: 'Owner', pin: '1234', role: 'owner', active: 1, updated_at: Date.now() })
-    insert.run({ id: 2, name: 'Cashier', pin: '0000', role: 'cashier', active: 1, updated_at: Date.now() })
-  })()
 }

@@ -6,16 +6,16 @@ import AdminApp from './medapp/AdminApp'
 import MedLogin from './medapp/MedLogin'
 
 export default function App() {
-  const { user, restoring } = useSession()
+  const { user, restoring, dbEpoch } = useSession()
   const [booting, setBooting] = useState(false)
 
   // Brief loading screen after a successful login, before the medapp shell.
   useEffect(() => {
-    if (!user) return
+    if (!user?.id) return
     setBooting(true)
     const t = setTimeout(() => setBooting(false), 5000)
     return () => clearTimeout(t)
-  }, [user])
+  }, [user?.id])
 
   // All hooks above are called unconditionally every render, so it is safe to
   // branch on their results here.
@@ -23,7 +23,8 @@ export default function App() {
   if (!user) return <MedLogin />
   if (booting) return <LoadingScreen />
 
-  // Admin signs in to the admin shell (To-Do List home); everyone else
-  // (cashier / owner) uses the medapp shell.
-  return user.name.toUpperCase() === 'ADMIN' ? <AdminApp /> : <MedApp />
+  // The admin (owner) gets the admin shell and can open any chemist; cashiers
+  // and managers work in their own chemist. Keyed on the open chemist's
+  // database so every screen reloads its data after a switch.
+  return user.role === 'owner' ? <AdminApp key={dbEpoch} /> : <MedApp key={dbEpoch} />
 }

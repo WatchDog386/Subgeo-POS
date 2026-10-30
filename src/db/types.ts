@@ -2,12 +2,31 @@
 
 export type Role = 'owner' | 'manager' | 'cashier'
 
+/** A chemist (pharmacy branch). Shown as CHEM<number>, e.g. CHEM1. */
+export interface Branch {
+  id?: number
+  /** Chemist number, unique: 1 → CHEM1. */
+  number: number
+  name: string
+  location?: string
+  phone?: string
+  active: boolean
+  createdAt: number
+}
+
 export interface User {
   id?: number
+  /** Display name (shown in the header). */
   name: string
-  pin: string
+  /** Sign-in name, unique, stored lower-case. */
+  username: string
+  /** sha256("<salt>:<password>") — see src/lib/sha256.ts. */
+  passHash: string
+  salt: string
   role: Role
   active: boolean
+  /** Chemist the user works in. Required for cashiers and managers; the owner (admin) has none and sees every chemist. */
+  branchId?: number
   /** Optional profile details shown on the Profile page. */
   email?: string
   phone?: string
@@ -131,7 +150,8 @@ export interface ParkedSale {
   userId: number
 }
 
-export type MovementReason = 'sale' | 'refund' | 'receive' | 'adjust' | 'damage' | 'count'
+/** transfer: stock moved between chemists by the admin. */
+export type MovementReason = 'sale' | 'refund' | 'receive' | 'adjust' | 'damage' | 'count' | 'transfer'
 
 export interface StockMovement {
   id?: number

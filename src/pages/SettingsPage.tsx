@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { AlertTriangle, Banknote, Bell, Layers, CreditCard, Database, Download, Info, Loader2, PackageSearch, Percent, Printer, Save, ShieldCheck, Smartphone, Store, Trash2, UserRound } from 'lucide-react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
+import { exportBackup, resetChemist, restoreBackup } from '../db/backup'
 import { saveSettings, useSettings } from '../db/settings'
 import type { PaymentMethod, Settings } from '../db/types'
 import { loadPrinterConfig, loadBarcodePrinterConfig, pairPrinter, savePrinterConfig, saveBarcodePrinterConfig, sendRaw, supports, type PrinterConfig } from '../lib/printer'
@@ -34,7 +35,7 @@ const SECTIONS: { group: string; items: { id: Tab; icon: typeof Store; tint: str
     group: 'System',
     items: [
       { id: 'Notifications', icon: Bell, tint: 'bg-rose-100 text-rose-600', desc: 'Choose which alert groups appear on the Notifications page.' },
-      { id: 'Security', icon: ShieldCheck, tint: 'bg-indigo-100 text-indigo-600', desc: 'Your PIN and how this till locks.' },
+      { id: 'Security', icon: ShieldCheck, tint: 'bg-indigo-100 text-indigo-600', desc: 'Your password and how this till locks.' },
       { id: 'Backup', icon: Download, tint: 'bg-teal-100 text-teal-600', desc: 'Download, restore and protect your data.' },
       { id: 'About', icon: Info, tint: 'bg-cyan-100 text-cyan-700', desc: 'Version, storage usage and factory reset.' },
     ],
@@ -684,11 +685,11 @@ function SecuritySettings() {
         </div>
       </div>
 
-      <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-600">Change my PIN</h3>
+      <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-600">Change my password</h3>
       <ChangePinForm />
 
       <p className="mt-5 rounded-lg bg-slate-50 p-3 text-xs text-slate-500">
-        PINs are stored only on this device. To add, disable or re-role staff members, open <b>Staff</b> from the sidebar (owner only) — or your own details from <b>My profile</b> in the top-right menu.
+        Passwords are stored hashed and synced to the server. To add, disable or re-role staff members, open <b>Utilities → User Management</b> (admin only) — or your own details from <b>My profile</b> in the top-right menu.
       </p>
     </>
   )
@@ -698,22 +699,16 @@ function SecuritySettings() {
 
 function BackupSettings() {
   const toast = useToast()
+  const { branchCode, user } = useSession()
   const backup = async () => {
-    const data: Record<string, unknown> = {}
-    for (const t of db.tables) data[t.name] = await t.toArray()
-    download(`subgeo-backup-${new Date().toISOString().slice(0, 16).replace(':', '')}.json`, JSON.stringify({ version: 1, exportedAt: Date.now(), data }), 'application/json')
+    download(`subgeo-${branchCode}-backup-${new Date().toISOString().slice(0, 16).replace(':', '')}.json`, JSON.stringify(await exportBackup()), 'application/json')
   }
   const restore = async (file: File) => {
-    if (!confirm('Restoring replaces ALL data on this till with the backup. Continue?')) return
+    if (!confirm(`Restoring replaces ALL ${branchCode} data (sales, medicines, stock, customers…) with the backup, here and on the server. Other chemists are not touched. Continue?`)) return
     try {
       const { data } = JSON.parse(await file.text()) as { data: Record<string, unknown[]> }
-      await db.transaction('rw', db.tables, async () => {
-        for (const t of db.tables) {
-          await t.clear()
-          if (data[t.name]) await t.bulkAdd(data[t.name])
-        }
-      })
-      toast('Backup restored')
+      await restoreBackup(data, { includeCompanyLists: user?.role === 'owner' })
+      toast(`Backup restored into ${branchCode}`)
     } catch (e) {
       toast(`Restore failed: ${errorText(e)}`, 'error')
     }
@@ -721,7 +716,7 @@ function BackupSettings() {
   return (
     <>
       <p className="mb-4 text-sm text-slate-600">
-        All data lives on this computer (works offline). Download a backup at least daily and keep it on a flash disk or Google Drive.
+        {branchCode}'s data is kept on this till (works offline) and synced to the company database on the server. A downloaded backup is an extra copy — keep it on a flash disk or Google Drive.
       </p>
       <div className="flex gap-2">
         <button className="btn-primary" onClick={backup}>
@@ -733,7 +728,7 @@ function BackupSettings() {
         </label>
       </div>
       <p className="mt-4 text-xs text-slate-500">
-        The backup JSON contains every table — products, sales, customers, jobs, staff, settings and the activity log. Restore it on any till running this app.
+        The backup JSON contains this chemist's medicines, sales, customers, jobs, shifts and activity log, plus the company lists (staff, chemists, categories, suppliers, settings).
       </p>
     </>
   )
@@ -749,6 +744,7 @@ function fmtBytes(n: number): string {
 
 function AboutSettings() {
   const toast = useToast()
+  const { branchCode } = useSession()
   const [usage, setUsage] = useState<number | null>(null)
   const [quota, setQuota] = useState<number | null>(null)
 
@@ -782,15 +778,11 @@ function AboutSettings() {
   )
 
   const reset = async () => {
-    if (!confirm('Erase ALL data on this till — products, categories, sales, customers, jobs, movements and settings.\n\nStaff accounts are KEPT. Cannot be undone (take a backup first). Reset?')) return
-    if (!confirm('Sure? Reset everything except staff now?')) return
+    if (!confirm(`Erase ALL ${branchCode} data — medicines, stock, sales, customers, jobs, shifts and its activity log — on this till AND on the server.\n\nStaff, chemists, categories, suppliers and other chemists are KEPT. Cannot be undone (take a backup first). Reset?`)) return
+    if (!confirm(`Sure? Erase ${branchCode} now?`)) return
     try {
-      await db.transaction('rw', db.tables, async () => {
-        for (const t of db.tables) if (t.name !== 'users') await t.clear()
-      })
-      // Mirror the wipe to the server (products table); harmless if offline.
-      void fetch('/api/products', { method: 'DELETE' }).catch(() => {})
-      window.location.reload()
+      await resetChemist()
+      toast(`${branchCode} data erased`)
     } catch (e) {
       toast(`Reset failed: ${errorText(e)}`, 'error')
     }
@@ -844,18 +836,18 @@ function AboutSettings() {
       </div>
 
       <p className="mt-4 text-sm text-slate-600">
-        Everything is stored locally in this browser (IndexedDB) and works offline. STK Push and network printing need the bundled Node server (<code>npm run server</code>). Setup docs live in <code>docs/</code> — <code>MPESA.md</code> for Daraja credentials.
+        Each chemist's data is stored in this browser (IndexedDB) so the till works offline, and syncs to the company database on the server (<code>npm run server</code>), which also runs STK Push and network printing. Setup docs live in <code>docs/</code> — <code>MPESA.md</code> for Daraja credentials.
       </p>
 
       <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4">
         <div className="flex items-center gap-2 font-semibold text-red-700">
-          <AlertTriangle size={17} /> Factory reset
+          <AlertTriangle size={17} /> Reset {branchCode}
         </div>
         <p className="mt-1 text-sm text-red-600">
-          Wipes products, categories, sales, customers and settings, then reloads. Staff accounts are kept. No demo data is re-added — start by adding your own real products in Inventory.
+          Wipes {branchCode}'s medicines, stock, sales, customers, shifts and jobs on this till and on the server. Staff, chemists, categories, suppliers, settings and other chemists are kept.
         </p>
         <button className="btn-ghost mt-3 border-red-300 text-red-600 hover:bg-red-100" onClick={reset}>
-          Reset all data (keeps staff)…
+          Reset this chemist's data…
         </button>
       </div>
     </>

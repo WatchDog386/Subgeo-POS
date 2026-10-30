@@ -17,6 +17,7 @@ import {
   ReportsTabIcon,
   UsersIcon,
 } from './icons'
+import SyncBadge from './SyncBadge'
 import { MODULE_GROUPS, REPORT_ITEMS, REPORT_TREE, UTILITY_EXPANDS, UTILITY_ITEMS, moduleGroupOf } from './nav'
 import HomePage from './pages/HomePage'
 import { ModuleListPage, ModulesEmpty } from './pages/ModulesPage'
@@ -64,7 +65,7 @@ function Legacy({ children }: { children: ReactNode }) {
 }
 
 export default function MedApp() {
-  const { user, lock } = useSession()
+  const { user, lock, branchCode } = useSession()
   const defaults = useMedDefaults()
   const nav = useNavigate()
   const path = useLocation().pathname
@@ -100,11 +101,15 @@ export default function MedApp() {
             <div>{user.name.toUpperCase()}</div>
           </div>
         </div>
-        <div className="ma-company">{defaults.companyName}</div>
+        <div className="ma-company">
+          {defaults.companyName}
+          {branchCode && `-${branchCode}`}
+        </div>
         <button type="button" className="ma-logout" title="Log Out" aria-label="Log Out" onClick={lock}>
           <LogoutIcon />
         </button>
         <div className="ma-header-right">
+          <SyncBadge />
           <button type="button" className="ma-notes" title="Notifications" onClick={() => nav('/notifications')}>
             <NotepadIcon />
           </button>
