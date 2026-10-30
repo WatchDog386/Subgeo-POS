@@ -2,8 +2,9 @@
    Navigations: network-first (falls back to cached shell when offline).
    Same-origin assets: cache-first (hashed build files are immutable).
    /api/* is live data (sync, stock, M-Pesa status) and always goes to the network.
-   v2: v1 also cached /api responses — bumping the name deletes that cache. */
-const CACHE = 'subgeo-shell-v2'
+   v2: v1 also cached /api responses — bumping the name deletes that cache.
+   v3: pre-cache square logo icons for the installed taskbar icon. */
+const CACHE = 'subgeo-shell-v3'
 const SHELL = [
   '/',
   '/index.html',
@@ -14,6 +15,8 @@ const SHELL = [
   '/apple-touch-icon.png',
   '/login.png',
   '/logo.png',
+  '/logo-192.png',
+  '/logo-512.png',
   '/avatar.svg',
 ]
 

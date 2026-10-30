@@ -945,6 +945,7 @@
   justify-content: center;
   gap: 12px;
   width: 100%;
+  padding-bottom: 90px;
 }
 .ma-login-brand {
   font-family: 'Rockwell Extra Bold', 'Rockwell', 'Bookman Old Style', 'Clarendon', Georgia, serif;

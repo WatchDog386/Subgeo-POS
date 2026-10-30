@@ -177,7 +177,10 @@ export function useFavourites(): Favourite[] {
   return useKv<Favourite[]>('medapp:favourites', DEFAULT_FAVOURITES)
 }
 
-// ── Admin register seeds (legacy admin screenshots 14.40.06 (2)-(9)) ────
+// ── Legacy demo registers (old admin screenshots) ────────────────────────
+// These sample rows used to be seeded on first run. They hung in the
+// registers forever, so now they are only used to DELETE their exact copies
+// from tills that still carry them — real key-entered data is never touched.
 const D = (values: Record<string, string>, n: number, day: string, month: string, year: string): DocRecord => ({
   id: n,
   createdAt: new Date(Number(year), Number(month) - 1, Number(day), 9, 0).getTime(),
@@ -236,13 +239,21 @@ export const MED_DOC_SEEDS: Record<string, DocRecord[]> = {
     D({ docNo: 'PRD00-24-25', name: 'ABZ NILWORM TABS', group: 'TABS/CAPSULES', uom: 'MG', retail: '50.00', whole: '50.00', cost: '0.00', packSize: '100.00', type: 'S' }, 11, '17', '10', '2026'),
   ],
 }
-/** Sample registers for the admin screens. Written as "already in sync" so
- * they stay on this till and only reach the server once someone edits them. */
+/** Remove the sample register rows from tills that still have them. Only rows
+ * whose id AND values exactly match a seeded sample are deleted, so anything
+ * the shop typed themselves stays. */
 export async function seedAdminDocs(): Promise<void> {
   await db.transaction('rw', db.kv, async (tx) => {
     markRemote(tx)
     for (const [slug, list] of Object.entries(MED_DOC_SEEDS)) {
-      if (!(await db.kv.get(docsKey(slug)))) await db.kv.put({ key: docsKey(slug), value: list, _dirty: 0, _ts: 0 } as KV)
+      const fresh = await db.kv.get(docsKey(slug))
+      if (!fresh) continue
+      const removed = (fresh.value as DocRecord[]).filter((doc) => {
+        const sample = list.find((s) => s.id === doc.id)
+        return sample && JSON.stringify(sample.values) === JSON.stringify(doc.values)
+      })
+      if (!removed.length) continue
+      await db.kv.put({ key: fresh.key, value: (fresh.value as DocRecord[]).filter((doc) => !removed.some((r) => r.id === doc.id)), _dirty: 0, _ts: 0 } as KV)
     }
   })
 }

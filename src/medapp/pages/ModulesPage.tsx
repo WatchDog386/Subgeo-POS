@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
-import type { Customer, Product, Sale, ServiceJob, Supplier } from '../../db/types'
+import type { Customer, Payment, Product, Sale, SaleLine, ServiceJob, Supplier } from '../../db/types'
+import { completeSale, refundSale } from '../../db/sales'
+import { toCents } from '../../lib/money'
 import { useSession } from '../../session'
 import { useToast } from '../../components/ui'
 import { downloadCsv } from '../../lib/csv'
@@ -36,7 +38,7 @@ import {
   ToolGlyph,
   type ToolKey,
 } from '../icons'
-import { Btn, Dialog, Grid, HScroll, IBtn, Input, PickList, Rows, Select, ToolBtn, type Col } from '../ui'
+import { Btn, Check, Dialog, Grid, HScroll, IBtn, Input, PickList, Rows, SearchBar, Select, ToolBtn, type Col, type Opt } from '../ui'
 
 /* ── Definitions ───────────────────────────────────────────────────────── */
 type Source = 'otc' | 'otc-return' | 'service' | 'party' | 'services' | 'docs'
@@ -612,6 +614,8 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
   const [view, setView] = useState<RawRow | null>(null)
   const [edit, setEdit] = useState<RawRow | 'new' | null>(null)
   const [action, setAction] = useState('SELECT')
+  const [otcOpen, setOtcOpen] = useState(false)
+  const [refund, setRefund] = useState<Sale | null | undefined>(undefined)
 
   const colKey = def.cols.find((c) => c.label === col)?.key
   const filtered = all
@@ -652,15 +656,16 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
     return rows.length ? rows : target() ? [target()!] : []
   }
   const newDoc = () => {
-    if (def.source === 'otc') nav('/sell')
-    else if (def.source === 'otc-return') nav('/sales')
+    if (def.source === 'otc') setOtcOpen(true)
+    else if (def.source === 'otc-return') setRefund(undefined)
     else if (def.source === 'service') nav('/service')
     else setEdit('new')
   }
   const editDoc = () => {
     const t = target()
     if (!t) return toast('Select a record first', 'error')
-    if (def.source === 'otc' || def.source === 'otc-return') nav('/sales')
+    if (def.source === 'otc') setRefund(t.detail as Sale)
+    else if (def.source === 'otc-return') setView(t)
     else if (def.source === 'service') nav('/service')
     else setEdit(t)
   }
@@ -852,6 +857,8 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
         />
       )}
       {view && <ViewDialog def={def} row={view} onClose={() => setView(null)} />}
+      {otcOpen && def.source === 'otc' && <OtcBillDialog onClose={() => setOtcOpen(false)} />}
+      {refund !== undefined && <OtcReturnDialog sale={refund ?? undefined} onClose={() => setRefund(undefined)} />}
       {edit && def.source === 'docs' && <DocDialog slug={slug} def={def} row={edit === 'new' ? undefined : edit} onClose={() => setEdit(null)} />}
       {edit && def.source === 'party' && <PartyDialog row={edit === 'new' ? undefined : edit} onClose={() => setEdit(null)} />}
       {edit && def.source === 'services' && <ServiceDialog row={edit === 'new' ? undefined : edit} onClose={() => setEdit(null)} />}
@@ -906,7 +913,360 @@ function FragmentRow({ label, value }: { label: string; value: string }) {
   )
 }
 
+/* ── OTC Medicine Issue/Bill entry ─────────────────────────────────────── */
+const PAY_OPTIONS: Opt[] = [
+  { value: 'cash', label: 'CASH COLLECTION ACCOUNT' },
+  { value: 'mpesa', label: 'MPESA COLLECTION ACCOUNT' },
+  { value: 'card', label: 'CREDIT CARD COLLECTION ACCOUNT' },
+  { value: 'account', label: 'CREDIT ACCOUNT' },
+]
+
+interface OtcLine extends SaleLine {
+  key: string
+  product?: Product
+  qtyText: string
+  rateText: string
+  discText: string
+}
+
+function LineNum({ value, onChange, width = 60 }: { value: string; onChange: (v: string) => void; width?: number }) {
+  return (
+    <input
+      className="ma-input is-plain"
+      style={{ width, height: 19, padding: '0 4px', fontSize: 11 }}
+      value={value}
+      inputMode="decimal"
+      onChange={(e) => onChange(e.target.value)}
+    />
+  )
+}
+
+function OtcBillDialog({ onClose }: { onClose: () => void }) {
+  const { user } = useSession()
+  const toast = useToast()
+  const d = useMedDefaults()
+  const products = useLiveQuery(() => db.products.filter((p) => p.active).toArray(), [], [] as Product[])
+  const customers = useLiveQuery(() => db.customers.toArray(), [], [] as Customer[])
+  const [category, setCategory] = useState(d.patientCategory.toUpperCase())
+  const [pay, setPay] = useState('cash')
+  const [narration, setNarration] = useState('')
+  const [lines, setLines] = useState<OtcLine[]>([])
+  const [pickItem, setPickItem] = useState(false)
+  const [pickCat, setPickCat] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const labelOf = (p: Product) => `${p.name}${p.sku ? ` [${p.sku}]` : ''}`
+  const addLine = (name: string) => {
+    const p = products.find((x) => labelOf(x).toLowerCase() === name.toLowerCase())
+    if (!p) return toast('Pick a medicine from the list', 'error')
+    if (lines.some((l) => l.product?.id === p.id)) {
+      toast(`${p.name} is already on the bill — edit its quantity`, 'error')
+      return
+    }
+    setLines((ls) => [
+      ...ls,
+      {
+        key: String(Date.now()) + String(ls.length),
+        product: p,
+        name: p.name,
+        sku: p.sku,
+        qty: 1,
+        unitPrice: p.price,
+        unitCost: p.cost,
+        discount: 0,
+        taxable: p.taxable,
+        qtyText: '1',
+        rateText: (p.price / 100).toFixed(2),
+        discText: '0',
+      },
+    ])
+  }
+  const setText = (key: string, field: 'qty' | 'rate' | 'disc', text: string) =>
+    setLines((ls) =>
+      ls.map((l) => {
+        if (l.key !== key) return l
+        const upd: OtcLine = { ...l, [field === 'qty' ? 'qtyText' : field === 'rate' ? 'rateText' : 'discText']: text }
+        upd.qty = Math.max(0, Number(upd.qtyText) || 0)
+        upd.unitPrice = Math.max(0, toCents(upd.rateText))
+        upd.discount = Math.max(0, toCents(upd.discText))
+        return upd
+      }),
+    )
+
+  const lineAmount = (l: OtcLine) => Math.max(0, l.qty * l.unitPrice - l.discount)
+  const total = lines.reduce((s, l) => s + lineAmount(l), 0)
+
+  const save = async () => {
+    if (!user || saving) return
+    if (!lines.length) return toast('Add at least one medicine to the bill', 'error')
+    if (lines.some((l) => l.qty <= 0)) return toast('Every line needs a quantity above zero', 'error')
+    if (pay === 'account' && category.trim().toUpperCase() === d.patientCategory.toUpperCase())
+      return toast('For a CREDIT ACCOUNT bill, type or pick the customer who is buying', 'error')
+    setSaving(true)
+    try {
+      let customerId: number | undefined
+      const cat = category.trim().toUpperCase()
+      if (cat && cat !== d.patientCategory.toUpperCase()) {
+        const existing = customers.find((c) => c.name.toUpperCase() === cat)
+        customerId = existing?.id ?? ((await db.customers.add({ name: cat, balance: 0, creditLimit: 0, createdAt: Date.now() })) as number)
+      }
+      const saleLines: SaleLine[] = lines.map(({ key: _k, qtyText: _q, rateText: _r, discText: _c, ...l }) => ({ ...l }))
+      const sale = await completeSale({
+        lines: saleLines,
+        discount: 0,
+        payments: [{ method: pay as Payment['method'], amount: total }],
+        customerId,
+        userId: user.id ?? 0,
+        note: narration.trim() || undefined,
+      })
+      toast(`Bill ${billNo(sale, d.billPrefix)} issued`)
+      onClose()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog
+      title="OTC Medicine Issue/Bill - New"
+      onClose={onClose}
+      width={690}
+      footer={
+        <>
+          <Btn onClick={() => void save()} disabled={saving || !lines.length}>
+            Save &amp; Issue Bill
+          </Btn>
+          <Btn onClick={onClose}>cancel</Btn>
+        </>
+      }
+    >
+      <div className="ma-form" style={{ gridTemplateColumns: '130px 1fr' }}>
+        <FieldRow label="Bill No.">
+          <Input value="(auto)" readOnly width={140} />
+        </FieldRow>
+        <FieldRow label="Date">
+          <Input value={dmy(Date.now())} readOnly width={140} />
+        </FieldRow>
+        <FieldRow label="Patient Category" req>
+          <span style={{ display: 'inline-flex' }}>
+            <Input value={category} onChange={(v) => setCategory(v.toUpperCase())} width={220} />
+            <button type="button" className="ma-lookup" onClick={() => setPickCat(true)} title="Customer lookup">
+              <MagnifierIcon size={13} />
+            </button>
+          </span>
+        </FieldRow>
+        <FieldRow label="Narration">
+          <Input value={narration} onChange={setNarration} width={220} />
+        </FieldRow>
+        <FieldRow label="User Name">
+          <Input value={user?.name.toUpperCase() ?? ''} readOnly width={220} />
+        </FieldRow>
+        <FieldRow label="Payable By" req>
+          <Select value={pay} onChange={setPay} options={PAY_OPTIONS} width={250} />
+        </FieldRow>
+        <FieldRow label="Bill Amount">
+          <Input value={amt(total)} readOnly width={140} />
+        </FieldRow>
+      </div>
+
+      <div style={{ marginTop: 10 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
+          <Btn round onClick={() => setPickItem(true)}>
+            + Add medicine
+          </Btn>
+          <span style={{ fontSize: 11, color: '#666' }}>Double-click a row to remove it. Stock is deducted when the bill is saved.</span>
+        </div>
+        <Grid
+          compact
+          height={Math.min(320, Math.max(60, 26 + lines.length * 23 + 23))}
+          cols={[
+            { key: 'name', label: 'Medicine / Item', width: 240 },
+            { key: 'qty', label: 'Qty', width: 70 },
+            { key: 'rate', label: 'Rate', width: 90 },
+            { key: 'disc', label: 'Discount', width: 90 },
+            { key: 'amount', label: 'Amount', width: 90, align: 'right' },
+          ]}
+          rows={lines.map((l) => ({
+            id: l.key,
+            cells: {
+              name: l.name + (l.sku ? ` [${l.sku}]` : ''),
+              qty: <LineNum value={l.qtyText} onChange={(n) => setText(l.key, 'qty', n)} />,
+              rate: <LineNum value={l.rateText} width={80} onChange={(n) => setText(l.key, 'rate', n)} />,
+              disc: <LineNum value={l.discText} width={80} onChange={(n) => setText(l.key, 'disc', n)} />,
+              amount: amt(lineAmount(l)),
+            },
+          }))}
+          onOpen={(id) => setLines((ls) => ls.filter((l) => l.key !== id))}
+        />
+      </div>
+
+      {pickItem && (
+        <PickList
+          title="Medicine"
+          options={[...products].sort((a, b) => a.name.localeCompare(b.name)).map(labelOf)}
+          onClose={() => setPickItem(false)}
+          onPick={(v) => {
+            addLine(v)
+            setPickItem(false)
+          }}
+        />
+      )}
+      {pickCat && (
+        <PickList
+          title="Patient / Customer"
+          options={customers.map((c) => c.name.toUpperCase())}
+          onClose={() => setPickCat(false)}
+          onPick={(v) => {
+            setCategory(v)
+            setPickCat(false)
+          }}
+        />
+      )}
+    </Dialog>
+  )
+}
+
+/* ── OTC Medicine Isse Return ──────────────────────────────────────────── */
+function OtcReturnDialog({ sale, onClose }: { sale?: Sale; onClose: () => void }) {
+  const { user } = useSession()
+  const toast = useToast()
+  const d = useMedDefaults()
+  const [orig, setOrig] = useState<Sale | undefined>(sale)
+  const [q, setQ] = useState('')
+  const [qty, setQty] = useState<Record<number, string>>({})
+  const [restock, setRestock] = useState(true)
+  const [method, setMethod] = useState('cash')
+  const [reason, setReason] = useState('')
+  const [saving, setSaving] = useState(false)
+  const sales = useLiveQuery(async () => {
+    const all = await db.sales.filter((s) => !s.refundOf && s.status !== 'voided').toArray()
+    return all.sort((a, b) => b.createdAt - a.createdAt).slice(0, 50)
+  }, [], [] as Sale[])
+  const shown = sales
+
+  const lineReturnAmount = (i: number, l: SaleLine) => {
+    const n = chosenQty(i, l)
+    return n * l.unitPrice - Math.round((l.discount * n) / Math.max(1, l.qty))
+  }
+  const chosenQty = (i: number, l: SaleLine) => Math.min(Math.max(0, Number(qty[i]) || 0), l.qty - (l.refundedQty ?? 0))
+  const amount = orig ? orig.lines.reduce((t, l, i) => t + lineReturnAmount(i, l), 0) : 0
+
+  const save = async () => {
+    if (!user || !orig || saving) return
+    const qtyByLine: Record<number, number> = {}
+    let any = false
+    orig.lines.forEach((l, i) => {
+      const n = chosenQty(i, l)
+      if (n > 0) {
+        qtyByLine[i] = n
+        any = true
+      }
+    })
+    if (!any) return toast('Enter the quantity to return', 'error')
+    setSaving(true)
+    try {
+      const refund = await refundSale(orig.id!, { qtyByLine, restock, method: method as Payment['method'], userId: user.id ?? 0, reason: reason.trim() || undefined })
+      toast(`Return ${refund.receiptNo} (${amt(-refund.total)}) recorded`)
+      onClose()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog title={orig ? `OTC Medicine Isse Return - ${billNo(orig, d.billPrefix)}` : 'OTC Medicine Isse Return - New Bill'} onClose={onClose} width={690}>
+      {!orig ? (
+        <>
+          <div style={{ marginBottom: 4 }}>
+            <SearchBar value={q} onChange={setQ} width={330} autoFocus />
+          </div>
+          <Grid
+            compact
+            height={300}
+            cols={[
+              { key: 'billNo', label: 'Bill No.', width: 150 },
+              { key: 'date', label: 'Date', width: 100 },
+              { key: 'amount', label: 'Bill Amount', width: 110, align: 'right' },
+              { key: 'narration', label: 'First medicine on the bill', width: 240 },
+            ]}
+            rows={shown
+              .filter((s) => !q.trim() || billNo(s, d.billPrefix).toLowerCase().includes(q.toLowerCase()) || s.lines.some((l) => l.name.toLowerCase().includes(q.toLowerCase())))
+              .map((s) => ({
+                id: s.id!,
+                cells: { billNo: billNo(s, d.billPrefix), date: dmy(s.createdAt), amount: amt(s.total), narration: s.lines[0]?.name ?? '' },
+              }))}
+            onOpen={(id) => setOrig(shown.find((s) => s.id === id))}
+          />
+          <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>Double-click a bill to start its return.</div>
+        </>
+      ) : (
+        <>
+          <div className="ma-form" style={{ gridTemplateColumns: '130px 1fr' }}>
+            <FieldRow label="Bill No.">
+              <Input value={billNo(orig, d.billPrefix)} readOnly width={200} />
+            </FieldRow>
+            <FieldRow label="Date">
+              <Input value={dmy(orig.createdAt)} readOnly width={140} />
+            </FieldRow>
+          </div>
+          <Grid
+            compact
+            height={Math.min(300, 26 + orig.lines.length * 23 + 23)}
+            cols={[
+              { key: 'name', label: 'Medicine / Item', width: 250 },
+              { key: 'avail', label: 'Available', width: 70, align: 'right' },
+              { key: 'ret', label: 'Return', width: 80 },
+              { key: 'amount', label: 'Amount', width: 100, align: 'right' },
+            ]}
+            rows={orig.lines.map((l, i) => {
+              const avail = l.qty - (l.refundedQty ?? 0)
+              return {
+                id: i,
+                cells: {
+                  name: l.name + (l.sku ? ` [${l.sku}]` : ''),
+                  avail: String(avail),
+                  ret: avail > 0 ? <LineNum value={qty[i] ?? ''} onChange={(v) => setQty({ ...qty, [i]: v })} /> : '—',
+                  amount: avail > 0 ? amt(lineReturnAmount(i, l)) : '—',
+                },
+              }
+            })}
+          />
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            <Check checked={restock} onChange={setRestock}>
+              Put returned stock back
+            </Check>
+          </div>
+          <div className="ma-form" style={{ gridTemplateColumns: '130px 1fr', marginTop: 6 }}>
+            <FieldRow label="Return To">
+              <Select value={method} onChange={setMethod} options={PAY_OPTIONS} width={250} />
+            </FieldRow>
+            <FieldRow label="Reason">
+              <Input value={reason} onChange={setReason} width={280} />
+            </FieldRow>
+            <FieldRow label="Refund Amount">
+              <Input value={amt(amount)} readOnly width={140} />
+            </FieldRow>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <Btn onClick={() => void save()} disabled={saving || amount <= 0}>
+              Save
+            </Btn>
+            <Btn onClick={() => setOrig(undefined)}>Back</Btn>
+            <Btn onClick={onClose}>cancel</Btn>
+          </div>
+        </>
+      )}
+    </Dialog>
+  )
+}
+
 /* ── Whole-sale document entry ─────────────────────────────────────────── */
+const PICKED_NEW = '(new party) '
+
 function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; row?: RawRow; onClose: () => void }) {
   const { user } = useSession()
   const toast = useToast()
@@ -925,8 +1285,11 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
     return v
   })
   const [pick, setPick] = useState<string | null>(null)
+  const [pickExtra, setPickExtra] = useState('') // current text of the party field being picked
   const label = (key: string) => def.cols.find((c) => c.key === key)?.label || (key === 'docNo' ? 'Doc No' : key === 'total' ? 'Amount' : key)
   const required = fields.find((f) => f.kind === 'party')?.key
+  /** Vendor fields write new suppliers; customer fields write new customers. */
+  const partyIsSupplier = (key: string) => /vendor|supplier/i.test(key)
 
   const save = async () => {
     if (required && !vals[required]?.trim()) return toast(`${label(required)} is required`, 'error')
@@ -936,6 +1299,18 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
     await saveDoc(slug, values, row ? Number(String(row.id).slice(1)) : undefined)
     toast(row ? 'Record updated' : 'Record saved')
     onClose()
+  }
+
+  const saveParty = async (key: string, typed: string) => {
+    const name = typed.trim().toUpperCase()
+    if (!name) return toast('Type the party name first', 'error')
+    if ((await db.customers.filter((c) => c.name.toUpperCase() === name).first()) || (await db.suppliers.filter((s) => s.name.toUpperCase() === name).first())) {
+      return toast(`${name} already exists`, 'error')
+    }
+    if (partyIsSupplier(key)) await db.suppliers.add({ name, notes: 'Added from ' + def.title })
+    else await db.customers.add({ name, balance: 0, creditLimit: 0, createdAt: Date.now() })
+    toast(`${name} added to Party Master`)
+    setVals((cur) => ({ ...cur, [key]: name }))
   }
 
   return (
@@ -973,7 +1348,15 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
             ) : f.kind === 'party' ? (
               <span style={{ display: 'inline-flex' }}>
                 <Input value={vals[f.key]} onChange={(v) => setVals({ ...vals, [f.key]: v })} width={200} />
-                <button type="button" className="ma-lookup" onClick={() => setPick(f.key)} title="Lookup">
+                <button
+                  type="button"
+                  className="ma-lookup"
+                  onClick={() => {
+                    setPickExtra(vals[f.key].trim().toUpperCase())
+                    setPick(f.key)
+                  }}
+                  title="Lookup — also adds a typed new party"
+                >
                   <MagnifierIcon size={13} />
                 </button>
               </span>
@@ -986,10 +1369,15 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
       {pick && (
         <PickList
           title="Party"
-          options={parties}
+          options={
+            pickExtra.trim()
+              ? [`${PICKED_NEW}${pickExtra.trim()}`, ...parties.filter((p) => p !== pickExtra.trim())]
+              : parties
+          }
           onClose={() => setPick(null)}
           onPick={(v) => {
-            setVals({ ...vals, [pick]: v })
+            if (v.startsWith(PICKED_NEW)) void saveParty(pick, v.slice(PICKED_NEW.length))
+            else setVals({ ...vals, [pick]: v })
             setPick(null)
           }}
         />
