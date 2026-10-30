@@ -1,7 +1,9 @@
 /* Subgeo POS — offline app-shell service worker.
    Navigations: network-first (falls back to cached shell when offline).
-   Same-origin assets: cache-first (hashed build files are immutable). */
-const CACHE = 'subgeo-shell-v1'
+   Same-origin assets: cache-first (hashed build files are immutable).
+   /api/* is live data (sync, stock, M-Pesa status) and always goes to the network.
+   v2: v1 also cached /api responses — bumping the name deletes that cache. */
+const CACHE = 'subgeo-shell-v2'
 const SHELL = [
   '/',
   '/index.html',
@@ -36,7 +38,9 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const req = event.request
   if (req.method !== 'GET') return
-  if (new URL(req.url).origin !== self.location.origin) return
+  const url = new URL(req.url)
+  if (url.origin !== self.location.origin) return
+  if (url.pathname.startsWith('/api/')) return
 
   if (req.mode === 'navigate') {
     event.respondWith(

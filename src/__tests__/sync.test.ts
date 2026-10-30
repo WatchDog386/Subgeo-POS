@@ -46,6 +46,7 @@ beforeAll(async () => {
   const app = express()
   app.use(express.json({ limit: '25mb' }))
   app.use('/api', syncRouter)
+  // (server/index.ts also marks /api responses no-store)
   await new Promise<void>((res) => {
     server = app.listen(0, () => res())
   })

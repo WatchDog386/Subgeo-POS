@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { useLiveQuery } from 'dexie-react-hooks'
 import { activeBranchId, db, markRemote, switchBranchDb } from './db/db'
 import { logActivity } from './db/logs'
-import { HttpError, api, flushPending, setSyncToken, setUnauthorizedHandler, startSync, stopSync, syncNow, syncToken } from './db/sync'
+import { HttpError, api, flushPending, setForbiddenHandler, setSyncToken, setUnauthorizedHandler, startSync, stopSync, syncNow, syncToken } from './db/sync'
 import { chemCode } from './db/seedData'
 import { hashPassword } from './lib/sha256'
 import type { Branch, Role, Shift, User } from './db/types'
@@ -146,10 +146,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setAuthUser(null)
     localStorage.removeItem('authUserId')
     password.current = null
-    // Upload what's waiting, then end the server session.
+    // Upload what's waiting, then end this user's server session — unless
+    // someone else has signed in meanwhile (their token must survive).
+    const mine = syncToken()
     void (async () => {
       await Promise.race([flushPending(), new Promise((r) => setTimeout(r, 8000))]).catch(() => {})
-      if (syncToken()) await api('/auth/logout', { method: 'POST', timeoutMs: 5000 }).catch(() => {})
+      if (!mine || syncToken() !== mine) return
+      await api('/auth/logout', { method: 'POST', timeoutMs: 5000 }).catch(() => {})
+      if (syncToken() !== mine) return
       setSyncToken(null)
       localStorage.removeItem('syncTokenUser')
     })()
@@ -168,6 +172,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     })
     return () => setUnauthorizedHandler(null)
   }, [authUser, reauth])
+
+  // Server refused this chemist: fetch the account as the server has it. If the
+  // admin moved this cashier, the effect above then opens the new chemist.
+  useEffect(() => {
+    setForbiddenHandler(() => {
+      void api<{ user: User; branches: Branch[] }>('/auth/me', { timeoutMs: 8000 })
+        .then((r) => storeServerCopies(r.user, r.branches))
+        .catch(() => {})
+    })
+    return () => setForbiddenHandler(null)
+  }, [])
 
   // Signed in offline: keep trying to reach the server so sync can start.
   useEffect(() => {
@@ -205,8 +220,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const local = await db.users.where('username').equals(uname).first()
         if (!local || hashPassword(local.salt, pass) !== local.passHash) return { ok: false, error: 'Invalid user name or password' }
         if (!local.active) return { ok: false, error: 'This account is disabled' }
-        const target = homeBranch(local, await db.branches.toArray())
+        const allBranches = await db.branches.toArray()
+        const target = homeBranch(local, allBranches)
         if (!target) return { ok: false, error: 'This account has no chemist. Ask the admin.' }
+        if (local.role !== 'owner' && !allBranches.find((b) => b.id === target)?.active) {
+          return { ok: false, error: 'Your chemist is closed or not set. Ask the admin.' }
+        }
         await openBranch(target)
         if (localStorage.getItem('syncTokenUser') !== String(local.id)) {
           setSyncToken(null)

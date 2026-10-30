@@ -25,6 +25,11 @@ const PORT = Number(process.env.PORT ?? 8787)
 const app = express()
 // Sync uploads can carry product photos (data URLs); nginx allows 25 MB.
 app.use(express.json({ limit: '25mb' }))
+// API answers are live data (stock, sync changes): never let a browser or proxy cache them.
+app.use('/api', (_req, res, next) => {
+  res.set('Cache-Control', 'no-store')
+  next()
+})
 
 const daraja = createDaraja(process.env)
 

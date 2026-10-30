@@ -87,6 +87,12 @@ export function setUnauthorizedHandler(fn: (() => void) | null) {
   onUnauthorized = fn
 }
 
+/** Called when the server refuses this chemist (403) — e.g. the admin moved the cashier. */
+let onForbidden: (() => void) | null = null
+export function setForbiddenHandler(fn: (() => void) | null) {
+  onForbidden = fn
+}
+
 export class HttpError extends Error {
   constructor(
     public status: number,
@@ -108,6 +114,7 @@ export async function api<T>(path: string, init?: RequestInit & { timeoutMs?: nu
   try {
     const r = await fetch(`${apiBase}/api${path}`, {
       ...init,
+      cache: 'no-store',
       signal: ctrl.signal,
       headers: {
         'Content-Type': 'application/json',
@@ -303,6 +310,9 @@ async function cycle(): Promise<void> {
     if (e instanceof HttpError && e.status === 401) {
       setState({ status: 'error', pending, error: 'Signed out by the server — sign in again' })
       onUnauthorized?.()
+    } else if (e instanceof HttpError && e.status === 403) {
+      setState({ status: 'error', pending, error: e.message })
+      onForbidden?.()
     } else if (e instanceof HttpError && e.status !== 503) {
       setState({ status: 'error', pending, error: e.message })
     } else {
