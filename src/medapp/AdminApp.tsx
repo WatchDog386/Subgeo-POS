@@ -32,6 +32,7 @@ import { useToast } from '../components/ui'
 import { toggleFullscreen } from '../lib/fullscreen'
 import AdminHomePage from './pages/AdminHomePage'
 import AdminReportListPage from './pages/AdminReportListPage'
+import ChartsPage from './pages/ChartsPage'
 import { ModuleListPage, ModulesEmpty } from './pages/ModulesPage'
 import FavouritesPage from './pages/FavouritesPage'
 import ReportPage from './pages/ReportPages'
@@ -236,6 +237,7 @@ export default function AdminApp() {
               <Route path="/reports/list/:slug" element={<AdminReportListPage />} />
               <Route path="/reports/:slug" element={<ReportPage />} />
               <Route path="/charts" element={<AdminHomePage />} />
+              <Route path="/charts/view" element={<ChartsPage />} />
               <Route path="/utilities" element={<Navigate to="/utilities/auto-generate" replace />} />
               <Route path="/utilities/:slug" element={<UtilityPage />} />
               <Route path="/helpdocs" element={<Navigate to={`/helpdocs/${HELP_DOCS[0].slug}`} replace />} />

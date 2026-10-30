@@ -138,6 +138,8 @@ export interface Sale {
   note?: string
   /** For refund records: the receipt being refunded. */
   refundOf?: number
+  /** Chemist that issued it, as printed on the receipt, e.g. "CHEM2 - SCL KAYOLE". */
+  branch?: string
 }
 
 export interface ParkedSale {

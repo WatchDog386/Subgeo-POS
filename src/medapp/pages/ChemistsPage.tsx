@@ -338,7 +338,7 @@ function ChemistForm({ branches, selected, userName, userId }: { branches: Branc
           <Btn onClick={save}>{editId !== undefined ? 'Save Changes' : 'Create Chemist'}</Btn>
         </div>
       </div>
-      <div className="ma-label" style={{ marginTop: 8 }}>
+      <div className="ma-label ma-note" style={{ marginTop: 8 }}>
         Each chemist keeps its own medicines, stock, sales, customers and shifts. Cashiers are tied to one chemist and see only its stock.
       </div>
     </Box>
@@ -381,7 +381,7 @@ function CopyCatalogue({ branches, onDone }: { branches: Branch[]; onDone: () =>
           {busy ? 'Copying…' : 'Copy Medicine List'}
         </Btn>
       </div>
-      <div className="ma-label" style={{ marginTop: 8 }}>
+      <div className="ma-label ma-note" style={{ marginTop: 8 }}>
         Quickest way to set up a new chemist: copy the list, then receive its opening stock (Medicines → Adjust stock, or Purchases).
       </div>
     </Box>
@@ -483,7 +483,7 @@ function TransferStock({ branches, onDone }: { branches: Branch[]; onDone: () =>
           {busy ? 'Transferring…' : 'Transfer Stock'}
         </Btn>
       </div>
-      <div className="ma-label" style={{ marginTop: 6 }}>
+      <div className="ma-label ma-note" style={{ marginTop: 6 }}>
         Stock leaves the first chemist and arrives at the second at once; both stock ledgers show the transfer. A medicine the receiving chemist lacks is created there.
       </div>
     </Box>

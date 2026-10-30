@@ -94,7 +94,8 @@
 }
 .ma-logout {
   position: absolute;
-  left: 602px;
+  /* Just right of the centred company name ("SUBGEO CHEMIST LTD-CHEM<n>"). */
+  left: calc(50% + 180px);
   top: 12px;
   width: 36px;
   height: 36px;
@@ -1197,4 +1198,9 @@
   background: #fff;
   font: bold 12px Arial, Helvetica, sans-serif;
   color: #c00;
+}
+/* Explanatory text under forms: wraps inside its box. */
+.ma-note {
+  white-space: normal !important;
+  line-height: 1.35;
 }

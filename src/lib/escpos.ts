@@ -90,6 +90,7 @@ export function receiptBytes(
   const p = new EscPos(columnsFor(settings.paperWidth)).init()
   if (opts.kickDrawer) p.kickDrawer()
   p.align('center').bold(true).size(true).line(settings.shopName).size(false).bold(false)
+  if (sale.branch) p.bold(true).line(sale.branch).bold(false)
   if (settings.address) p.line(settings.address)
   if (settings.phone) p.line(`Tel: ${settings.phone}`)
   if (settings.kraPin) p.line(`KRA PIN: ${settings.kraPin}`)

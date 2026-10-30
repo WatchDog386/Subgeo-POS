@@ -13,7 +13,7 @@ import { saveStaff } from '../../db/staff'
 import { useSession } from '../../session'
 import { useToast } from '../../components/ui'
 import { download, downloadCsv, parseCsv } from '../../lib/csv'
-import { amt, dmy, getKv, nextDocNo, parseDmy, saveDoc, setKv, useDocs, useKv, useMedDefaults } from '../data'
+import { amt, dmy, getKv, nextDocNo, parseDmy, saveDoc, setKv, useDocs, useKv, useMedDefaults, yy } from '../data'
 import { CheckGreenIcon, OrangeArrow, SearchLens } from '../icons'
 import { Btn, Check, Dialog, Grid, IBtn, Input, LookupField, matches, PickList, Radio, Rows, SearchBar, Select, TransferArrows, useTransfer, type Col, type Row } from '../ui'
 import { At, Canvas, L, Title } from './layout'
@@ -1160,7 +1160,7 @@ function UserManagement() {
                 if (b && role !== 'owner') setBranchId(b.id)
               }}
             />
-            <div className="ma-label" style={{ marginTop: 6, width: 300 }}>
+            <div className="ma-label ma-note" style={{ marginTop: 6, width: 300 }}>
               Cashiers and managers only see and sell the stock of their own chemist. The admin sees all chemists. Add chemists in Utilities → Chemists (Branches).
             </div>
           </div>
@@ -1320,13 +1320,15 @@ function AutoNumberReset() {
   const toast = useToast()
   const [tx, setTx] = useState('')
   const [numV, setNumV] = useState('')
+  const [look, setLook] = useState('NEXT VALUE')
   const t = SEQ_TX.find((x) => x.label === tx)
+  const fmt = (key: string, legacy: boolean | undefined, n: number) => (legacy ? `${key}-${String(n).padStart(6, '0')}` : `${key}-${n}-${yy(Date.now())}`)
   const current = useLiveQuery(async () => {
     if (!t) return ''
     const n = await getKv<number>(t.legacy ? `seq:${t.key}` : `medapp:seq:${t.key}`, 0)
-    if (t.legacy) return n ? `${t.key}-${String(n).padStart(6, '0')}` : `${t.key}-000000`
-    return `${t.key}-${n}-26`
-  }, [tx], '')
+    if (look === 'LAST VALUE') return n ? fmt(t.key, t.legacy, n) : '(none issued yet)'
+    return fmt(t.key, t.legacy, n + 1)
+  }, [tx, look], '')
 
   const save = async () => {
     if (!t) return toast('Select a transaction', 'error')
@@ -1336,7 +1338,7 @@ function AutoNumberReset() {
     await setKv(t.legacy ? `seq:${t.key}` : `medapp:seq:${t.key}`, v)
     await logActivity('system', `Auto Number Reset ${t.label}`, { detail: `next will be ${n}` })
     setNumV('')
-    toast(t.legacy ? `Next number will be ${t.key}-${String(n).padStart(6, '0')}` : `Next Doc No will be ${t.key}-${n}-26`)
+    toast(`Next number will be ${fmt(t.key, t.legacy, n)}`)
   }
 
   return (
@@ -1354,11 +1356,11 @@ function AutoNumberReset() {
           width={180}
         />
         <L>LookUp Fields</L>
-        <Select value="NEXT VALUE" onChange={() => {}} options={['NEXT VALUE', 'LAST VALUE']} width={110} />
+        <Select value={look} onChange={setLook} options={['NEXT VALUE', 'LAST VALUE']} width={110} />
       </At>
       <At x={14} y={120}>
         <L>FieldData</L>
-        <Input value={current} onChange={() => {}} width={150} readOnly grey />
+        <Input value={current} width={150} readOnly grey />
       </At>
       <At x={14} y={160}>
         <IBtn bare title="Save" onClick={save} style={{ float: 'right' }}>
@@ -1429,7 +1431,7 @@ function Sync() {
             </div>
           ))}
         </div>
-        <div className="ma-label" style={{ marginTop: 8 }}>
+        <div className="ma-label ma-note" style={{ marginTop: 8 }}>
           The till keeps working without internet: every sale and stock change is stored here first and uploaded when the connection returns.
         </div>
       </Group>
