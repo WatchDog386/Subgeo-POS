@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { db } from '../../db/db'
 import { useToast } from '../../components/ui'
 import { inRange } from '../data'
@@ -96,7 +97,9 @@ export default function ChartsPage() {
   const toast = useToast()
   const [chart, setChart] = useState('Column Chart')
   const [filters, setFilters] = useState<Filter[]>(Array.from({ length: 3 }, () => ({ field: '', op: 'START WITH', value: '', join: 'AND' })))
-  const [dataset, setDataset] = useState('SELECT')
+  // Admin Home chart links open this screen with ?ds=<data set>.
+  const [params] = useSearchParams()
+  const [dataset, setDataset] = useState(() => (DATASETS.includes(params.get('ds') ?? '') ? params.get('ds')! : 'SELECT'))
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [zoom, setZoom] = useState(1)

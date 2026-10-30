@@ -1,4 +1,5 @@
-import { db } from './db'
+import { activeBranchId, db } from './db'
+import { chemCode } from './seedData'
 import { getSettings, nextNumber } from './settings'
 import { logActivity, userName } from './logs'
 import { changeDue, computeTotals, paidAmount } from '../lib/cart'
@@ -6,6 +7,12 @@ import { money } from '../lib/money'
 import type { Payment, Sale, SaleLine } from './types'
 
 export class SaleError extends Error {}
+
+/** "CHEM2 - SCL KAYOLE · Tel 0700…" for the open chemist, stamped on every bill. */
+async function branchStamp(): Promise<string | undefined> {
+  const b = await db.branches.get(activeBranchId)
+  return b ? `${chemCode(b.number)} - ${b.name}${b.phone ? ` · Tel ${b.phone}` : ''}` : undefined
+}
 
 export interface CheckoutInput {
   lines: SaleLine[]
@@ -30,6 +37,7 @@ export async function completeSale(input: CheckoutInput): Promise<Sale> {
 
   const onAccount = input.payments.filter((p) => p.method === 'account').reduce((s, p) => s + p.amount, 0)
   if (onAccount > 0 && !input.customerId) throw new SaleError('Select a customer to sell on account')
+  const branch = await branchStamp()
 
   return db.transaction('rw', [db.sales, db.products, db.movements, db.customers, db.kv], async () => {
     if (onAccount > 0) {
@@ -58,6 +66,7 @@ export async function completeSale(input: CheckoutInput): Promise<Sale> {
       shiftId: input.shiftId,
       status: 'completed',
       note: input.note,
+      branch,
     }
     sale.id = await db.sales.add(sale)
 
@@ -100,6 +109,7 @@ export interface RefundRequest {
 /** Refund some or all lines of a sale. Creates a negative sale record for reporting. */
 export async function refundSale(saleId: number, req: RefundRequest): Promise<Sale> {
   const settings = await getSettings()
+  const branch = await branchStamp()
   const refund = await db.transaction('rw', [db.sales, db.products, db.movements, db.customers, db.kv], async () => {
     const original = await db.sales.get(saleId)
     if (!original) throw new SaleError('Sale not found')
@@ -142,6 +152,7 @@ export async function refundSale(saleId: number, req: RefundRequest): Promise<Sa
       status: 'completed',
       note: req.reason,
       refundOf: original.id,
+      branch,
     }
     refund.id = await db.sales.add(refund)
 

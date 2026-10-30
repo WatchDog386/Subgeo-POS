@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db } from '../db/db'
+import { db, markRemote, type KV } from '../db/db'
 import type { Customer, Sale, User } from '../db/types'
 
 // ── Legacy header constants ─────────────────────────────────────────────
@@ -236,8 +236,13 @@ export const MED_DOC_SEEDS: Record<string, DocRecord[]> = {
     D({ docNo: 'PRD00-24-25', name: 'ABZ NILWORM TABS', group: 'TABS/CAPSULES', uom: 'MG', retail: '50.00', whole: '50.00', cost: '0.00', packSize: '100.00', type: 'S' }, 11, '17', '10', '2026'),
   ],
 }
+/** Sample registers for the admin screens. Written as "already in sync" so
+ * they stay on this till and only reach the server once someone edits them. */
 export async function seedAdminDocs(): Promise<void> {
-  for (const [slug, list] of Object.entries(MED_DOC_SEEDS)) {
-    if ((await getKv(docsKey(slug), [])).length === 0) await setKv(docsKey(slug), list)
-  }
+  await db.transaction('rw', db.kv, async (tx) => {
+    markRemote(tx)
+    for (const [slug, list] of Object.entries(MED_DOC_SEEDS)) {
+      if (!(await db.kv.get(docsKey(slug)))) await db.kv.put({ key: docsKey(slug), value: list, _dirty: 0, _ts: 0 } as KV)
+    }
+  })
 }

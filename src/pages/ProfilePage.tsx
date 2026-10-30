@@ -250,7 +250,7 @@ export default function ProfilePage() {
           )}
 
           <p className="mt-4 hidden px-1 text-xs leading-relaxed text-slate-400 md:block">
-            Signed in with your {user.pin.length}-digit PIN. Profile details stay on this device.
+            Signed in as <b>{user.username}</b>. Profile changes sync to the server.
           </p>
         </nav>
 
@@ -321,9 +321,9 @@ export default function ProfilePage() {
                 <Field label="Role">
                   <input className="input capitalize text-slate-500" value={user.role} disabled readOnly />
                 </Field>
-                <Field label="PIN">
+                <Field label="Password">
                   <div className="flex items-center gap-2">
-                    <input className="input font-mono tracking-[0.4em]" value={'•'.repeat(user.pin.length)} disabled readOnly />
+                    <input className="input font-mono tracking-[0.4em]" value="••••••" disabled readOnly />
                     <button className="btn-ghost shrink-0" onClick={() => setSection('security')}>
                       Change
                     </button>
@@ -351,10 +351,10 @@ export default function ProfilePage() {
               <div className="mt-4 flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <ShieldCheck size={20} className="mt-0.5 shrink-0 text-brand-600" />
                 <div className="text-sm text-slate-600">
-                  Your PIN unlocks the till and signs every sale, refund and settings change against your name. Lock the till when you step away.
+                  Your password unlocks the till and signs every sale, refund and settings change against your name. Lock the till when you step away.
                 </div>
               </div>
-              <h3 className="mb-3 mt-6 text-sm font-bold uppercase tracking-wide text-slate-600">Change my PIN</h3>
+              <h3 className="mb-3 mt-6 text-sm font-bold uppercase tracking-wide text-slate-600">Change my password</h3>
               <ChangePinForm />
 
               <h3 className="mt-8 text-sm font-bold uppercase tracking-wide text-slate-600">Terminal setup</h3>

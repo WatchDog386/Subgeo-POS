@@ -11,7 +11,8 @@ import path from 'node:path'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { createDaraja, type StkCallbackBody } from './daraja'
-import { dbPath, migrate, seedDefaultUsers, sql } from './db'
+import { dbPath, migrate, sql } from './db'
+import { ensureSeeds, syncRouter } from './sync'
 import * as pinpay from './pinpay'
 
 try {
@@ -22,7 +23,13 @@ try {
 
 const PORT = Number(process.env.PORT ?? 8787)
 const app = express()
-app.use(express.json({ limit: '1mb' }))
+// Sync uploads can carry product photos (data URLs); nginx allows 25 MB.
+app.use(express.json({ limit: '25mb' }))
+// API answers are live data (stock, sync changes): never let a browser or proxy cache them.
+app.use('/api', (_req, res, next) => {
+  res.set('Cache-Control', 'no-store')
+  next()
+})
 
 const daraja = createDaraja(process.env)
 
@@ -187,167 +194,8 @@ app.get('/api/mpesa/status/:id', async (req, res) => {
   res.json(known ?? { status: 'pending' })
 })
 
-// --- Staff & settings (server copy in SQLite) -------------------------------
-// The till is still the source of truth for day-to-day use (IndexedDB); these
-// endpoints keep a durable server-side copy and let the till push changes.
-
-type UserRow = {
-  id: number
-  name: string
-  pin: string
-  role: string
-  active: number
-  email: string | null
-  phone: string | null
-  about: string | null
-}
-
-app.get('/api/users', (_req, res) => {
-  // PINs are deliberately not returned — they can be pushed (PUT/POST) but not read back.
-  const rows = sql.prepare('SELECT id, name, role, active, email, phone, about FROM users ORDER BY id').all() as Omit<UserRow, 'pin'>[]
-  res.json(rows.map((r) => ({ ...r, active: !!r.active })))
-})
-
-function upsertUser(u: Record<string, unknown>) {
-  const name = String(u.name ?? '').trim()
-  const pin = String(u.pin ?? '').trim()
-  const role = String(u.role ?? 'cashier')
-  if (!name || !/^\d{4}$/.test(pin)) throw new Error('each user needs a name and a 4-digit PIN')
-  if (!['owner', 'manager', 'cashier'].includes(role)) throw new Error(`unknown role "${role}"`)
-  sql.prepare(
-    `INSERT INTO users (id, name, pin, role, active, email, phone, about, updated_at)
-     VALUES (@id, @name, @pin, @role, @active, @email, @phone, @about, @updated_at)
-     ON CONFLICT(id) DO UPDATE SET
-       name = excluded.name, pin = excluded.pin, role = excluded.role, active = excluded.active,
-       email = excluded.email, phone = excluded.phone, about = excluded.about, updated_at = excluded.updated_at`,
-  ).run({
-    id: typeof u.id === 'number' ? u.id : null,
-    name,
-    pin,
-    role,
-    active: u.active === false ? 0 : 1,
-    email: u.email == null ? null : String(u.email),
-    phone: u.phone == null ? null : String(u.phone),
-    about: u.about == null ? null : String(u.about),
-    updated_at: Date.now(),
-  })
-}
-
-app.put('/api/users', (req, res) => {
-  const list = req.body
-  if (!Array.isArray(list)) {
-    res.status(400).json({ error: 'expected an array of users' })
-    return
-  }
-  try {
-    sql.transaction(() => {
-      for (const u of list) upsertUser(u as Record<string, unknown>)
-    })()
-    res.json({ ok: true, count: list.length })
-  } catch (e) {
-    res.status(400).json({ error: e instanceof Error ? e.message : String(e) })
-  }
-})
-
-app.post('/api/users', (req, res) => {
-  try {
-    upsertUser((req.body ?? {}) as Record<string, unknown>)
-    res.json({ ok: true })
-  } catch (e) {
-    res.status(400).json({ error: e instanceof Error ? e.message : String(e) })
-  }
-})
-
-app.get('/api/settings', (_req, res) => {
-  const row = sql.prepare('SELECT json, updated_at FROM settings WHERE id = 1').get() as { json: string; updated_at: number } | undefined
-  res.json(row ? { ...JSON.parse(row.json), updatedAt: row.updated_at } : {})
-})
-
-app.put('/api/settings', (req, res) => {
-  const body = req.body
-  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
-    res.status(400).json({ error: 'expected a settings object' })
-    return
-  }
-  sql.prepare(
-    `INSERT INTO settings (id, json, updated_at) VALUES (1, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET json = excluded.json, updated_at = excluded.updated_at`,
-  ).run(JSON.stringify(body), Date.now())
-  res.json({ ok: true })
-})
-
-// --- Products (mirror of till IndexedDB products) -------------------------
-
-app.get('/api/products', (_req, res) => {
-  const rows = sql.prepare(
-    `SELECT id, sku, barcode, name, category_id, brand, part_number, cost, price, stock, reorder_level, active, updated_at FROM products ORDER BY sku`
-  ).all() as {
-    id: number
-    sku: string
-    barcode: string | null
-    name: string
-    category_id: number | null
-    brand: string | null
-    part_number: string | null
-    cost: number
-    price: number
-    stock: number
-    reorder_level: number
-    active: number
-    updated_at: number
-  }[]
-  res.json(rows)
-})
-
-app.post('/api/products', (req, res) => {
-  const body = (req.body ?? {}) as Record<string, unknown>
-  const sku = String(body.sku ?? '').trim()
-  const name = String(body.name ?? '').trim()
-  if (!sku || !name) {
-    res.status(400).json({ error: 'sku and name are required' })
-    return
-  }
-  const now = Date.now()
-  sql.prepare(
-    `INSERT INTO products (sku, barcode, name, category_id, brand, part_number, cost, price, stock, reorder_level, active, updated_at)
-     VALUES (@sku, @barcode, @name, @category_id, @brand, @part_number, @cost, @price, @stock, @reorder_level, @active, @updated_at)
-     ON CONFLICT(sku) DO UPDATE SET
-       barcode = excluded.barcode,
-       name = excluded.name,
-       category_id = excluded.category_id,
-       brand = excluded.brand,
-       part_number = excluded.part_number,
-       cost = excluded.cost,
-       price = excluded.price,
-       stock = excluded.stock,
-       reorder_level = excluded.reorder_level,
-       active = excluded.active,
-       updated_at = excluded.updated_at`,
-  ).run({
-    sku,
-    barcode: body.barcode == null || body.barcode === '' ? null : String(body.barcode),
-    name,
-    category_id: typeof body.category_id === 'number' ? body.category_id : null,
-    brand: body.brand == null || body.brand === '' ? null : String(body.brand),
-    part_number: body.part_number == null || body.part_number === '' ? null : String(body.part_number),
-    cost: Number(body.cost ?? 0) || 0,
-    price: Number(body.price ?? 0) || 0,
-    stock: Number(body.stock ?? 0) || 0,
-    reorder_level: Number(body.reorder_level ?? 2) || 0,
-    // Booleans can't be bound to SQLite — coerce to 0/1.
-    active: body.active === false || body.active === 0 ? 0 : 1,
-    updated_at: now,
-  })
-  res.json({ ok: true })
-})
-
-app.delete('/api/products', (_req, res) => {
-  // sql.transaction() returns a function — it must be invoked.
-  sql.transaction(() => {
-    sql.prepare('DELETE FROM products').run()
-  })()
-  res.json({ ok: true })
-})
+// --- Company database: sign-in, till sync, admin views (server/sync.ts) ----
+app.use('/api', syncRouter)
 
 // --- Network printer relay -----------------------------------------------
 
@@ -389,7 +237,7 @@ if (existsSync(dist)) {
 
 const migrated = migrate()
 if (migrated.length) console.log(`DB migrations applied: ${migrated.join(', ')}`)
-seedDefaultUsers()
+ensureSeeds()
 
 app.listen(PORT, () => {
   console.log(`Subgeo POS server on http://localhost:${PORT}`)

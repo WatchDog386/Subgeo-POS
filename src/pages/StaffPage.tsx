@@ -3,8 +3,10 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { Plus, Power, Search, ShieldCheck, UserRound, Users } from 'lucide-react'
 import { db } from '../db/db'
 import { logActivity } from '../db/logs'
-import type { Role, User } from '../db/types'
-import { PERMS, PIN_LENGTH, useSession, type Permission } from '../session'
+import { chemCode } from '../db/seedData'
+import { PASSWORD_MIN, saveStaff } from '../db/staff'
+import type { Branch, Role, User } from '../db/types'
+import { PERMS, ROLE_LABEL, useSession, type Permission } from '../session'
 import { Modal, errorText, useToast } from '../components/ui'
 
 const PERM_COLS: { key: Permission; label: string }[] = [
@@ -22,7 +24,8 @@ const ROLES: Role[] = ['owner', 'manager', 'cashier']
 
 export default function StaffPage() {
   const users = useLiveQuery(() => db.users.toArray(), [], [] as User[])
-  const { user: me } = useSession()
+  const { user: me, branches } = useSession()
+  const chem = (id?: number) => chemCode(branches.find((b) => b.id === id)?.number) || 'All chemists'
   const toast = useToast()
   const [edit, setEdit] = useState<Partial<User> | null>(null)
   const [q, setQ] = useState('')
@@ -44,7 +47,7 @@ export default function StaffPage() {
   )
 
   const filtered = users.filter((u) =>
-    u.name.toLowerCase().includes(q.trim().toLowerCase()) && (roleFilter === 'all' || u.role === roleFilter),
+    [u.name, u.username, chem(u.branchId)].some((v) => v.toLowerCase().includes(q.trim().toLowerCase())) && (roleFilter === 'all' || u.role === roleFilter),
   )
   const active = users.filter((u) => u.active).length
   const cashiers = users.filter((u) => u.role === 'cashier').length
@@ -55,6 +58,7 @@ export default function StaffPage() {
       return toast('Keep at least one active owner', 'error')
     }
     await db.users.update(u.id!, { active: !u.active })
+    // (synced: the server refuses this too if it would leave no active admin)
     await logActivity('user', `${u.name} ${u.active ? 'deactivated' : 'reactivated'}`, { userId: me?.id, userName: me?.name })
     toast(`${u.name} ${u.active ? 'deactivated' : 'reactivated'}`)
   }
@@ -69,10 +73,10 @@ export default function StaffPage() {
               <h1 className="text-2xl font-bold tracking-tight text-mc-ink">Staff & access</h1>
               <span className="mc-pill bg-mc-cobalt-soft text-mc-cobalt-hover">Owner workspace</span>
             </div>
-            <p className="mt-0.5 text-sm text-mc-muted">Manage till users, PIN access and cashier activity.</p>
+            <p className="mt-0.5 text-sm text-mc-muted">Manage sign-in accounts, which chemist each person works in, and cashier activity.</p>
           </div>
         </div>
-        <button className="mc-btn-primary h-10 px-4" onClick={() => setEdit({ role: 'cashier', active: true })}>
+        <button className="mc-btn-primary h-10 px-4" onClick={() => setEdit({ role: 'cashier', active: true, branchId: branches.find((b) => b.active)?.id })}>
           <Plus size={16} /> Add staff member
         </button>
       </header>
@@ -89,7 +93,7 @@ export default function StaffPage() {
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-mc-line px-4 py-3.5">
             <div>
               <h2 className="font-semibold text-mc-ink">Team directory</h2>
-              <p className="mt-0.5 text-xs text-mc-muted">Select a staff member to edit their role or till PIN.</p>
+              <p className="mt-0.5 text-xs text-mc-muted">Select a staff member to edit their role, chemist or password.</p>
             </div>
             <div className="flex w-full flex-wrap gap-2 sm:w-auto">
               <label className="relative min-w-[180px] flex-1 sm:w-52 sm:flex-none">
@@ -109,7 +113,7 @@ export default function StaffPage() {
                 <tr>
                   <th className="px-4 py-3">Staff member</th>
                   <th className="px-3 py-3">Role</th>
-                  <th className="px-3 py-3">Till PIN</th>
+                  <th className="px-3 py-3">Chemist</th>
                   <th className="px-3 py-3 text-right">Sales · 30d</th>
                   <th className="px-3 py-3">Status</th>
                   <th className="px-4 py-3 text-right">Access</th>
@@ -123,12 +127,12 @@ export default function StaffPage() {
                         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-mc-panel text-sm font-bold text-mc-navy">{u.name.trim().split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase()}</span>
                         <div className="min-w-0">
                           <div className="truncate text-sm font-semibold text-mc-ink">{u.name} {u.id === me?.id && <span className="ml-1 text-xs font-normal text-mc-muted">You</span>}</div>
-                          <div className="text-xs text-mc-muted">Till user · ID {u.id}</div>
+                          <div className="text-xs text-mc-muted">Signs in as <b>{u.username}</b></div>
                         </div>
                       </div>
                     </td>
                     <td className="px-3 py-3"><RoleTag role={u.role} /></td>
-                    <td className="px-3 py-3 font-mono text-sm tracking-[0.22em] text-mc-muted">{'•'.repeat(u.pin.length)}</td>
+                    <td className="px-3 py-3 text-sm font-semibold text-mc-body">{chem(u.branchId)}</td>
                     <td className="px-3 py-3 text-right text-sm font-semibold tabular-nums text-mc-body">{(salesByUser[u.id ?? -1] ?? 0).toLocaleString('en-KE')}</td>
                     <td className="px-3 py-3"><span className={`mc-pill ${u.active ? 'bg-mc-ok-soft text-green-800' : 'bg-slate-100 text-slate-500'}`}><span className={`h-1.5 w-1.5 rounded-full ${u.active ? 'bg-mc-ok' : 'bg-slate-400'}`} />{u.active ? 'Active' : 'Disabled'}</span></td>
                     <td className="px-4 py-3 text-right">
@@ -167,12 +171,12 @@ export default function StaffPage() {
             ))}
           </div>
           <div className="m-3 rounded-lg border border-mc-cobalt-line bg-mc-cobalt-soft p-3 text-xs leading-relaxed text-mc-cobalt-hover">
-            Each person signs in with a {PIN_LENGTH}-digit till PIN. Keep one active owner account; the last active owner cannot be disabled.
+            Each person signs in with a user name and password. Cashiers and managers work in one chemist (CHEM number); the admin sees every chemist. The last active admin cannot be disabled.
           </div>
         </section>
       </div>
 
-      {edit && <UserModal user={edit} users={users} onClose={() => setEdit(null)} />}
+      {edit && <UserModal user={edit} branches={branches} onClose={() => setEdit(null)} />}
     </div>
   )
 }
@@ -196,7 +200,7 @@ function StaffMetric({ label, value, detail, icon, tone = 'slate' }: { label: st
 
 function RoleTag({ role }: { role: Role }) {
   const styles = role === 'owner' ? 'bg-mc-cobalt-soft text-mc-cobalt-hover' : role === 'manager' ? 'bg-mc-warn-soft text-amber-800' : 'bg-slate-100 text-slate-700'
-  return <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-bold capitalize ${styles}`}>{role}</span>
+  return <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-bold ${styles}`}>{ROLE_LABEL[role]}</span>
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -208,28 +212,30 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-function UserModal({ user, users, onClose }: { user: Partial<User>; users: User[]; onClose: () => void }) {
+function UserModal({ user, branches, onClose }: { user: Partial<User>; branches: Branch[]; onClose: () => void }) {
   const toast = useToast()
   const { user: me } = useSession()
   const [u, setU] = useState(user)
+  const [password, setPassword] = useState('')
 
   const save = async () => {
     try {
-      if (!u.name?.trim()) throw new Error('Name is required')
-      if (!new RegExp(`^\\d{${PIN_LENGTH}}$`).test(u.pin ?? '')) throw new Error(`PIN must be ${PIN_LENGTH} digits`)
-      if (users.some((x) => x.pin === u.pin && x.id !== u.id)) throw new Error('That PIN is already used')
-      const remainingOwners = users.filter((x) => x.role === 'owner' && x.active && x.id !== u.id).length
-      if (remainingOwners === 0 && (u.role !== 'owner' || !u.active)) throw new Error('Keep at least one active owner')
-      const rec = { ...u, name: u.name.trim() } as User
-      const isNew = rec.id === undefined
-      if (isNew) delete rec.id
-      await db.users.put(rec)
-      await logActivity('user', `${isNew ? 'Added' : 'Updated'} staff ${rec.name}`, {
-        detail: `${rec.role}${rec.active ? '' : ' · disabled'}`,
-        userId: me?.id,
-        userName: me?.name,
-      })
-      toast(isNew ? `${rec.name} added` : 'Staff updated')
+      const rec = await saveStaff(
+        {
+          id: u.id,
+          name: u.name ?? '',
+          username: u.username ?? '',
+          password,
+          role: u.role ?? 'cashier',
+          branchId: u.branchId,
+          active: u.active ?? true,
+          email: u.email,
+          phone: u.phone,
+          about: u.about,
+        },
+        me,
+      )
+      toast(u.id ? 'Staff updated' : `${rec.name} added — signs in as ${rec.username}`)
       onClose()
     } catch (e) {
       toast(errorText(e), 'error')
@@ -250,28 +256,41 @@ function UserModal({ user, users, onClose }: { user: Partial<User>; users: User[
         <Field label="Name">
           <input className="input" value={u.name ?? ''} onChange={(e) => setU({ ...u, name: e.target.value })} autoFocus />
         </Field>
-        <Field label={`PIN (${PIN_LENGTH} digits)`}>
-          <input
-            className="input font-mono"
-            inputMode="numeric"
-            maxLength={PIN_LENGTH}
-            value={u.pin ?? ''}
-            onChange={(e) => setU({ ...u, pin: e.target.value.replace(/\D/g, '') })}
-          />
+        <Field label="User name (to sign in)">
+          <input className="input" value={u.username ?? ''} onChange={(e) => setU({ ...u, username: e.target.value.toLowerCase().replace(/\s/g, '') })} autoComplete="off" />
+        </Field>
+        <Field label={u.id ? 'New password (blank = keep)' : `Password (min ${PASSWORD_MIN})`}>
+          <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
         </Field>
         <Field label="Role">
           <select className="input" value={u.role} onChange={(e) => setU({ ...u, role: e.target.value as Role })}>
             <option value="cashier">Cashier</option>
             <option value="manager">Manager</option>
-            <option value="owner">Owner</option>
+            <option value="owner">Admin (all chemists)</option>
+          </select>
+        </Field>
+        <Field label="Chemist">
+          <select
+            className="input"
+            value={u.role === 'owner' ? '' : String(u.branchId ?? '')}
+            disabled={u.role === 'owner'}
+            onChange={(e) => setU({ ...u, branchId: e.target.value ? Number(e.target.value) : undefined })}
+          >
+            <option value="">{u.role === 'owner' ? 'All chemists' : 'Select…'}</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {chemCode(b.number)} · {b.name}
+                {b.active ? '' : ' (closed)'}
+              </option>
+            ))}
           </select>
         </Field>
         <label className="mt-6 flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={u.active} onChange={(e) => setU({ ...u, active: e.target.checked })} /> Active
+          <input type="checkbox" checked={u.active ?? true} onChange={(e) => setU({ ...u, active: e.target.checked })} /> Active
         </label>
       </div>
       <p className="mt-3 text-xs text-slate-500">
-        PINs are stored on this device only and unlock the till — not a password for online accounts.
+        Passwords are stored hashed. Changes sync to the server and to every till.
       </p>
     </Modal>
   )

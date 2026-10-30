@@ -16,6 +16,7 @@ export function Receipt({ sale, settings, cashier, customer }: { sale: Sale; set
     <div className="mx-auto font-mono text-[12px] leading-snug text-black" style={{ width: settings.paperWidth === 58 ? '48mm' : '72mm' }}>
       <div className="text-center">
         <div className="text-[16px] font-bold">{settings.shopName}</div>
+        {sale.branch && <div className="font-bold">{sale.branch}</div>}
         {settings.address && <div>{settings.address}</div>}
         {settings.phone && <div>Tel: {settings.phone}</div>}
         {settings.kraPin && <div>KRA PIN: {settings.kraPin}</div>}

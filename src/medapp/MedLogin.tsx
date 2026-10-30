@@ -1,15 +1,14 @@
 import { useState } from 'react'
 import { useSession } from '../session'
 import { APP_VERSION, DEFAULTS } from './data'
-import { db } from '../db/db'
 import { EmrLiteLogo, LogoutIcon, NotepadIcon, UsersIcon } from './icons'
 
 /** Medapp login screen: grey page, top bar, then User Name / Pass / Log In
  * row, and the red SUBGEO CHEMIST LTD brand centred below the fields.
  *
- * Cashier (every chemist): User Name "subgeo", Pass "0000".
- * Admin: User Name "admin", Pass "subgeo22".
- * Owner: Pass "1234". */
+ * Accounts are created by the admin in Utilities → User Management; each
+ * cashier belongs to one chemist (CHEM number) and lands in that chemist.
+ * Starter accounts: admin / subgeo22 (all chemists), subgeo / 0000 (CHEM1). */
 export default function MedLogin() {
   const { login } = useSession()
   const [name, setName] = useState('')
@@ -18,32 +17,16 @@ export default function MedLogin() {
   const [msg, setMsg] = useState<string | null>(null)
 
   const submit = async () => {
-    if (busy || !pass.trim()) return
+    if (busy || !pass || !name.trim()) return
     setBusy(true)
     setMsg(null)
-    let ok = false
-    const userName = name.trim().toLowerCase()
-    if (userName === 'subgeo' && pass === '0000') {
-      ok = await login('0000') // cashier PIN
-      if (!ok) setMsg('Cashier account not found')
-    } else if (userName === 'admin' && pass === 'subgeo22') {
-      try {
-        const existing = await db.users.where('pin').equals('subgeo22').filter((u) => u.name.toUpperCase() === 'ADMIN').first()
-        if (!existing) {
-          await db.users.add({ name: 'ADMIN', pin: 'subgeo22', role: 'owner', active: true })
-        }
-      } catch {}
-      ok = await login('subgeo22')
-      if (!ok) setMsg('Admin account not found')
-    } else if (pass === '1234') {
-      ok = await login('1234') // owner PIN
-      if (!ok) setMsg('Owner account not found')
-    } else {
-      setMsg('Invalid user name or password')
-    }
+    const r = await login(name, pass).catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) }))
     setBusy(false)
-    if (ok) {
+    if (r.ok) {
       setName('')
+      setPass('')
+    } else {
+      setMsg(r.error)
       setPass('')
     }
   }
@@ -86,7 +69,8 @@ export default function MedLogin() {
               style={{ width: 150 }}
               value={name}
               onChange={(e) => setName(e.target.value)}
-              autoComplete="off"
+              onKeyDown={(e) => e.key === 'Enter' && document.getElementById('ma-login-pass')?.focus()}
+              autoComplete="username"
               autoFocus
             />
             <label className="ma-login-label" htmlFor="ma-login-pass">
@@ -98,12 +82,12 @@ export default function MedLogin() {
               style={{ width: 150 }}
               type="password"
               value={pass}
-              onChange={(e) => setPass(e.target.value.slice(0, 32))}
+              onChange={(e) => setPass(e.target.value.slice(0, 64))}
               onKeyDown={(e) => e.key === 'Enter' && void submit()}
-              autoComplete="off"
+              autoComplete="current-password"
             />
-            <button type="button" className="ma-btn ma-login-btn" onClick={() => void submit()} disabled={busy || pass.length === 0}>
-              Log In
+            <button type="button" className="ma-btn ma-login-btn" onClick={() => void submit()} disabled={busy || pass.length === 0 || !name.trim()}>
+              {busy ? 'Signing in…' : 'Log In'}
             </button>
           </div>
         </form>

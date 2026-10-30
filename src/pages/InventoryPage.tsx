@@ -14,7 +14,6 @@ import { printBarcodeLabel } from '../lib/printReceipt'
 import { useSession } from '../session'
 import { Badge, Empty, ListPanel, Modal, PageHeader, errorText, useToast } from '../components/ui'
 import { quotationImportSummary, quotationProductSkus } from '../db/quotationProducts'
-const API_BASE = '/api'
 
 const CSV_HEADER = ['sku', 'name', 'barcode', 'regNumber', 'category', 'brand', 'cost', 'price', 'stock', 'reorderLevel', 'location', 'taxable', 'serialized', 'trackStock']
 
@@ -74,13 +73,8 @@ export default function InventoryPage() {
 
   const clearAllInventory = async () => {
     if (!confirm('Are you sure you want to delete ALL medicines from stock? This cannot be undone.')) return
+    // Each delete is uploaded too, so the chemist's medicines go from the server as well.
     await db.products.clear()
-    // Also clear server-side if available
-    try {
-      await fetch(`${API_BASE}/products`, { method: 'DELETE' })
-    } catch {
-      // Server may not be running; local clear is still effective
-    }
     toast('All medicines deleted from stock')
     setQ('')
     setCat('all')
@@ -114,7 +108,7 @@ export default function InventoryPage() {
             sku,
             name: get(r, 'name') || prev?.name || sku,
             barcode: get(r, 'barcode') || prev?.barcode,
-            partNumber: get(r, 'partNumber') || prev?.partNumber,
+            partNumber: get(r, 'regNumber') || get(r, 'partNumber') || prev?.partNumber,
             brand: get(r, 'brand') || prev?.brand,
             categoryId: categoryId ?? prev?.categoryId,
             cost: num('cost') !== undefined ? toCents(num('cost')!) : prev?.cost ?? 0,
@@ -329,6 +323,7 @@ export default function InventoryPage() {
                       )}
                     </div>
                   </td>
+                  <td className="font-mono text-xs">{p.partNumber}</td>
                   <td className="text-xs">{p.location}</td>
                   <td className="text-right">
                     {p.trackStock ? <Badge tone={p.stock <= 0 ? 'red' : p.stock <= p.reorderLevel ? 'amber' : 'green'}>{p.stock}</Badge> : '—'}
@@ -403,6 +398,14 @@ function Section({
   )
 }
 
+/** Next unused MED-#### code in this chemist. */
+async function nextMedicineCode(): Promise<string> {
+  const skus = new Set((await db.products.toArray()).map((x) => x.sku))
+  let n = skus.size + 1
+  while (skus.has(`MED-${String(n).padStart(4, '0')}`)) n++
+  return `MED-${String(n).padStart(4, '0')}`
+}
+
 function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose: () => void }) {
   const settings = useSettings()
   const toast = useToast()
@@ -440,7 +443,9 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
 
   const save = async () => {
     try {
-      if (!p.sku?.trim() || !p.name?.trim()) throw new Error('SKU and name are required')
+      if (!p.name?.trim()) throw new Error('Medicine name is required')
+      // New medicines without a code get the next free MED-#### code.
+      if (!p.sku?.trim()) p.sku = await nextMedicineCode()
       if (p.active && toCents(price) <= 0) throw new Error('Set a selling price above zero before activating this medicine')
       if (p.active && quotationProductSkus.has(p.sku.trim())) {
         if (!p.barcode?.trim()) throw new Error('Add the barcode before activating this quoted medicine')
@@ -470,25 +475,6 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
       } as Product
       if (record.id === undefined) delete record.id
       await db.products.put(record)
-      // Mirror to the server database (durable backup). The endpoint is an
-      // upsert on sku; if the server is offline the till keeps working.
-      void fetch(`${API_BASE}/products`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sku: record.sku,
-          barcode: record.barcode ?? null,
-          name: record.name,
-          category_id: record.categoryId ?? null,
-          brand: record.brand ?? null,
-          part_number: record.partNumber ?? null,
-          cost: record.cost ?? 0,
-          price: record.price ?? 0,
-          stock: record.stock ?? 0,
-          reorder_level: record.reorderLevel ?? 2,
-          active: record.active === false ? 0 : 1,
-        }),
-      }).catch(() => {})
       toast(isNew ? 'Medicine added' : 'Medicine updated')
       onClose()
     } catch (e) {
@@ -527,6 +513,10 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
           <div className="md:col-span-2">
             <label className="label">Name *</label>
             <input className="input" value={p.name ?? ''} onChange={(e) => set('name', e.target.value)} autoFocus />
+          </div>
+          <div>
+            <label className="label">Code (SKU)</label>
+            <input className="input font-mono" placeholder="Auto (MED-0001…) if blank" value={p.sku ?? ''} onChange={(e) => set('sku', e.target.value.toUpperCase())} />
           </div>
           <div>
             <label className="label">Barcode</label>

@@ -1196,7 +1196,7 @@ export function ModulesEmpty() {
           <IBtn lg title="Find" onClick={() => document.getElementById('ma-mod-q')?.focus()}>
             <FindIcon />
           </IBtn>
-          <IBtn lg title="Filter">
+          <IBtn lg title="Filter list" onClick={() => document.getElementById('ma-mod-q')?.focus()}>
             <FunnelIcon />
           </IBtn>
           <IBtn lg title="Upload" onClick={() => nav('/utilities/sync')}>

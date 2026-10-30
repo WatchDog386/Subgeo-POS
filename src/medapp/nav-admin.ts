@@ -64,6 +64,7 @@ export const ADMIN_REPORT_ITEMS: MenuItem[] = REPORT_ITEMS
 
 /** Utilities sidebar: cashier list + the three admin-only screens appended. */
 export const ADMIN_UTILITY_ITEMS: MenuItem[] = [
+  { slug: 'chemists', label: 'Chemists (Branches)' },
   ...UTILITY_ITEMS,
   { slug: 'role-wise-transaction-process', label: 'Role Wise Transaction Process' },
   { slug: 'tally-to-n360i', label: 'Tally to N360i' },
@@ -116,7 +117,8 @@ export const ADMIN_TRANSACTIONS: Transaction[] = [
   A('', 'Payment Voucher', '/purchasing'),
   A('', 'Cash In / Out', '/shift'),
   A('', 'Day Shift Open/Close', '/shift'),
-  A('ADMINISTRATION', 'User Management', '/utilities/user-management'),
+  A('ADMINISTRATION', 'Chemists (Branches)', '/utilities/chemists', 'Create chemists, monitor all chemists, copy medicine lists, transfer stock'),
+  A('', 'User Management', '/utilities/user-management', 'Create cashiers and assign each to a chemist (CHEM number)'),
   A('', 'Audit Logs', '/logs'),
   A('', 'Settings', '/settings'),
   A('', 'Notifications', '/notifications'),

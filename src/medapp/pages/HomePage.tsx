@@ -6,6 +6,9 @@ import type { Customer, Product, Sale, ServiceJob } from '../../db/types'
 import { amt, dmy, useFavourites } from '../data'
 import { REPORT_ITEMS, REPORT_TREE, TRANSACTIONS, UTILITY_ITEMS, transactionTo } from '../nav'
 import { Grid, Rows, SearchBar, Select, type Col } from '../ui'
+import { setTaskStatus, tasksFor, useTasks } from '../tasks'
+import { useSession } from '../../session'
+import { useToast } from '../../components/ui'
 
 type Section = 'todo' | 'quick' | 'stats' | 'favs' | 'reports' | 'charts' | 'utilities'
 const TOP: { id: Section; label: string }[] = [
@@ -111,6 +114,9 @@ function QuickAccess() {
 
 function TodoList() {
   const nav = useNavigate()
+  const { user } = useSession()
+  const toast = useToast()
+  const tasks = tasksFor(useTasks(), user)
   const data = useLiveQuery(async () => {
     const [products, customers, jobs] = await Promise.all([
       db.products.filter((p) => p.active && p.trackStock && p.stock <= p.reorderLevel).toArray(),
@@ -120,6 +126,7 @@ function TodoList() {
     return { products, customers, jobs }
   }, [], { products: [] as Product[], customers: [] as Customer[], jobs: [] as ServiceJob[] })
   const rows = [
+    ...tasks.map((t) => ({ id: `t${t.id}`, cells: { task: `Task from ${t.assigner}`, detail: `${t.text}${t.doc ? ` (${t.doc})` : ''}${t.due ? ` — due ${dmy(t.due)}` : ''}  [click when done]`, date: dmy(t.createdAt) }, to: `#task:${t.id}` })),
     ...data.products.map((p) => ({ id: `p${p.id}`, cells: { task: 'Re-order Medicine', detail: `${p.name} — ${p.stock} in stock (re-order at ${p.reorderLevel})`, date: dmy(p.updatedAt) }, to: '/reports/reorder' })),
     ...data.customers.map((c) => ({ id: `c${c.id}`, cells: { task: 'Collect Payment', detail: `${c.name.toUpperCase()} owes ${amt(c.balance)}`, date: dmy(c.createdAt) }, to: '/reports/list/os-debtor' })),
     ...data.jobs.map((j) => ({ id: `j${j.id}`, cells: { task: 'Service Request', detail: `${j.jobNo} ${j.customerName} — ${j.status.replace('_', ' ')}`, date: dmy(j.createdAt) }, to: '/modules/service-bill' })),
@@ -139,7 +146,10 @@ function TodoList() {
         height={300}
         onSelect={(id) => {
           const to = rows.find((r) => r.id === id)?.to
-          if (to) nav(to)
+          if (to?.startsWith('#task:')) {
+            const t = tasks.find((x) => `#task:${x.id}` === to)
+            if (t && confirm(`Mark this task as completed?\n\n${t.text}`)) void setTaskStatus(t.id, 'COMPLETED', user).then(() => toast('Task completed'))
+          } else if (to) nav(to)
         }}
       />
     </div>

@@ -44,3 +44,13 @@ if (typeof document !== 'undefined') {
     if (!document.fullscreenElement) setFullscreenPref('off')
   })
 }
+
+/** Header "Full screen" button: enter or leave fullscreen and remember the choice. */
+export async function toggleFullscreen() {
+  if (document.fullscreenElement) {
+    await document.exitFullscreen?.().catch(() => {})
+  } else {
+    setFullscreenPref('on')
+    enterFullscreen()
+  }
+}

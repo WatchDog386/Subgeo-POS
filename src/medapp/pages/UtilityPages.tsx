@@ -1,19 +1,24 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db } from '../../db/db'
+import { SYNCED_TABLES, db } from '../../db/db'
+import { getSyncState, syncNow, useSyncState } from '../../db/sync'
+import { exportBackup, restoreBackup } from '../../db/backup'
 import { getSettings, saveSettings } from '../../db/settings'
 import { logActivity } from '../../db/logs'
 import { createPurchaseOrder } from '../../db/purchasing'
-import type { Customer, Product, Sale, ServiceJob, Settings, Supplier, User } from '../../db/types'
+import type { Branch, Customer, Product, Role, Sale, ServiceJob, Settings, Supplier, User } from '../../db/types'
+import { chemCode } from '../../db/seedData'
+import { saveStaff } from '../../db/staff'
 import { useSession } from '../../session'
 import { useToast } from '../../components/ui'
 import { download, downloadCsv, parseCsv } from '../../lib/csv'
-import { amt, dmy, getKv, nextDocNo, parseDmy, saveDoc, setKv, useDocs, useKv, useMedDefaults } from '../data'
+import { amt, dmy, getKv, nextDocNo, parseDmy, saveDoc, setKv, useDocs, useKv, useMedDefaults, yy } from '../data'
 import { CheckGreenIcon, OrangeArrow, SearchLens } from '../icons'
 import { Btn, Check, Dialog, Grid, IBtn, Input, LookupField, matches, PickList, Radio, Rows, SearchBar, Select, TransferArrows, useTransfer, type Col, type Row } from '../ui'
 import { At, Canvas, L, Title } from './layout'
 import { ResultDialog } from './reportKit'
+import ChemistsPage from './ChemistsPage'
 
 const C = (key: string, label: string, width: number, align?: 'right'): Col => ({ key, label, width, align })
 const num = (v: string) => parseFloat(v) || 0
@@ -1031,115 +1036,151 @@ function AcUpdate() {
 }
 
 /* ═══════════════════════ USER MANAGEMENT ══════════════════════════════════ */
+const ROLE_OPTS: { value: Role; label: string }[] = [
+  { value: 'cashier', label: 'CASHIER' },
+  { value: 'manager', label: 'MANAGER' },
+  { value: 'owner', label: 'ADMIN' },
+]
+
 function UserManagement() {
   const toast = useToast()
-  const { user: me } = useSession()
+  const { user: me, branches } = useSession()
   const users = useLiveQuery(() => db.users.toArray(), [], [] as User[])
-  const [addMode, setAddMode] = useState(true)
   const [sel, setSel] = useState<string | number>()
+  const [editId, setEditId] = useState<number>()
   const [name, setName] = useState('')
-  const [pin, setPin] = useState('')
+  const [pass, setPass] = useState('')
   const [full, setFull] = useState('')
   const [email, setEmail] = useState('')
   const [mobile, setMobile] = useState('')
-  const [role, setRole] = useState('PHARMACIST')
-  const [location, setLocation] = useState('SCL UMOJA 3')
+  const [role, setRole] = useState<Role>('cashier')
+  const [branchId, setBranchId] = useState<number | undefined>()
+  const [active, setActive] = useState(true)
+  const [filter, setFilter] = useState('ALL')
+  const chem = (id?: number) => chemCode(branches.find((b) => b.id === id)?.number)
+  const chemLabel = (b: Branch) => `${chemCode(b.number)} - ${b.name}${b.active ? '' : ' (CLOSED)'}`
+
+  const clear = () => {
+    setEditId(undefined)
+    setSel(undefined)
+    setName('')
+    setPass('')
+    setFull('')
+    setEmail('')
+    setMobile('')
+    setRole('cashier')
+    setBranchId(branches.find((b) => b.active)?.id)
+    setActive(true)
+  }
+  // New profiles default to the first open chemist.
+  useEffect(() => {
+    if (editId === undefined && branchId === undefined) setBranchId(branches.find((b) => b.active)?.id)
+  }, [branches, editId, branchId])
 
   const loadRow = (id: string | number) => {
     const u = users.find((x) => x.id === id)
     if (!u) return
-    setAddMode(false)
-    setName(u.name)
-    setPin(u.pin)
-    setFull(u.about ?? '')
+    setEditId(u.id)
+    setName(u.username)
+    setPass('')
+    setFull(u.name)
     setEmail(u.email ?? '')
     setMobile(u.phone ?? '')
-    setRole(u.role.toUpperCase())
+    setRole(u.role)
+    setBranchId(u.branchId)
+    setActive(u.active)
   }
 
   const submit = async () => {
     try {
-      if (!name.trim()) throw new Error('User Name is required')
-      if (!/^\d{4}$/.test(pin)) throw new Error('Password must be a 4 digit PIN')
-      if (users.some((x) => x.pin === pin && x.name.toUpperCase() !== name.trim().toUpperCase())) throw new Error('That PIN is already used')
-      const existing = users.find((x) => x.name.toUpperCase() === name.trim().toUpperCase())
-      const r = role.toLowerCase() as User['role']
-      if (existing) {
-        await db.users.update(existing.id!, { name: name.trim(), pin, about: full, email, phone: mobile, role: r })
-        await logActivity('user', `Updated user ${name.trim()}`, { userId: me?.id, userName: me?.name })
-        toast('Profile updated')
-      } else {
-        if (r !== 'owner' && !users.some((x) => x.role === 'owner' && x.active)) throw new Error('At least one active owner must exist')
-        await db.users.add({ name: name.trim(), pin, role: r, active: true, about: full, email, phone: mobile })
-        await logActivity('user', `Added user ${name.trim()}`, { detail: r, userId: me?.id, userName: me?.name })
-        toast('Profile created')
-      }
-      setName('')
-      setPin('')
-      setFull('')
-      setEmail('')
-      setMobile('')
+      const rec = await saveStaff(
+        { id: editId, username: name, password: pass, name: full || name, email, phone: mobile, role, branchId: role === 'owner' ? undefined : branchId, active },
+        me,
+      )
+      toast(editId !== undefined ? `Profile ${rec.username} updated` : `Profile created: ${rec.username} (${role === 'owner' ? 'all chemists' : chem(rec.branchId)})`)
+      clear()
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), 'error')
     }
   }
 
+  const shown = users
+    .filter((u) => filter === 'ALL' || (filter === 'ADMIN' ? u.role === 'owner' : chem(u.branchId) === filter))
+    .sort((a, b) => (chem(a.branchId) || ' ').localeCompare(chem(b.branchId) || ' ') || a.username.localeCompare(b.username))
+
   return (
-    <Canvas height={700}>
+    <Canvas height={720}>
       <Title x={110} y={26}>Create Profile</Title>
-      <Group title="User Details" y={56} w={700}>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-          <Btn style={{ width: 96 }} onClick={() => setAddMode(true)}>Add Profile</Btn>
-          <Btn style={{ width: 96 }} onClick={() => setAddMode(false)}>Edit Profile</Btn>
+      <Group title="User Details" y={56} w={760}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+          <Btn style={{ width: 96 }} onClick={clear}>Add Profile</Btn>
+          <Btn style={{ width: 96 }} onClick={() => (sel !== undefined ? loadRow(sel) : toast('Click a profile in the list below first', 'error'))}>Edit Profile</Btn>
+          <span className="ma-label" style={{ marginLeft: 10 }}>
+            {editId !== undefined ? `Editing ${name} — change fields and Submit (leave Password blank to keep it).` : 'New profile: fill in and Submit.'}
+          </span>
         </div>
         <div style={{ display: 'flex', gap: 24 }}>
-          <div className="ma-form" style={{ gridTemplateColumns: '130px 150px', width: 300 }}>
+          <div className="ma-form" style={{ gridTemplateColumns: '130px 190px', width: 340 }}>
             <L bold>User Name</L>
-            <Input value={name} onChange={setName} width={148} />
+            <Input value={name} onChange={(v) => setName(v.toLowerCase().replace(/\s/g, ''))} width={188} />
             <L bold>Password</L>
-            <Input value={pin} onChange={setPin} width={148} type="password" placeholder="4-digit PIN" />
+            <Input value={pass} onChange={setPass} width={188} type="password" placeholder={editId !== undefined ? 'blank = keep current' : 'min 4 characters'} />
             <L bold>Full Name</L>
-            <Input value={full} onChange={setFull} width={148} />
+            <Input value={full} onChange={setFull} width={188} />
             <L bold>Email</L>
-            <Input value={email} onChange={setEmail} width={148} />
+            <Input value={email} onChange={setEmail} width={188} />
             <L bold>Mobile No</L>
-            <Input value={mobile} onChange={setMobile} width={148} />
+            <Input value={mobile} onChange={setMobile} width={188} />
             <L bold>Role</L>
-            <Select value={role} onChange={setRole} options={['PHARMACIST', 'OWNER', 'LAB TECHNICIAN']} width={148} />
-            <L>IDLE TIME</L>
-            <Input value="0" readOnly width={148} grey />
-            <L>SCREEN LOCK TIME</L>
-            <Input value="1 MINUTE" readOnly width={148} grey />
-            <L>WIDTH AND HEIGHT</L>
-            <Input value="1024 X 768" readOnly width={148} grey />
-            <L bold>Location</L>
-            <Input value={location} readOnly width={148} grey />
+            <Select value={role} onChange={(v) => setRole(v as Role)} options={ROLE_OPTS} width={188} />
+            <L bold>Chemist No.</L>
+            <Select
+              value={role === 'owner' ? '' : String(branchId ?? '')}
+              onChange={(v) => setBranchId(v ? Number(v) : undefined)}
+              options={role === 'owner' ? [{ value: '', label: 'ALL CHEMISTS' }] : [{ value: '', label: 'SELECT CHEMIST' }, ...branches.map((b) => ({ value: String(b.id), label: chemLabel(b) }))]}
+              width={188}
+              disabled={role === 'owner'}
+            />
+            <L bold>Status</L>
+            <Check checked={active} onChange={setActive}>Active (can sign in)</Check>
             <span />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <Check checked onChange={() => {}}>For Individual Shift Login</Check>
-              <Check checked={false} onChange={() => {}}>For Individual Rooster Pages</Check>
-              <Check checked={false} onChange={() => {}}>Login Regs. Location Wise</Check>
-            </div>
             <div style={{ marginTop: 10 }}>
               <Btn style={{ width: 74 }} onClick={submit}>Submit</Btn>
             </div>
           </div>
-          <List items={['SCL UMOJA 3', 'nursing station', 'lab station', 'theatre', 'pharmacy store']} width={150} height={200} value={location} onSelect={setLocation} />
+          <div>
+            <L bold>Chemists</L>
+            <List
+              items={branches.map(chemLabel)}
+              width={300}
+              height={230}
+              value={branches.find((b) => b.id === branchId) ? chemLabel(branches.find((b) => b.id === branchId)!) : undefined}
+              onSelect={(v) => {
+                const b = branches.find((x) => chemLabel(x) === v)
+                if (b && role !== 'owner') setBranchId(b.id)
+              }}
+            />
+            <div className="ma-label ma-note" style={{ marginTop: 6, width: 300 }}>
+              Cashiers and managers only see and sell the stock of their own chemist. The admin sees all chemists. Add chemists in Utilities → Chemists (Branches).
+            </div>
+          </div>
         </div>
       </Group>
-      <At x={760} y={56} top>
-        <span className="ma-label">{addMode ? 'Add a new profile' : 'Edit: click a profile row below, change fields, Submit.'}</span>
-      </At>
-      <At x={14} y={540} top>
+      <At x={14} y={470} top>
         <L bold>Existing Profiles</L>
+        <Select value={filter} onChange={setFilter} options={['ALL', 'ADMIN', ...branches.map((b) => chemCode(b.number))]} width={110} />
+        <Rows n={shown.length} />
       </At>
-      <At x={14} y={566} top>
+      <At x={14} y={500} top>
         <Grid
-          cols={[C('name', 'User Name', 140), C('role', 'Role', 110), C('active', 'Active', 60), C('phone', 'Mobile', 110)]}
-          rows={users.map((u) => ({ id: u.id!, cells: { name: u.name, role: u.role.toUpperCase(), active: u.active ? 'Yes' : 'No', phone: u.phone ?? '' } }))}
-          height={120}
+          cols={[C('name', 'User Name', 130), C('full', 'Full Name', 170), C('role', 'Role', 90), C('chem', 'Chemist', 90), C('active', 'Active', 60), C('phone', 'Mobile', 110)]}
+          rows={shown.map((u) => ({
+            id: u.id!,
+            cells: { name: u.username, full: u.name, role: ROLE_OPTS.find((r) => r.value === u.role)?.label ?? u.role, chem: u.role === 'owner' ? 'ALL' : chem(u.branchId), active: u.active ? 'Yes' : 'No', phone: u.phone ?? '' },
+          }))}
+          height={190}
           compact
-          width={440}
+          width={680}
           selected={sel}
           onSelect={(id) => {
             setSel(id)
@@ -1161,25 +1202,20 @@ function DataManagement() {
   const settings = useLiveQuery(() => db.kv.get('settings'), [])
   const shopName = ((settings?.value as Record<string, string>) ?? {}).shopName ?? 'Subgeo Chemist'
 
+  const { branchCode, user: me } = useSession()
   const backup = async () => {
-    const data: Record<string, unknown[]> = {}
-    for (const t of db.tables) data[t.name] = await t.toArray()
-    const nm = fileNm.trim() || `subgeo-backup-${new Date().toISOString().slice(0, 16).replace(':', '')}`
-    download(`${nm}.json`, JSON.stringify({ version: 1, exportedAt: Date.now(), data }), 'application/json')
-    await logActivity('system', 'Data backup downloaded', { detail: 'Data Management' })
+    const nm = fileNm.trim() || `subgeo-${branchCode}-backup-${new Date().toISOString().slice(0, 16).replace(':', '')}`
+    download(`${nm}.json`, JSON.stringify(await exportBackup()), 'application/json')
+    await logActivity('system', 'Data backup downloaded', { detail: `Data Management · ${branchCode}` })
     toast('Backup downloaded')
   }
   const restore = async (file: File) => {
-    if (!confirm('Restoring replaces ALL data on this till with the backup. Continue?')) return
+    if (!confirm(`Restoring replaces ALL ${branchCode} data with the backup, here and on the server. Other chemists are not touched. Continue?`)) return
     try {
       const { data } = JSON.parse(await file.text()) as { data: Record<string, unknown[]> }
-      await db.transaction('rw', db.tables, async () => {
-        for (const t of db.tables) {
-          await t.clear()
-          if (data[t.name]) await t.bulkAdd(data[t.name])
-        }
-      })
-      toast('Backup restored')
+      await restoreBackup(data, { includeCompanyLists: me?.role === 'owner' })
+      await logActivity('system', 'Backup restored', { detail: `Data Management · ${branchCode}`, userId: me?.id, userName: me?.name })
+      toast(`Backup restored into ${branchCode}`)
     } catch (e) {
       toast(`Restore failed: ${e instanceof Error ? e.message : String(e)}`, 'error')
     }
@@ -1284,13 +1320,15 @@ function AutoNumberReset() {
   const toast = useToast()
   const [tx, setTx] = useState('')
   const [numV, setNumV] = useState('')
+  const [look, setLook] = useState('NEXT VALUE')
   const t = SEQ_TX.find((x) => x.label === tx)
+  const fmt = (key: string, legacy: boolean | undefined, n: number) => (legacy ? `${key}-${String(n).padStart(6, '0')}` : `${key}-${n}-${yy(Date.now())}`)
   const current = useLiveQuery(async () => {
     if (!t) return ''
     const n = await getKv<number>(t.legacy ? `seq:${t.key}` : `medapp:seq:${t.key}`, 0)
-    if (t.legacy) return n ? `${t.key}-${String(n).padStart(6, '0')}` : `${t.key}-000000`
-    return `${t.key}-${n}-26`
-  }, [tx], '')
+    if (look === 'LAST VALUE') return n ? fmt(t.key, t.legacy, n) : '(none issued yet)'
+    return fmt(t.key, t.legacy, n + 1)
+  }, [tx, look], '')
 
   const save = async () => {
     if (!t) return toast('Select a transaction', 'error')
@@ -1300,7 +1338,7 @@ function AutoNumberReset() {
     await setKv(t.legacy ? `seq:${t.key}` : `medapp:seq:${t.key}`, v)
     await logActivity('system', `Auto Number Reset ${t.label}`, { detail: `next will be ${n}` })
     setNumV('')
-    toast(t.legacy ? `Next number will be ${t.key}-${String(n).padStart(6, '0')}` : `Next Doc No will be ${t.key}-${n}-26`)
+    toast(`Next number will be ${fmt(t.key, t.legacy, n)}`)
   }
 
   return (
@@ -1318,11 +1356,11 @@ function AutoNumberReset() {
           width={180}
         />
         <L>LookUp Fields</L>
-        <Select value="NEXT VALUE" onChange={() => {}} options={['NEXT VALUE', 'LAST VALUE']} width={110} />
+        <Select value={look} onChange={setLook} options={['NEXT VALUE', 'LAST VALUE']} width={110} />
       </At>
       <At x={14} y={120}>
         <L>FieldData</L>
-        <Input value={current} onChange={() => {}} width={150} readOnly grey />
+        <Input value={current} width={150} readOnly grey />
       </At>
       <At x={14} y={160}>
         <IBtn bare title="Save" onClick={save} style={{ float: 'right' }}>
@@ -1338,68 +1376,63 @@ function AutoNumberReset() {
 
 /* ═══════════════════════ OFFLINE/ONLINE SYNC ══════════════════════════════ */
 function Sync() {
-  const [status, setStatus] = useState<string[]>([])
-  const upd = (s: string) => setStatus((x) => [...x, s])
+  const st = useSyncState()
+  const { branchCode, user } = useSession()
+  const [log, setLog] = useState<string[]>([])
+  const [busy, setBusy] = useState(false)
+  const upd = (s: string) => setLog((x) => [`${new Date().toLocaleTimeString('en-KE')}  ${s}`, ...x].slice(0, 200))
+  const pendingByTable = useLiveQuery(async () => {
+    const out: { t: string; n: number }[] = []
+    for (const t of SYNCED_TABLES) {
+      const n = await db.table(t).where('_dirty').equals(1).count()
+      if (n) out.push({ t, n })
+    }
+    const del = await db.outbox.count()
+    if (del) out.push({ t: 'deletions', n: del })
+    return out
+  }, [], [] as { t: string; n: number }[])
 
-  const upload = async () => {
-    try {
-      const ps = await db.products.toArray()
-      let n = 0
-      for (const p of ps) {
-        const r = await fetch('/api/products', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sku: p.sku, barcode: p.barcode ?? null, name: p.name, category_id: p.categoryId ?? null, brand: p.brand ?? null, part_number: p.partNumber ?? null, cost: p.cost ?? 0, price: p.price ?? 0, stock: p.stock ?? 0, reorder_level: p.reorderLevel ?? 2, active: p.active === false ? 0 : 1 }),
-        })
-        if (r.ok) n++
-      }
-      upd(`Uploaded ${n} of ${ps.length} product(s)`)
-      await logActivity('system', 'Uploaded products to server', { detail: `${n} records` })
-    } catch (e) {
-      upd(`Upload failed: ${e instanceof Error ? e.message : String(e)}`)
-    }
+  const run = async () => {
+    setBusy(true)
+    upd(`Sync ${branchCode} started`)
+    await syncNow()
+    const s = getSyncState()
+    upd(s.status === 'idle' ? `Done · ${s.pending} change(s) still waiting` : s.status === 'off' ? 'Not connected: sign out and sign in again while online' : s.status === 'offline' ? 'Server not reachable (offline). Changes stay on this till and upload automatically.' : `Error: ${s.error ?? ''}`)
+    if (s.status === 'idle') await logActivity('system', 'Manual sync', { detail: branchCode, userId: user?.id, userName: user?.name })
+    setBusy(false)
   }
-  const downloadNow = async () => {
-    try {
-      const r = await fetch('/api/products', { headers: { Accept: 'application/json' } })
-      if (!r.ok) throw new Error(`HTTP ${r.status}`)
-      const list = (await r.json()) as { sku: string; name: string; cost?: number; price?: number; stock?: number }[]
-      let updN = 0
-      let add = 0
-      const now = Date.now()
-      await db.transaction('rw', db.products, async () => {
-        for (const s of list) {
-          const ex = await db.products.where('sku').equals(String(s.sku)).first()
-          if (ex) {
-            await db.products.update(ex.id!, { name: s.name, cost: s.cost ?? ex.cost, price: s.price ?? ex.price, updatedAt: now })
-            updN++
-          } else {
-            await db.products.add({ sku: String(s.sku), name: s.name, cost: s.cost ?? 0, price: s.price ?? 0, stock: s.stock ?? 0, reorderLevel: 2, fitment: [], taxable: true, serialized: false, trackStock: true, active: true, createdAt: now, updatedAt: now })
-            add++
-          }
-        }
-      })
-      upd(`Downloaded ${updN} updated + ${add} new product(s)`)
-      await logActivity('system', 'Downloaded products from server', { detail: `${updN}+${add}` })
-    } catch (e) {
-      upd(`Download failed: ${e instanceof Error ? e.message : String(e)}`)
-    }
-  }
+
+  const statusText =
+    st.status === 'idle' ? 'ONLINE — connected to the company database' : st.status === 'syncing' ? 'SYNCING…' : st.status === 'offline' ? 'OFFLINE — server not reachable' : st.status === 'error' ? `ERROR — ${st.error ?? ''}` : 'NOT CONNECTED — signed in offline'
 
   return (
-    <Canvas height={520}>
-      <Group title="OffLine/OnLine Synchronization" y={60} w={480}>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <Btn style={{ width: 86 }} onClick={upload}>Upload</Btn>
-          <Btn style={{ width: 110 }} onClick={downloadNow}>Download</Btn>
+    <Canvas height={560}>
+      <Group title="OffLine/OnLine Synchronization" y={60} w={640}>
+        <div className="ma-form" style={{ gridTemplateColumns: '170px 420px' }}>
+          <L bold>Chemist on this till</L>
+          <b style={{ color: '#c00' }}>{branchCode}</b>
+          <L bold>Status</L>
+          <span style={{ fontWeight: 'bold', color: st.status === 'idle' || st.status === 'syncing' ? '#2e7d32' : '#c00' }}>{statusText}</span>
+          <L bold>Last synced</L>
+          <span>{st.lastSyncAt ? new Date(st.lastSyncAt).toLocaleString('en-KE') : 'never (this session)'}</span>
+          <L bold>Waiting to upload</L>
+          <span>{pendingByTable.length === 0 ? 'nothing — all changes uploaded' : pendingByTable.map((p) => `${p.t}: ${p.n}`).join(' · ')}</span>
+        </div>
+        <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+          <Btn style={{ width: 120 }} onClick={run} disabled={busy}>
+            {busy ? 'Syncing…' : 'Sync Now'}
+          </Btn>
         </div>
         <div style={{ marginTop: 10, height: 180, overflow: 'auto', border: '1px solid #b7b19d', background: '#fff', padding: '6px 8px' }}>
-          {status.length === 0 && <div className="ma-label">Run Upload or Download...</div>}
-          {status.map((s, i) => (
+          {log.length === 0 && <div className="ma-label">Sales, stock and records sync automatically every few seconds while online. Use Sync Now to force it.</div>}
+          {log.map((s, i) => (
             <div key={i} style={{ fontFamily: 'Consolas, monospace', fontSize: 12 }}>
               {s}
             </div>
           ))}
+        </div>
+        <div className="ma-label ma-note" style={{ marginTop: 8 }}>
+          The till keeps working without internet: every sale and stock change is stored here first and uploaded when the connection returns.
         </div>
       </Group>
     </Canvas>
@@ -1781,9 +1814,24 @@ function DbUtility() {
   )
 }
 
+/** Shown to cashiers who open an admin-only utility. */
+function AdminOnly({ what }: { what: string }) {
+  return (
+    <Canvas height={200}>
+      <Title x={110} y={26}>{what}</Title>
+      <At x={14} y={80}>
+        <span className="ma-label">Only the admin can use {what}. Sign in as the admin to continue.</span>
+      </At>
+    </Canvas>
+  )
+}
+
 export default function UtilityPage() {
   const { slug } = useParams()
+  const { can } = useSession()
   switch (slug) {
+    case 'chemists':
+      return can('branches') ? <ChemistsPage /> : <AdminOnly what="Chemists (Branches)" />
     case 'role-wise-transaction-process':
       return <RoleWiseTxn />
     case 'tally-to-n360i':
@@ -1817,9 +1865,9 @@ export default function UtilityPage() {
     case 'ac-update':
       return <AcUpdate />
     case 'user-management':
-      return <UserManagement />
+      return can('users') ? <UserManagement /> : <AdminOnly what="User Management" />
     case 'data-management':
-      return <DataManagement />
+      return can('settings') ? <DataManagement /> : <AdminOnly what="Data Management" />
     case 'auto-number-reset':
       return <AutoNumberReset />
     case 'sync':

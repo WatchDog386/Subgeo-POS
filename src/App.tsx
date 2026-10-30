@@ -6,16 +6,22 @@ import AdminApp from './medapp/AdminApp'
 import MedLogin from './medapp/MedLogin'
 
 export default function App() {
-  const { user, restoring } = useSession()
-  const [booting, setBooting] = useState(false)
-
+  const { user, restoring, dbEpoch } = useSession()
   // Brief loading screen after a successful login, before the medapp shell.
+  // Derived during render (not set in an effect) so the shell never flashes first.
+  const [bootedFor, setBootedFor] = useState<number>()
+  const booting = !!user?.id && bootedFor !== user.id
+
   useEffect(() => {
-    if (!user) return
-    setBooting(true)
-    const t = setTimeout(() => setBooting(false), 5000)
+    if (!user?.id) {
+      setBootedFor(undefined) // signed out: show it again on the next sign-in
+      return
+    }
+    if (bootedFor === user.id) return
+    const id = user.id
+    const t = setTimeout(() => setBootedFor(id), 5000)
     return () => clearTimeout(t)
-  }, [user])
+  }, [user?.id, bootedFor])
 
   // All hooks above are called unconditionally every render, so it is safe to
   // branch on their results here.
@@ -23,7 +29,8 @@ export default function App() {
   if (!user) return <MedLogin />
   if (booting) return <LoadingScreen />
 
-  // Admin signs in to the admin shell (To-Do List home); everyone else
-  // (cashier / owner) uses the medapp shell.
-  return user.name.toUpperCase() === 'ADMIN' ? <AdminApp /> : <MedApp />
+  // The admin (owner) gets the admin shell and can open any chemist; cashiers
+  // and managers work in their own chemist. Keyed on the open chemist's
+  // database so every screen reloads its data after a switch.
+  return user.role === 'owner' ? <AdminApp key={dbEpoch} /> : <MedApp key={dbEpoch} />
 }
