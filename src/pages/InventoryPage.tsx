@@ -416,6 +416,7 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
   const [printCopies, setPrintCopies] = useState(() => Math.max(1, (initial as Product | undefined)?.stock ?? 1))
   const [cost, setCost] = useState(String((p.cost ?? 0) / 100))
   const [price, setPrice] = useState(String((p.price ?? 0) / 100))
+  const [minPrice, setMinPrice] = useState(p.minPrice ? String(p.minPrice / 100) : '')
   const [newCat, setNewCat] = useState('')
   const imageRef = useRef<HTMLInputElement>(null)
   const set = <K extends keyof Product>(k: K, v: Product[K]) => setP((x) => ({ ...x, [k]: v }))
@@ -438,6 +439,10 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
       // New medicines without a code get the next free MED-#### code.
       if (!p.sku?.trim()) p.sku = await nextMedicineCode()
       if (p.active && toCents(price) <= 0) throw new Error('Set a selling price above zero before activating this medicine')
+      const floor = minPrice.trim() ? toCents(minPrice) : undefined
+      if (floor !== undefined && floor < 0) throw new Error('Minimum selling price cannot be negative')
+      if (floor !== undefined && toCents(price) < floor) throw new Error(`Selling price is below the minimum selling price ${(floor / 100).toFixed(2)}`)
+      if (p.maxStock !== undefined && p.maxStock < (p.reorderLevel ?? 0)) throw new Error('Maximum stock is below the re-order level')
       const clash = await db.products.where('sku').equals(p.sku.trim()).first()
       if (clash && clash.id !== p.id) throw new Error(`SKU ${p.sku} is already used by ${clash.name}`)
       let barcode = p.barcode?.trim()
@@ -457,6 +462,7 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
         categoryId,
         cost: toCents(cost),
         price: toCents(price),
+        minPrice: minPrice.trim() ? toCents(minPrice) : undefined,
         createdAt: p.createdAt ?? now,
         updatedAt: now,
       } as Product
@@ -617,6 +623,14 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
           <div>
             <label className="label">Reorder at</label>
             <input className="input" type="number" min={0} value={p.reorderLevel ?? 0} onChange={(e) => set('reorderLevel', Number(e.target.value))} />
+          </div>
+          <div>
+            <label className="label">Maximum stock</label>
+            <input className="input" type="number" min={0} placeholder="blank = no limit" value={p.maxStock ?? ''} onChange={(e) => set('maxStock', e.target.value === '' ? (undefined as never) : Number(e.target.value))} />
+          </div>
+          <div>
+            <label className="label">Minimum selling price</label>
+            <input className="input" inputMode="decimal" placeholder="blank = no floor" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} />
           </div>
         </div>
       </Section>

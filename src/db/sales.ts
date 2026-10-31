@@ -32,8 +32,27 @@ export interface CheckoutInput {
  * Complete a sale atomically: write the sale, deduct stock, log stock movements and
  * post any on-account amount to the customer's balance.
  */
+/**
+ * Every medicine must sell at or above its minimum selling price, after its
+ * line discount and its share of the bill discount. Throws when one doesn't.
+ */
+export async function checkPriceFloor(lines: SaleLine[], billDiscount: number): Promise<void> {
+  const net = (l: SaleLine) => Math.max(0, l.qty * l.unitPrice - l.discount)
+  const gross = lines.reduce((s, l) => s + net(l), 0)
+  for (const l of lines) {
+    if (l.productId === undefined || l.qty <= 0) continue
+    const p = await db.products.get(l.productId)
+    if (!p?.minPrice) continue
+    const share = gross > 0 ? (billDiscount * net(l)) / gross : 0
+    const each = (net(l) - share) / l.qty
+    if (each + 0.5 < p.minPrice)
+      throw new SaleError(`${p.name} cannot be sold below KES ${(p.minPrice / 100).toFixed(2)} (this bill sells it at ${(each / 100).toFixed(2)} each)`)
+  }
+}
+
 export async function completeSale(input: CheckoutInput): Promise<Sale> {
   if (input.lines.length === 0) throw new SaleError('Cart is empty')
+  await checkPriceFloor(input.lines, input.discount)
   const settings = await getSettings()
   const totals = computeTotals(input.lines, input.discount, settings.vatRate, settings.pricesIncludeVat)
   const paid = paidAmount(input.payments)

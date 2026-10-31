@@ -672,15 +672,17 @@ function ReorderReport() {
       .map((p) => {
         const q = sold.get(p.id!)?.qty ?? 0
         const avg = q / days
-        const suggest = Math.max(0, Math.ceil(avg * 30) + p.reorderLevel - p.stock)
-        return { name: p.name, code: p.sku, stock: String(p.stock), level: String(p.reorderLevel), sold: String(q), avg: avg.toFixed(2), eoq: String(suggest), n: suggest }
+        // A month's sales plus the re-order level, never above the medicine's maximum level.
+        const want = Math.ceil(avg * 30) + p.reorderLevel
+        const suggest = Math.max(0, (p.maxStock !== undefined ? Math.min(want, p.maxStock) : want) - p.stock)
+        return { name: p.name, code: p.sku, stock: String(p.stock), level: String(p.reorderLevel), max: p.maxStock !== undefined ? String(p.maxStock) : '-', sold: String(q), avg: avg.toFixed(2), eoq: String(suggest), n: suggest }
       })
       .filter((r) => s2 !== 'BELOW RE-ORDER' || Number(r.stock) <= Number(r.level))
       .sort((a, b) => b.n - a.n)
       .map(({ n: _n, ...r }) => r)
     setRes({
       title: 'Stock Reorder/EOQ Analysis',
-      cols: [C('name', 'Product Name', 240), C('code', 'Product Code', 100), C('stock', 'Avl Qty', 70, 'right'), C('level', 'Re-Order Level', 100, 'right'), C('sold', 'Sold Qty', 70, 'right'), C('avg', 'Avg/Day', 70, 'right'), C('eoq', 'Order Qty (EOQ)', 110, 'right')],
+      cols: [C('name', 'Product Name', 240), C('code', 'Product Code', 100), C('stock', 'Avl Qty', 70, 'right'), C('level', 'Re-Order Level', 100, 'right'), C('max', 'Max Level', 80, 'right'), C('sold', 'Sold Qty', 70, 'right'), C('avg', 'Avg/Day', 70, 'right'), C('eoq', 'Order Qty (EOQ)', 110, 'right')],
       rows,
     })
   }

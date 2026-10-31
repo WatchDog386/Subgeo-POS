@@ -233,6 +233,11 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
     const dup = (await db.docs.where('slug').equals('pur-grn-direct-invoice').toArray()).find(
       (d) => invoiceNo.trim() && d.values.invoice === invoiceNo.trim() && (d.values.vendorName ?? '').toUpperCase() === vendor.trim().toUpperCase(),
     )
+    const over = chosen
+      .map((l) => ({ p: l.productId !== undefined ? products.find((x) => x.id === l.productId) : undefined, qty: Number(l.qty) || 0 }))
+      .filter(({ p, qty }) => p?.maxStock !== undefined && p.stock + qty > p.maxStock)
+      .map(({ p, qty }) => `${p!.name}: ${p!.stock + qty} (max ${p!.maxStock})`)
+    if (over.length && !confirm(`This takes these medicines above their maximum level:\n\n${over.slice(0, 12).join('\n')}\n\nReceive anyway?`)) return
     if (dup && !confirm(`${vendor} invoice ${invoiceNo} was already received as ${dup.values.docNo}. Receive it again (stock will be added twice)?`)) return
     setSaving(true)
     try {
@@ -358,7 +363,10 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
                       title={p ? `Adds to ${p.name} (${p.sku})` : 'Will be created as a new medicine. Type an existing name to match it instead.'}
                     />
                   </td>
-                  <td style={{ ...td, textAlign: 'right' }}>{p ? p.stock : '—'}</td>
+                  <td style={{ ...td, textAlign: 'right', color: p?.maxStock !== undefined && p.stock + (Number(l.qty) || 0) > p.maxStock ? '#c00' : undefined }} title={p?.maxStock !== undefined ? `Max level ${p.maxStock}` : undefined}>
+                    {p ? p.stock : '—'}
+                    {p?.maxStock !== undefined && p.stock + (Number(l.qty) || 0) > p.maxStock ? ' ⚠' : ''}
+                  </td>
                   <td style={td}>
                     {p ? (
                       <span style={{ color: p.price < Math.round(cost * 100) ? '#c00' : undefined }} title={p.price < Math.round(cost * 100) ? 'Selling price is below the new cost — update it in Medicine / Inventory' : 'Current selling price (kept)'}>

@@ -144,7 +144,7 @@ function usePurchaseItems(team: boolean): Item[] {
       kind: 'RE-ORDER',
       doc: p.sku,
       date: p.updatedAt,
-      task: `${p.name} — ${p.stock} left (re-order at ${p.reorderLevel})`,
+      task: `${p.name} — ${p.stock} left (re-order at ${p.reorderLevel}${p.maxStock !== undefined ? `, order ${Math.max(0, p.maxStock - p.stock)} to reach ${p.maxStock}` : ''})`,
       assigner: 'SYSTEM',
       assignee: branchCode || me,
       status: p.stock <= 0 ? 'OUT OF STOCK' : 'LOW STOCK',

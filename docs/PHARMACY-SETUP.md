@@ -107,8 +107,12 @@ Pick whichever method suits you:
   price, cost price, pack size, and `S`/`N` for stock or non-stock. Saving
   adds the medicine to the chemist's stock list.
 - **Import a CSV:** *Utilities → Data Management* → import products.
-- **Opening stock:** receive a purchase order, or use the stock adjustment on
-  the *Inventory* screen (stock entry / count).
+- **Opening stock:** *Modules → STOCK ADJUSTMENTS → Stock Adjust +(DBH)* →
+  **+**, choose the type **Opening Stock**, or receive a supplier invoice
+  (*Pur/GRN (Direct Invoice)*).
+- **Limits:** for each medicine, set the **Min Selling Price** (nothing is
+  sold below it), the **Re-order Level** and the **Max Level** in
+  *Modules → Medicine* (see [HANDOVER.md](HANDOVER.md)).
 
 ### 5. Set up the till computer
 
@@ -151,6 +155,8 @@ Pick whichever method suits you:
 | Purchase | *Modules → STEP 1 → STEP 2 → STEP 3* | Indent, then LPO (type the indent no.), then GRN (type the LPO no.). For supplier invoices without an LPO, use *Pur/GRN (Direct Invoice)* |
 | Purchase | *Modules → Pur/GRN (Direct Invoice) → Upload Supplier Invoice (PDF)* | Receive a whole supplier invoice / proforma / sales order at once (see below) |
 | Purchase | *Modules → Petty Cash Voucher* | Petty cash spent |
+| Admin / Purchase | *Modules → STOCK ADJUSTMENTS → Stock Adjust -* | Take off expired, damaged or lost stock, or a count shortage |
+| Admin / Purchase | *Modules → STOCK ADJUSTMENTS → Stock Adjust +(DBH)* | Add opening stock, a count excess or stock that was found |
 | Admin | *Home → To-Do List → Task To-Do* | Assign tasks. They appear on the assignee's Home and move to *Pending-Completed* when done |
 | Admin | *Utilities → Chemists* | Watch all chemists; transfer stock between chemists |
 | Everyone | *Messages* | Messages to one person or to everyone; they reach every till |
@@ -173,6 +179,29 @@ Pick whichever method suits you:
 | *"Your chemist is closed or not set"* at sign-in | As admin, set the profile's **Chemist No.** and make sure that chemist is **active**. |
 | Till stuck on *Offline* | Check the internet. Everything keeps working and uploads later. Don't clear the browser data while changes are waiting. |
 | A report on the server looks out of date | Run `npm run db:rebuild` on the server. |
+
+## Typing a supplier's invoice (Pur/GRN (Direct Invoice) → +)
+
+1. **VENDOR DETAILS:** look up the **Vendor Name** (its phone, address and
+   e-mail fill in) or type a new one, which is added to the Party Master. Type
+   the **Invoice/Receipt No**. Location, Mran No, Mran Date, Status, Received
+   By and Expense A/c are filled in for you.
+2. **PRODUCT DETAILS:** on each row, press the lookup next to **Medicine
+   Name**. In the **LookUp Box**, search by Product Name, Product Code or Cost
+   Rate and pick the medicine. Then key in the **Qty**, the **Rate** (cost per
+   unit on the invoice), and optionally **Disc%**, **Less discount**,
+   **VAT %**, **Expiary Date**, **Batch No** and a new **Retail Price**.
+   **NEW ROW(F7)** adds a row. A name that is not in the list (or the green +
+   in the LookUp Box) creates a new medicine; it needs a Retail Price.
+3. **Save (F2)**. Stock goes up by each Qty, and the cost becomes the net unit
+   cost (after discounts, before VAT). It asks first if a medicine goes above
+   its Max Level or would sell below its new cost.
+
+**To correct a GRN that was already saved**, select it in the list and press
+*Edit* (the pencil). The same screen opens with its lines; change them and
+save. The old quantities are taken back out and the new ones put in. **Delete**
+on that screen takes the whole GRN back out of stock. Both are refused if the
+stock has already been sold. *Payable* shows what each vendor has invoiced.
 
 ## Receiving a supplier's invoice from its PDF
 

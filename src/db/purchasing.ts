@@ -10,8 +10,8 @@ export async function draftReorder(supplierId?: number): Promise<PurchaseOrder |
   if (low.length === 0) return undefined
   const lines: PurchaseOrderLine[] = low.map((p) => ({
     productId: p.id!,
-    // Order back up to twice the reorder level.
-    qty: Math.max(1, p.reorderLevel * 2 - p.stock),
+    // Order up to the maximum level when one is set, else back up to twice the reorder level.
+    qty: Math.max(1, (p.maxStock ?? p.reorderLevel * 2) - p.stock),
     unitCost: p.cost,
     received: 0,
   }))

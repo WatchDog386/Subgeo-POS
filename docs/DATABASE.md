@@ -48,7 +48,7 @@ internet or the server is down.
 
 | Table | What it holds | Key relations |
 |---|---|---|
-| `products` | Medicines and services: SKU, barcode, prices, stock, re-order level | `category_id → categories`, `supplier_id → suppliers` |
+| `products` | Medicines and services: SKU, barcode, prices, stock, re-order level, maximum level (`max_stock`) and minimum selling price (`min_price`, cents) | `category_id → categories`, `supplier_id → suppliers` |
 | `stock_movements` | Every stock change: sale, refund, receive, adjust, damage, count, transfer | `product_id → products`, `user_id → users` |
 | `customers` | Customers / debtors and what they owe, with the same Party Master details as suppliers | — |
 | `shifts` | Day shifts: float, counted and expected cash | `user_id → users` |
@@ -80,7 +80,7 @@ internet or the server is down.
 
 | View | Shows |
 |---|---|
-| `v_stock` | Every active medicine per chemist with category, supplier, stock value and a `below_reorder` flag |
+| `v_stock` | Every active medicine per chemist with category, supplier, stock value, a `below_reorder` flag, `max_stock`, `min_price` and `to_order` (how many to order to reach the maximum level) |
 | `v_daily_sales` | Bills and takings per chemist per day |
 | `v_payments_by_method` | Takings per chemist, day and payment method |
 | `v_debtors` | Customers who owe money |

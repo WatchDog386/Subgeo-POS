@@ -10,6 +10,8 @@ import { setTaskStatus, tasksFor, useTasks } from '../tasks'
 import { useSession } from '../../session'
 import { useToast } from '../../components/ui'
 import PurchaseTodo from './PurchaseTodo'
+import { ADMIN_TRANSACTIONS } from '../nav-admin'
+import { hasAdminRights } from '../../db/syncSchema'
 
 type Section = 'todo' | 'quick' | 'stats' | 'favs' | 'reports' | 'charts' | 'utilities'
 const TOP: { id: Section; label: string }[] = [
@@ -86,7 +88,10 @@ function QuickAccess() {
   const nav = useNavigate()
   const [role, setRole] = useState('SELECT')
   const [q, setQ] = useState('')
-  const rows = TRANSACTIONS.filter((t) => role === 'SELECT' || t.role.toUpperCase() === role)
+  const { user } = useSession()
+  // The purchases dashboard has the admin's rights, so it gets the admin's list (with STOCK ADJUSTMENTS).
+  const list = hasAdminRights(user?.role) ? ADMIN_TRANSACTIONS : TRANSACTIONS
+  const rows = list.filter((t) => role === 'SELECT' || t.role.toUpperCase() === role)
     .filter((t) => !q.trim() || [t.module, t.label, t.role, t.description].some((v) => v.toLowerCase().includes(q.trim().toLowerCase())))
     .map((t, i) => ({ id: i, cells: { module: t.module, transaction: t.label, role: t.role, description: t.description }, to: t.to }))
   return (
@@ -95,7 +100,7 @@ function QuickAccess() {
         <span className="ma-label" style={{ fontSize: 12 }}>
           Role
         </span>
-        <Select value={role} onChange={setRole} options={['SELECT', ...new Set(TRANSACTIONS.map((t) => t.role.toUpperCase()))]} width={86} round />
+        <Select value={role} onChange={setRole} options={['SELECT', ...new Set(list.map((t) => t.role.toUpperCase()))]} width={86} round />
       </div>
       <div style={{ display: 'flex', alignItems: 'center', marginTop: 9 }}>
         <SearchBar value={q} onChange={setQ} width={553} />

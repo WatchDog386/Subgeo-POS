@@ -26,6 +26,7 @@ import {
 import { MODULE_GROUPS } from '../nav'
 import { OtcEntry, PartyEntry, WHOLESALE_RULES, WholesaleEntry } from './EntryScreens'
 import { useInvoiceUpload } from './InvoiceImport'
+import { ADJUST_MINUS, ADJUST_PLUS, GrnEntry, StockAdjustEntry } from './StockScreens'
 import {
   EyeIcon,
   FindIcon,
@@ -58,8 +59,8 @@ interface ModuleDef {
   yellowChk?: boolean
   prefix?: string
   fields?: Field[]
-  /** 'grid': "+" opens an in-panel entry table with the list's headers instead of the pop-up form. */
-  entry?: 'grid'
+  /** "+" opens a full-page stock screen (StockScreens.tsx) instead of the pop-up form; saving moves stock. */
+  entry?: 'grn' | 'adjust'
   /** Offer "Upload Supplier Invoice (PDF)" (reads the lines and receives them into stock). */
   importInvoice?: boolean
 }
@@ -99,6 +100,9 @@ const FIELD_HINTS: Record<string, string> = {
   supplierName: 'Type or look up the supplier',
   total: 'Total value, e.g. 1746.00',
   type: 'S = stock item, N = non-stock',
+  minPrice: 'Lowest price it may be sold for',
+  reorder: 'Re-order when stock falls to, e.g. 10',
+  maxStock: 'Most to hold (blank = no limit)',
   uom: 'Unit, e.g. ML, MG, TABS',
   vendorName: 'Type or look up the vendor',
   whole: 'Wholesale price per unit',
@@ -430,8 +434,8 @@ const DEFS: Record<string, ModuleDef> = {
     hscroll: 0.6,
     tools: BASE_TOOLS,
     cols: [
-      C('docNo', 'Mrn No', 100),
-      C('mrnDate', 'Mrn Date', 100),
+      C('docNo', 'Mran No', 100),
+      C('mrnDate', 'Mran Date', 100),
       C('invoice', 'Invoice/Receipt', 100),
       C('vendorName', 'Vendor Name', 190),
       C('total', 'TOTAL VALUE', 100, 'right'),
@@ -439,8 +443,9 @@ const DEFS: Record<string, ModuleDef> = {
       C('receivedBy', 'Received By', 100),
       C('status', 'Status', 200),
       C('phoneNo', 'Phone No', 120),
+      C('address', 'Address', 200),
     ],
-    entry: 'grid',
+    entry: 'grn',
     importInvoice: true,
     fields: [
       { key: 'docNo', kind: 'docno' },
@@ -452,7 +457,46 @@ const DEFS: Record<string, ModuleDef> = {
       { key: 'receivedBy', kind: 'text' },
       { key: 'status', kind: 'text' },
       { key: 'phoneNo', kind: 'text' },
+      { key: 'address', kind: 'text' },
     ],
+  },
+  [ADJUST_MINUS]: {
+    title: 'Stock Adjust -',
+    source: 'docs',
+    prefix: 'SAM',
+    hscroll: 0.5,
+    tools: BASE_TOOLS,
+    cols: [
+      C('docNo', 'Doc No', 100),
+      C('date', 'Date', 100),
+      C('location', 'Location', 140),
+      C('types', 'Type Of Adjustment', 200),
+      C('items', 'Products', 80, 'right'),
+      C('qty', 'Qty', 80, 'right'),
+      C('total', 'Value (Cost)', 110, 'right'),
+      C('user', 'User', 110),
+      C('approval', 'Status', 160),
+    ],
+    entry: 'adjust',
+  },
+  [ADJUST_PLUS]: {
+    title: 'Stock Adjust +(DBH)',
+    source: 'docs',
+    prefix: 'SAP',
+    hscroll: 0.5,
+    tools: BASE_TOOLS,
+    cols: [
+      C('docNo', 'Doc No', 100),
+      C('date', 'Date', 100),
+      C('location', 'Location', 140),
+      C('types', 'Type Of Adjustment', 200),
+      C('items', 'Products', 80, 'right'),
+      C('qty', 'Qty', 80, 'right'),
+      C('total', 'Value (Cost)', 110, 'right'),
+      C('user', 'User', 110),
+      C('approval', 'Status', 160),
+    ],
+    entry: 'adjust',
   },
   'medicine': {
     title: 'Medicine',
@@ -471,6 +515,9 @@ const DEFS: Record<string, ModuleDef> = {
       C('packSize', 'Pack Size', 110, 'right'),
       C('type', 'Stock/Non-Stock', 80),
       C('stock', 'Qty In Stock', 90, 'right'),
+      C('minPrice', 'Min Selling Price', 110, 'right'),
+      C('reorder', 'Re-order Level', 100, 'right'),
+      C('maxStock', 'Max Level', 90, 'right'),
     ],
     fields: [
       { key: 'docNo', kind: 'docno' },
@@ -482,6 +529,9 @@ const DEFS: Record<string, ModuleDef> = {
       { key: 'cost', kind: 'money' },
       { key: 'packSize', kind: 'money' },
       { key: 'type', kind: 'text' },
+      { key: 'minPrice', kind: 'money' },
+      { key: 'reorder', kind: 'text' },
+      { key: 'maxStock', kind: 'text' },
     ],
   },
   /* Purchases dashboard — Petty Cash Issue (screenshot 12.24.48 (1)). */
@@ -723,6 +773,9 @@ function useRows(slug: string, def: ModuleDef): RawRow[] {
               packSize: v.packSize || '1.00',
               type: p.trackStock ? 'S' : 'N',
               stock: String(p.stock),
+              minPrice: p.minPrice ? amt(p.minPrice) : '',
+              reorder: String(p.reorderLevel ?? 0),
+              maxStock: p.maxStock !== undefined ? String(p.maxStock) : '',
             },
           }
         })
@@ -757,7 +810,6 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
   const [applied, setApplied] = useState<{ col: string; op: string; val: string } | null>(null)
   const [approval, setApproval] = useState<string>(APPROVALS[0])
   const { user } = useSession()
-  const [entering, setEntering] = useState(false)
   const [asc, setAsc] = useState(false)
   const [page, setPage] = useState(0)
   const [checked, setChecked] = useState<Set<string | number>>(new Set())
@@ -768,7 +820,7 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
   const [edit, setEdit] = useState<RawRow | 'new' | null>(null)
   const [action, setAction] = useState('SELECT')
   // Full-page entry screens (EntryScreens.tsx) that replace the list while open.
-  const [screen, setScreen] = useState<{ kind: 'wholesale'; editId?: number } | { kind: 'otc'; mode: 'bill' | 'return' | 'service'; sale?: Sale } | { kind: 'party'; row?: RawRow } | null>(null)
+  const [screen, setScreen] = useState<{ kind: 'wholesale' | 'grn' | 'adjust'; editId?: number } | { kind: 'otc'; mode: 'bill' | 'return' | 'service'; sale?: Sale } | { kind: 'party'; row?: RawRow } | null>(null)
 
   const colKey = def.cols.find((c) => c.label === col)?.key
   const filtered = all
@@ -814,7 +866,7 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
     else if (def.source === 'service') setScreen({ kind: 'otc', mode: 'service' })
     else if (def.source === 'party') setScreen({ kind: 'party' })
     else if (WHOLESALE_RULES[slug]) setScreen({ kind: 'wholesale' })
-    else if (def.entry === 'grid') setEntering(true)
+    else if (def.entry === 'grn' || def.entry === 'adjust') setScreen({ kind: def.entry })
     else setEdit('new')
   }
   const editDoc = () => {
@@ -824,6 +876,7 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
     else if (def.source === 'otc-return') setView(t)
     else if (def.source === 'service') nav('/service')
     else if (WHOLESALE_RULES[slug]) setScreen({ kind: 'wholesale', editId: Number(String(t.id).slice(1)) })
+    else if (def.entry === 'grn' || def.entry === 'adjust') setScreen({ kind: def.entry, editId: Number(String(t.id).slice(1)) })
     else if (def.source === 'party') setScreen({ kind: 'party', row: t })
     else setEdit(t)
   }
@@ -902,7 +955,8 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
     }
   }
 
-  if (entering) return <GridEntry slug={slug} def={def} onClose={() => setEntering(false)} />
+  if (screen?.kind === 'grn') return <GrnEntry editId={screen.editId} onClose={() => setScreen(null)} />
+  if (screen?.kind === 'adjust') return <StockAdjustEntry slug={slug as typeof ADJUST_MINUS} editId={screen.editId} onClose={() => setScreen(null)} />
   if (screen?.kind === 'wholesale') return <WholesaleEntry slug={slug} def={def} editId={screen.editId} onClose={() => setScreen(null)} />
   if (screen?.kind === 'otc') return <OtcEntry mode={screen.mode} fromSale={screen.sale} onClose={() => setScreen(null)} />
   if (screen?.kind === 'party')
@@ -1172,23 +1226,45 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
 
   // The Medicine master is where a chemist's inventory starts: a new product is
   // added to stock at its cost/retail prices; edits refresh the prices.
+  /** Price floor and stock limits typed on the Medicine form (validated before anything is saved). */
+  const medicineLimits = (values: Record<string, string>) => {
+    const price = toCents(values.retail || values.whole || '0')
+    const minPrice = values.minPrice?.trim() ? toCents(values.minPrice) : undefined
+    const whole = (k: string, label: string) => {
+      const t = (values[k] ?? '').trim()
+      if (!t) return undefined
+      if (!/^\d+$/.test(t)) throw new Error(`${label} must be a whole number`)
+      return Number(t)
+    }
+    const reorderLevel = whole('reorder', 'Re-order Level') ?? 0
+    const maxStock = whole('maxStock', 'Max Level')
+    if (minPrice !== undefined && minPrice < 0) throw new Error('Min Selling Price cannot be negative')
+    if (minPrice !== undefined && price > 0 && price < minPrice) throw new Error(`Retail Sale ${(price / 100).toFixed(2)} is below the Min Selling Price ${(minPrice / 100).toFixed(2)}`)
+    const wholePrice = values.whole?.trim() ? toCents(values.whole) : 0
+    if (minPrice !== undefined && wholePrice > 0 && wholePrice < minPrice) throw new Error(`Whole Sale ${(wholePrice / 100).toFixed(2)} is below the Min Selling Price ${(minPrice / 100).toFixed(2)}`)
+    if (maxStock !== undefined && maxStock < reorderLevel) throw new Error(`Max Level ${maxStock} is below the Re-order Level ${reorderLevel}`)
+    return { price, minPrice, reorderLevel, maxStock }
+  }
+
   const upsertMedicine = async (values: Record<string, string>, id?: number) => {
     const name = values.name.trim()
     if (!name) return
     const cost = toCents(values.cost || '0')
-    const price = toCents(values.retail || values.whole || '0')
+    const { price, minPrice, reorderLevel, maxStock } = medicineLimits(values)
     const existingP = id !== undefined ? await db.products.get(id) : await db.products.filter((p) => p.name.toUpperCase() === name.toUpperCase()).first()
     if (existingP)
-      await db.products.update(existingP.id!, { name: name.toUpperCase(), cost, price, trackStock: !/^N/i.test((values.type || 'S').trim()), updatedAt: Date.now() })
+      await db.products.update(existingP.id!, { name: name.toUpperCase(), cost, price, minPrice, reorderLevel, maxStock, trackStock: !/^N/i.test((values.type || 'S').trim()), updatedAt: Date.now() })
     else {
       await db.products.add({
         sku: values.docNo,
-        name,
+        name: name.toUpperCase(),
         fitment: [],
         cost,
         price,
+        minPrice,
         stock: 0,
-        reorderLevel: 0,
+        reorderLevel,
+        maxStock,
         taxable: true,
         serialized: false,
         trackStock: !/^N/i.test((values.type || 'S').trim()),
@@ -1203,7 +1279,16 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
     if (required && !vals[required]?.trim()) return toast(`${label(required)} is required`, 'error')
     const values = { ...vals }
     // Stock is counted by the stock ledger, never typed into a form record.
-    if (slug === 'medicine') delete values.stock
+    if (slug === 'medicine') {
+      delete values.stock
+      if (!values.name?.trim()) return toast('Product Name is required', 'error')
+      if (toCents(values.retail || values.whole || '0') <= 0) return toast('Enter the Retail Sale price', 'error')
+      try {
+        medicineLimits(values)
+      } catch (e) {
+        return toast(e instanceof Error ? e.message : String(e), 'error')
+      }
+    }
     if (!values.docNo?.trim() && fields.some((f) => f.kind === 'docno')) values.docNo = await nextDocNo(def.prefix ?? 'DOC')
     for (const f of fields) if (f.kind === 'money' && values[f.key]) values[f.key] = (parseFloat(values[f.key]) || 0).toFixed(2)
     if (file) {
@@ -1329,309 +1414,6 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
         />
       )}
     </Dialog>
-  )
-}
-
-/* ── In-panel entry table ("+" on Pur/GRN (Direct Invoice)) ───────────────
-   Same title bar and table headers as the list; each row of the table is one
-   new record, typed straight into the cells. */
-type EntryRow = { key: number; vals: Record<string, string>; file?: { name: string; data: string }; dirty?: boolean }
-
-function GridEntry({ slug, def, onClose }: { slug: string; def: ModuleDef; onClose: () => void }) {
-  const { user } = useSession()
-  const toast = useToast()
-  const upload = useInvoiceUpload(onClose)
-  const d = useMedDefaults()
-  const suppliers = useLiveQuery(() => db.suppliers.toArray(), [], [] as Supplier[])
-  const existing = useDocs(slug)
-  const fields = def.fields ?? []
-  const required = fields.find((f) => f.kind === 'party')?.key
-  const last = existing[0]?.values ?? {}
-  const blank = (key: number): EntryRow => {
-    const v: Record<string, string> = {}
-    for (const f of fields) {
-      if (f.kind === 'date') v[f.key] = dmy(Date.now())
-      else if (f.kind === 'location') v[f.key] = d.location
-      else if (f.kind === 'user' || f.key === 'receivedBy') v[f.key] = user?.name.toUpperCase() ?? ''
-      else v[f.key] = REPEAT_FIELDS.has(f.key) && f.key !== 'receivedBy' ? last[f.key] ?? '' : ''
-    }
-    return { key, vals: v }
-  }
-  const [rows, setRows] = useState<EntryRow[]>(() => [blank(1)])
-  // The register loads a moment after the screen: carry its usual values into untouched rows.
-  const lastKey = existing[0]?.id
-  useEffect(() => {
-    if (lastKey === undefined) return
-    setRows((list) => list.map((r) => (touched(r) ? r : { ...r, vals: blank(r.key).vals })))
-  }, [lastKey]) // eslint-disable-line react-hooks/exhaustive-deps
-  const [sel, setSel] = useState(1)
-  const [saving, setSaving] = useState(false)
-  const fileInput = useRef<HTMLInputElement | null>(null)
-  const fileFor = useRef<number>(0)
-  const kindOf = (key: string) => fields.find((f) => f.key === key)?.kind
-  const pristine = blank(0).vals
-  const touched = (r: EntryRow) => !!r.file || !!r.dirty
-
-  const set = (rk: number, key: string, v: string) =>
-    setRows((list) =>
-      list.map((r) => {
-        if (r.key !== rk) return r
-        const vals = { ...r.vals, [key]: v }
-        // Picking a known vendor fills in its phone number.
-        if (key === 'vendorName' && 'phoneNo' in vals) {
-          const s = suppliers.find((x) => x.name.toUpperCase() === v.trim().toUpperCase())
-          if (s?.phone && !r.vals.phoneNo) vals.phoneNo = s.phone
-        }
-        return { ...r, vals, dirty: true }
-      }),
-    )
-  const addRow = () => {
-    const k = Math.max(0, ...rows.map((r) => r.key)) + 1
-    setRows((list) => [...list, blank(k)])
-    setSel(k)
-  }
-  const removeRow = () => {
-    if (rows.length === 1) return setRows([blank(rows[0].key + 1)])
-    setRows((list) => list.filter((r) => r.key !== sel))
-    setSel(rows.find((r) => r.key !== sel)?.key ?? 0)
-  }
-  const pickFile = async (f: File) => {
-    if (f.size > 5 * 1024 * 1024) return toast('Document is too big (max 5 MB)', 'error')
-    const data = await new Promise<string>((res, rej) => {
-      const r = new FileReader()
-      r.onload = () => res(r.result as string)
-      r.onerror = () => rej(r.error)
-      r.readAsDataURL(f)
-    })
-    setRows((list) => list.map((r) => (r.key === fileFor.current ? { ...r, file: { name: f.name, data }, dirty: true } : r)))
-  }
-
-  const save = async () => {
-    if (saving) return
-    const todo = rows.filter(touched)
-    if (!todo.length) return toast('Type the details into the table first', 'error')
-    for (const [i, r] of todo.entries()) {
-      if (required && !r.vals[required]?.trim()) return toast(`Row ${i + 1}: ${def.cols.find((c) => c.key === required)?.label ?? required} is required`, 'error')
-      for (const f of fields) {
-        if (f.kind === 'money' && r.vals[f.key]?.trim() && Number.isNaN(parseFloat(r.vals[f.key].replace(/,/g, ''))))
-          return toast(`Row ${i + 1}: ${def.cols.find((c) => c.key === f.key)?.label ?? f.key} must be a number`, 'error')
-      }
-    }
-    setSaving(true)
-    try {
-      for (const r of todo) {
-        const values: Record<string, string> = {}
-        for (const [k, v] of Object.entries(r.vals)) values[k] = kindOf(k) === 'party' ? v.trim().toUpperCase() : v.trim()
-        if (fields.some((f) => f.kind === 'docno')) values.docNo = await nextDocNo(def.prefix ?? 'DOC')
-        for (const f of fields) if (f.kind === 'money' && values[f.key]) values[f.key] = (parseFloat(values[f.key].replace(/,/g, '')) || 0).toFixed(2)
-        if (r.file) {
-          values.attachment = r.file.data
-          values.attachmentName = r.file.name
-        }
-        // A vendor typed for the first time goes into the Party Master.
-        const vendor = values.vendorName
-        if (vendor && !(await db.suppliers.filter((s) => s.name.toUpperCase() === vendor).first())) {
-          await db.suppliers.add({ name: vendor, phone: values.phoneNo || undefined, notes: 'Added from ' + def.title })
-        }
-        await saveDoc(slug, values, undefined, user?.id)
-      }
-      toast(`${todo.length} record(s) saved`)
-      onClose()
-    } catch (e) {
-      toast(e instanceof Error ? e.message : String(e), 'error')
-    } finally {
-      setSaving(false)
-    }
-  }
-  useEffect(() => {
-    const key = (e: KeyboardEvent) => {
-      if (e.key === 'F2') {
-        e.preventDefault()
-        void save()
-      } else if (e.key === 'F3' || e.key === 'Escape') {
-        e.preventDefault()
-        onClose()
-      }
-    }
-    window.addEventListener('keydown', key)
-    return () => window.removeEventListener('keydown', key)
-  })
-
-  const cols = def.cols.filter((c) => c.label)
-  const total = cols.reduce((s, c) => s + c.width, 0) + 20 + 34
-  const filler = Math.max(0, 11 - rows.length)
-  const sum = rows.reduce((s, r) => s + (parseFloat((r.vals.total ?? '').replace(/,/g, '')) || 0), 0)
-  const cellInput = (r: EntryRow, c: Col, last: boolean) => {
-    const kind = kindOf(c.key)
-    const v = r.vals[c.key] ?? ''
-    if (kind === 'docno') return <span style={{ color: '#888' }}>(auto)</span>
-    if (kind === 'location')
-      return (
-        <select className="ma-input is-plain" style={{ width: '100%', height: 20, fontSize: 11 }} value={v} onChange={(e) => set(r.key, c.key, e.target.value)}>
-          {d.locations.map((l) => (
-            <option key={l}>{l}</option>
-          ))}
-        </select>
-      )
-    return (
-      <input
-        className="ma-input is-plain"
-        style={{ width: '100%', height: 20, padding: '0 3px', fontSize: 11, textAlign: c.align === 'right' ? 'right' : undefined, textTransform: kind === 'party' ? 'uppercase' : undefined }}
-        value={v}
-        list={kind === 'party' ? 'ma-entry-vendors' : undefined}
-        inputMode={kind === 'money' ? 'decimal' : undefined}
-        placeholder={(() => {
-          const f = fields.find((x) => x.key === c.key)
-          return f ? hintFor(f) : undefined
-        })()}
-        title={c.label}
-        onFocus={() => setSel(r.key)}
-        onChange={(e) => set(r.key, c.key, e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && last && r.key === rows[rows.length - 1].key) {
-            e.preventDefault()
-            addRow()
-          }
-        }}
-        aria-label={c.label}
-      />
-    )
-  }
-
-  return (
-    <div className="ma-panel-inner" style={{ paddingTop: 10 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 10, height: 30 }}>
-        <span className="ma-title" style={{ marginRight: 10 }}>
-          {def.title}
-        </span>
-        <IBtn lg title="Add Row" onClick={addRow}>
-          <PlusIcon />
-        </IBtn>
-        <span className="ma-label" style={{ marginLeft: 6, color: '#c00', fontWeight: 'bold' }}>
-          NEW ENTRY
-        </span>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, whiteSpace: 'nowrap' }}>
-        <Btn onClick={onClose}>
-          Back <span style={{ fontSize: 10, color: '#777' }}>(F3)</span>
-        </Btn>
-        <Btn onClick={() => void save()} disabled={saving}>
-          Save <span style={{ fontSize: 10, color: '#777' }}>(F2)</span>
-        </Btn>
-        <span style={{ borderLeft: '1px solid #c3c3c3', height: 20 }} />
-        <Btn onClick={addRow}>Add Row</Btn>
-        <Btn onClick={removeRow}>Remove Row</Btn>
-        <Btn
-          onClick={() => {
-            fileFor.current = sel
-            fileInput.current?.click()
-          }}
-        >
-          Upload Document
-        </Btn>
-        {def.importInvoice && (
-          <Btn onClick={upload.pick} disabled={upload.busy} title="Read the whole supplier invoice PDF instead of typing it">
-            {upload.busy ? 'Reading PDF…' : 'Upload Supplier Invoice (PDF)'}
-          </Btn>
-        )}
-        {upload.element}
-        <span className="ma-label" style={{ marginLeft: 6 }}>
-          Type each record into a row, or upload the supplier's PDF to receive every line at once.
-        </span>
-        <span style={{ marginLeft: 'auto', marginRight: 10 }}>
-          <Rows n={rows.filter(touched).length} />
-        </span>
-      </div>
-
-      <div style={{ marginTop: 4 }}>
-        <div className="ma-grid" style={{ height: 352 }}>
-          <table style={{ width: total, minWidth: total }}>
-            <colgroup>
-              <col style={{ width: 20 }} />
-              {cols.map((c) => (
-                <col key={c.key} style={{ width: c.width }} />
-              ))}
-              <col style={{ width: 34 }} />
-            </colgroup>
-            <thead>
-              <tr>
-                <th className="chk" />
-                {cols.map((c) => (
-                  <th key={c.key} className={c.align === 'right' ? 'r' : undefined} title={c.label}>
-                    {c.label}
-                    {c.key === required && <span className="ma-req">*</span>}
-                  </th>
-                ))}
-                <th title="Document">Doc</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.key} className={`is-data${sel === r.key ? ' is-selected' : ''}`} onClick={() => setSel(r.key)}>
-                  <td className="chk">
-                    <span className={`cbox${sel === r.key ? ' is-on' : ''}`} />
-                  </td>
-                  {cols.map((c, i) => (
-                    <td key={c.key} style={{ padding: '0 2px' }}>
-                      {cellInput(r, c, i === cols.length - 1)}
-                    </td>
-                  ))}
-                  <td style={{ textAlign: 'center' }}>
-                    <button
-                      type="button"
-                      className="ma-lookup"
-                      title={r.file ? `Attached: ${r.file.name} (click to replace)` : 'Attach supplier invoice / receipt'}
-                      onClick={() => {
-                        fileFor.current = r.key
-                        fileInput.current?.click()
-                      }}
-                      style={{ color: r.file ? '#2e7d32' : undefined, fontWeight: 'bold' }}
-                    >
-                      {r.file ? '✓' : '…'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {Array.from({ length: filler }, (_, i) => (
-                <tr key={`f${i}`} onClick={addRow} style={{ cursor: 'pointer' }}>
-                  <td className="chk" />
-                  {cols.map((c) => (
-                    <td key={c.key} />
-                  ))}
-                  <td />
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {def.hscroll && <HScroll thumb={def.hscroll} />}
-      </div>
-
-      {'total' in pristine && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8, marginRight: 10 }}>
-          <span className="ma-bold-label">TOTAL VALUE</span>
-          <b>{sum.toFixed(2)}</b>
-        </div>
-      )}
-
-      <datalist id="ma-entry-vendors">
-        {suppliers.map((s) => (
-          <option key={s.id} value={s.name.toUpperCase()} />
-        ))}
-      </datalist>
-      <input
-        ref={fileInput}
-        type="file"
-        accept="image/*,application/pdf"
-        style={{ display: 'none' }}
-        onChange={(e) => {
-          const f = e.target.files?.[0]
-          if (f) void pickFile(f)
-          e.target.value = ''
-        }}
-      />
-    </div>
   )
 }
 

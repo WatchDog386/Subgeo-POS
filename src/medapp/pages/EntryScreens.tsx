@@ -23,14 +23,14 @@ import { EyeIcon, MagnifierIcon } from '../icons'
 import { Btn, Check, DateField, Dialog, Grid, IBtn, Input, PickList, Rows, SearchBar, Select, type Col } from '../ui'
 
 /* ── Small shared pieces ───────────────────────────────────────────────── */
-const n = (s: string) => {
+export const n = (s: string) => {
   const v = parseFloat(String(s ?? '').replace(/,/g, ''))
   return Number.isFinite(v) ? v : 0
 }
-const c2 = (cents: number) => (cents / 100).toFixed(2)
+export const c2 = (cents: number) => (cents / 100).toFixed(2)
 const esc = (v: string) => v.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
 
-function RefreshGlyph() {
+export function RefreshGlyph() {
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden>
       <path d="M15.5 7A6.5 6.5 0 0 0 4 6" stroke="#888" strokeWidth="2.4" fill="none" />
@@ -51,7 +51,7 @@ function RoundGlyph({ kind }: { kind: 'x' | 'ok' | 'plus' }) {
     </svg>
   )
 }
-function DeleteX({ onClick, title }: { onClick: () => void; title: string }) {
+export function DeleteX({ onClick, title }: { onClick: () => void; title: string }) {
   return (
     <button type="button" onClick={onClick} title={title} aria-label={title} style={{ border: 0, background: 'none', cursor: 'pointer', color: '#e53935', fontSize: 18, fontWeight: 'bold', lineHeight: 1 }}>
       ✕
@@ -60,7 +60,7 @@ function DeleteX({ onClick, title }: { onClick: () => void; title: string }) {
 }
 
 /** Plain legacy text box sized for the line grids. */
-function Cell({ value, onChange, width, right, readOnly, placeholder, inputRef, onEnter, label }: { value: string; onChange?: (v: string) => void; width: number; right?: boolean; readOnly?: boolean; placeholder?: string; inputRef?: React.Ref<HTMLInputElement>; onEnter?: () => void; label?: string }) {
+export function Cell({ value, onChange, width, right, readOnly, placeholder, inputRef, onEnter, label }: { value: string; onChange?: (v: string) => void; width: number; right?: boolean; readOnly?: boolean; placeholder?: string; inputRef?: React.Ref<HTMLInputElement>; onEnter?: () => void; label?: string }) {
   return (
     <input
       ref={inputRef}
@@ -78,7 +78,7 @@ function Cell({ value, onChange, width, right, readOnly, placeholder, inputRef, 
   )
 }
 
-function LookupBtn({ onClick, title }: { onClick: () => void; title: string }) {
+export function LookupBtn({ onClick, title }: { onClick: () => void; title: string }) {
   return (
     <button type="button" className="ma-lookup" onClick={onClick} title={title} aria-label={title}>
       <MagnifierIcon size={13} />
@@ -86,7 +86,7 @@ function LookupBtn({ onClick, title }: { onClick: () => void; title: string }) {
   )
 }
 
-function SubTabs<T extends string>({ tabs, value, onChange }: { tabs: { id: T; label: string }[]; value: T; onChange: (t: T) => void }) {
+export function SubTabs<T extends string>({ tabs, value, onChange }: { tabs: { id: T; label: string }[]; value: T; onChange: (t: T) => void }) {
   return (
     <div className="ma-subtabs" style={{ paddingLeft: 6 }}>
       {tabs.map((t) => (
@@ -98,7 +98,7 @@ function SubTabs<T extends string>({ tabs, value, onChange }: { tabs: { id: T; l
   )
 }
 
-function EntryHeader({ title, adjust, onAdjust, onView, onRefresh }: { title: string; adjust?: string; onAdjust?: () => void; onView: () => void; onRefresh: () => void }) {
+export function EntryHeader({ title, adjust, onAdjust, onView, onRefresh }: { title: string; adjust?: string; onAdjust?: () => void; onView: () => void; onRefresh: () => void }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 12px 18px', height: 32 }}>
       <span className="ma-title" style={{ minWidth: 280 }}>
@@ -122,7 +122,7 @@ function EntryHeader({ title, adjust, onAdjust, onView, onRefresh }: { title: st
 }
 
 /** F2 save, F3 back, F7 new row. */
-function useEntryKeys(keys: { save: () => void; back: () => void; newRow?: () => void }) {
+export function useEntryKeys(keys: { save: () => void; back: () => void; newRow?: () => void }) {
   const ref = useRef(keys)
   ref.current = keys
   useEffect(() => {
@@ -144,11 +144,11 @@ function useEntryKeys(keys: { save: () => void; back: () => void; newRow?: () =>
   }, [])
 }
 
-const panel: CSSProperties = { border: '1px solid #c8c8c8', borderTop: 0, background: '#f6f5ef', minHeight: 360, padding: '10px 6px', overflowX: 'auto' }
-const head: CSSProperties = { fontSize: 11, color: '#333', paddingBottom: 6, whiteSpace: 'nowrap', textAlign: 'left' }
+export const panel: CSSProperties = { border: '1px solid #c8c8c8', borderTop: 0, background: '#f6f5ef', minHeight: 360, padding: '10px 6px', overflowX: 'auto' }
+export const head: CSSProperties = { fontSize: 11, color: '#333', paddingBottom: 6, whiteSpace: 'nowrap', textAlign: 'left' }
 
 /** Open a small print window with a formatted document. */
-function printSheet(title: string, rows: [string, string][], cols: string[], lines: string[][], foot: [string, string][]) {
+export function printSheet(title: string, rows: [string, string][], cols: string[], lines: string[][], foot: [string, string][]) {
   const w = window.open('', '_blank', 'width=900,height=700')
   if (!w) return false
   w.document.write(`<!doctype html><title>${esc(title)}</title><style>body{font:12px Arial;margin:24px}table{border-collapse:collapse;width:100%;margin-top:10px}td,th{border:1px solid #999;padding:4px 6px;text-align:left}h1{font-size:16px}.kv td{border:0;padding:2px 8px 2px 0}</style>
@@ -161,7 +161,7 @@ ${cols.length ? `<table><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join('')}</t
   return true
 }
 
-function openSms(phone: string | undefined, text: string) {
+export function openSms(phone: string | undefined, text: string) {
   window.open(`sms:${encodeURIComponent((phone ?? '').replace(/\s/g, ''))}?body=${encodeURIComponent(text)}`, '_blank')
 }
 
@@ -574,6 +574,18 @@ export function WholesaleEntry({ slug, def, editId, onClose }: { slug: string; d
         return toast(`${unknown.l.name} is not in the medicine list — pick it with the lookup so its stock moves`, 'error')
       }
     }
+    // Nothing is sold (or quoted) below a medicine's minimum selling price. Credit notes give money back: no floor.
+    if (rule.post >= 0) {
+      for (const { l, c } of filled) {
+        if (l.productId === undefined) continue
+        const p = products.find((x) => x.id === l.productId) ?? (await db.products.get(l.productId))
+        const each = (c.qty * c.rate - c.discount) / c.qty
+        if (p?.minPrice && each + 0.5 < p.minPrice) {
+          setTab('product')
+          return toast(`${p.name} cannot be sold below KES ${(p.minPrice / 100).toFixed(2)} (here ${(each / 100).toFixed(2)} each)`, 'error')
+        }
+      }
+    }
     const customer = (vals.customer ?? '').trim().toUpperCase()
     if (fields.some((f) => f.kind === 'party') && !customer) {
       setTab('customer')
@@ -866,7 +878,7 @@ export function WholesaleEntry({ slug, def, editId, onClose }: { slug: string; d
   )
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <>
       <label className="ma-label" style={{ textAlign: 'right', paddingRight: 14 }}>

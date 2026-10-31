@@ -24,7 +24,21 @@
    - *Utilities → Chemists* (today / month / stock value);
    - the reports (Daily Sales, Cash Collection, OTC Medicine Issue…);
    - the module registers.
-4. **Purchase** sees the stock after the sales in *Modules → Medicine* (column *Qty In Stock*), and *Home → To-Do List* shows what has run out.
+4. **Admin or purchase** correct the stock with *Modules → STOCK ADJUSTMENTS*:
+   - **Stock Adjust -** takes stock off (Expiry, Damage, Loss / Theft, Count Shortage…);
+   - **Stock Adjust +(DBH)** adds it (Opening Stock, Count Excess, Found…).
+   Both are also on *Home → Quick Access*. Each one is filed with its number, and the stock ledger records why.
+5. **Purchase** sees the stock after the sales in *Modules → Medicine* (column *Qty In Stock*), and *Home → To-Do List* shows what has run out.
+
+## Stock limits and the minimum selling price
+
+Set these for each medicine in *Modules → Medicine* (select it → edit), or on the *Inventory* screen:
+
+| Field | What it does |
+|---|---|
+| **Min Selling Price** | The lowest price the medicine may be sold for. Nothing can be sold below it: not by changing the price, a line discount, the Pharma % or a bill discount, on OTC bills, the Sell screen or whole-sale invoices. The retail and whole-sale prices, a GRN's Retail Price and a Stock Adjust +'s Selling Price can't be set below it either. |
+| **Re-order Level** | When stock falls to this, the medicine shows on the To-Do lists and the re-order report. |
+| **Max Level** | The most to hold. Re-order suggestions top up to this level, and receiving more than it (GRN or PDF upload) asks first. Leave it blank for no limit. |
 
 ## The twelve chemists (run once)
 

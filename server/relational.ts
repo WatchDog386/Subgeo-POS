@@ -12,7 +12,7 @@ import { chemCode } from '../src/db/seedData'
 type Rec = Record<string, unknown>
 
 /** Bump when the projection changes: the server rebuilds the tables on boot. */
-export const RELATIONAL_VERSION = 5
+export const RELATIONAL_VERSION = 6
 
 const int = (v: unknown, d: number | null = null): number | null => {
   const n = Number(v)
@@ -150,6 +150,8 @@ const PROJECTORS: Record<string, (id: number, d: Rec, scope: number) => void> = 
       price: int(d.price, 0),
       stock: int(d.stock, 0),
       reorder_level: int(d.reorderLevel, 0),
+      min_price: int(d.minPrice),
+      max_stock: int(d.maxStock),
       taxable: bool(d.taxable),
       serialized: bool(d.serialized, false),
       track_stock: bool(d.trackStock),

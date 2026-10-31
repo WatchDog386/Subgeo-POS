@@ -39,6 +39,17 @@ export const ADMIN_MODULE_GROUPS: MenuGroup[] = [
       { slug: 'party-master', label: 'Party Master' },
     ],
   },
+  {
+    label: 'STOCK ADJUSTMENTS',
+    items: [
+      { slug: 'stock-adjust-minus', label: 'Stock Adjust -' },
+      { slug: 'stock-adjust-plus', label: 'Stock Adjust +(DBH)' },
+      { slug: 'pur-grn-direct-invoice', label: 'Pur/GRN (Direct Invoice)' },
+      { slug: 'sales-quotation', label: 'Quotation Live' },
+      { slug: 'delivery-note', label: 'Quotation Issue Live' },
+      { slug: 'medicine', label: 'Medicine' },
+    ],
+  },
 ]
 
 export function adminModuleGroupOf(slug: string): MenuGroup | undefined {
@@ -81,13 +92,19 @@ const A = (module: string, label: string, to?: string, description = ''): Transa
 
 /** Quick Access rows in the admin home (role column shows Admin). */
 export const ADMIN_TRANSACTIONS: Transaction[] = [
+  A('STOCK ADJUSTMENTS', 'Stock Adjust -', '/modules/stock-adjust-minus', 'Take stock off: expiry, damage, loss, count shortage'),
+  A('STOCK ADJUSTMENTS', 'Stock Adjust +(DBH)', '/modules/stock-adjust-plus', 'Add stock: opening stock, count excess, found, returns'),
+  A('STOCK ADJUSTMENTS', 'Pur/GRN (Direct Invoice)', '/modules/pur-grn-direct-invoice', 'Receive a supplier invoice into stock (type it or upload the PDF)'),
+  A('STOCK ADJUSTMENTS', 'Quotation Live', '/modules/sales-quotation'),
+  A('STOCK ADJUSTMENTS', 'Quotation Issue Live', '/modules/delivery-note'),
+  A('STOCK ADJUSTMENTS', 'Medicine', '/modules/medicine', 'Medicine list: prices, minimum selling price, re-order and max levels'),
   A('', 'Purchase Indent', '/purchasing'),
   A('', 'Local Purchase Order', '/purchasing'),
   A('', 'Pur Inv/GRN', '/purchasing'),
   A('', 'Stock Transfers Request', '/inventory'),
   A('', 'Stock Transfer Internal', '/inventory'),
   A('', 'Stock Transfer Issue Internal', '/inventory'),
-  A('', 'Medicine', '/inventory'),
+  A('', 'Medicine', '/modules/medicine'),
   A('ACCOUNTS MASTERS', 'Party Master', '/modules/party-master'),
   A('', 'Services Master', '/modules/services-master'),
   A('', 'MOLECULAR NAME', '/inventory'),
@@ -112,7 +129,7 @@ export const ADMIN_TRANSACTIONS: Transaction[] = [
   A('', 'Movie Issue...', '/inventory'),
   A('', 'Movie Return...', '/inventory'),
   A('', 'Stock Entry (Opening)', '/inventory'),
-  A('', 'Stock Adjust -', '/inventory'),
+  A('', 'Stock Adjust -', '/modules/stock-adjust-minus'),
   A('ACCOUNTS', 'Receipt Voucher', '/customers'),
   A('', 'Payment Voucher', '/purchasing'),
   A('', 'Cash In / Out', '/shift'),

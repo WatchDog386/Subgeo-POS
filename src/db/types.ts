@@ -74,8 +74,13 @@ export interface Product {
   fitment: string[]
   cost: number
   price: number
+  /** Lowest price it may ever be sold for (cents); unset = no floor. */
+  minPrice?: number
   stock: number
+  /** Re-order when stock falls to this level (minimum stock). */
   reorderLevel: number
+  /** Most it should hold; re-orders top up to this. Unset = no limit. */
+  maxStock?: number
   supplierId?: number
   /** Shelf / bin location in the store room. */
   location?: string
@@ -335,6 +340,12 @@ export interface DocLine {
   srcSlug?: string
   srcDocNo?: string
   srcLine?: number
+  /** GRN lines: discount % and the extra "less discount" typed, and the selling price set. */
+  discPct?: number
+  less?: number
+  retail?: number
+  /** Stock adjustments: the type of adjustment, e.g. EXPIRY, OPENING STOCK. */
+  reason?: string
 }
 
 /** A task the admin (or anyone) assigns to staff of a chemist (Home → To-Do List). */
