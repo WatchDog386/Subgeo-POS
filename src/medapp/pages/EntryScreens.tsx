@@ -12,7 +12,7 @@ import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
 import { completeSale, refundSale } from '../../db/sales'
-import { getSettings, useSettings } from '../../db/settings'
+import { getSettings, nextNumber, useSettings } from '../../db/settings'
 import type { Customer, DocLine, DocRecord, Payment, Product, Sale, SaleLine } from '../../db/types'
 import { toCents } from '../../lib/money'
 import { printReceipt } from '../../lib/printReceipt'
@@ -153,7 +153,7 @@ function printSheet(title: string, rows: [string, string][], cols: string[], lin
   if (!w) return false
   w.document.write(`<!doctype html><title>${esc(title)}</title><style>body{font:12px Arial;margin:24px}table{border-collapse:collapse;width:100%;margin-top:10px}td,th{border:1px solid #999;padding:4px 6px;text-align:left}h1{font-size:16px}.kv td{border:0;padding:2px 8px 2px 0}</style>
 <h1>${esc(title)}</h1><table class="kv">${rows.map(([k, v]) => `<tr><td><b>${esc(k)}</b></td><td>${esc(v)}</td></tr>`).join('')}</table>
-<table><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join('')}</tr>${lines.map((l) => `<tr>${l.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</table>
+${cols.length ? `<table><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join('')}</tr>${lines.map((l) => `<tr>${l.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</table>` : ''}
 <table class="kv">${foot.map(([k, v]) => `<tr><td><b>${esc(k)}</b></td><td>${esc(v)}</td></tr>`).join('')}</table>`)
   w.document.close()
   w.focus()
@@ -488,6 +488,11 @@ export function WholesaleEntry({ slug, def, editId, onClose }: { slug: string; d
     })
   }, [editId, d.location]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** Phone of a customer by name (contact person's first). */
+  const contactFor = (name?: string) => {
+    const c = customers.find((x) => x.name.toUpperCase() === (name ?? '').trim().toUpperCase())
+    return c?.contactPhone || c?.phone || ''
+  }
   const calc = lines.map((l) => wCalc(l, settings.pricesIncludeVat))
   const sum = calc.reduce((s, c) => s + c.total, 0)
   const setLine = (key: string, patch: Partial<WLine>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)))
@@ -609,6 +614,7 @@ export function WholesaleEntry({ slug, def, editId, onClose }: { slug: string; d
       }
       const values: Record<string, string> = {
         ...vals,
+        contact: (vals.contact ?? '').trim() || contactFor(customer),
         customer,
         date: dmy(dateMs ?? Date.now()),
         total: c2(total),
@@ -633,7 +639,7 @@ export function WholesaleEntry({ slug, def, editId, onClose }: { slug: string; d
           docLines.map((l, i) => [String(i + 1), l.name, String(l.qty), c2(l.rate), c2(l.vat), c2(l.discount), c2(l.total), l.batch ?? '', l.expiry ?? '']),
           [['TOTAL', amt(total)]],
         )
-      if (sms) openSms(customers.find((c) => c.id === customerId)?.phone, `${d.companyName}: ${def.title} ${values.docNo ?? ''} for ${customer}, total KES ${c2(total)}.`)
+      if (sms) openSms(values.contact || customers.find((c) => c.id === customerId)?.phone, `${d.companyName}: ${def.title} ${values.docNo ?? ''} for ${customer}, total KES ${c2(total)}.`)
       onClose()
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), 'error')
@@ -774,6 +780,9 @@ export function WholesaleEntry({ slug, def, editId, onClose }: { slug: string; d
                 </Field>
               )
             })}
+            <Field label="Contact No">
+              <Input value={vals.contact ?? ''} onChange={(x) => setVals({ ...vals, contact: x })} width={140} placeholder={contactFor(vals.customer) || 'e.g. 0712 345 678'} />
+            </Field>
           </div>
           <datalist id="ma-entry-customers">
             {customers.map((c) => (
@@ -883,7 +892,7 @@ function ReceivableDialog({ customer, onClose }: { customer?: string; onClose: (
   )
 }
 
-/* ══════════════════════ OTC BILL / RETURN ═════════════════════════════════ */
+/* ══════════════════════ OTC BILL / RETURN / SERVICE BILL ══════════════════ */
 type OLine = {
   key: string
   productId?: number
@@ -912,31 +921,66 @@ const PAY_FIELDS = [
 ] as const
 type PayKey = (typeof PAY_FIELDS)[number][0]
 
-export function OtcEntry({ mode, fromSale, onClose }: { mode: 'bill' | 'return'; fromSale?: Sale; onClose: () => void }) {
+/** "Payable By" accounts of the legacy bill and the payment method each one means. */
+export const PAYABLE_BY: { label: string; method: Payment['method'] }[] = [
+  { label: 'CASH COLLECTION ACCOUNT', method: 'cash' },
+  { label: 'MPESA COLLECTION ACCOUNT', method: 'mpesa' },
+  { label: 'CREDIT CARD COLLECTION ACCOUNT', method: 'card' },
+  { label: 'CHEQUE COLLECTION ACCOUNT', method: 'cheque' },
+  { label: 'CREDIT ACCOUNT', method: 'account' },
+]
+
+type OtcMode = 'bill' | 'return' | 'service'
+
+/** Next number a bill / return / service bill will get (shown, not used up). */
+async function peekNumber(mode: OtcMode, d: { billPrefix: string; servicePrefix: string }): Promise<string> {
+  const key = mode === 'bill' ? 'seq:R' : mode === 'return' ? 'seq:RF' : 'seq:JOB'
+  const next = Number((await db.kv.get(key))?.value ?? 0) + 1
+  const yy = String(new Date().getFullYear()).slice(-2)
+  return mode === 'bill' ? `${d.billPrefix}-${next}-${yy}` : mode === 'return' ? `RTN-${next}-${yy}` : `${d.servicePrefix}-${next}-${yy}`
+}
+
+export function OtcEntry({ mode, fromSale, onClose }: { mode: OtcMode; fromSale?: Sale; onClose: () => void }) {
   const toast = useToast()
   const { user } = useSession()
   const d = useMedDefaults()
-  const products = useLiveQuery(() => db.products.filter((p) => p.active).toArray(), [], [] as Product[])
-  const customers = useLiveQuery(() => db.customers.toArray(), [], [] as Customer[])
   const isReturn = mode === 'return'
+  const isService = mode === 'service'
+  const products = useLiveQuery(() => db.products.filter((p) => p.active && (isService ? !p.trackStock : true)).toArray(), [isService], [] as Product[])
+  const customers = useLiveQuery(() => db.customers.toArray(), [], [] as Customer[])
   const [tab, setTab] = useState<'pay' | 'detail' | 'patient'>(isReturn ? 'pay' : 'detail')
-  const blank = (): OLine => ({ key: `${Date.now()}-${Math.random()}`, name: '', form: '', instruction: '', qty: '0.0', cost: '', price: '', disc: '0.0', batch: '', expiry: '', taxable: true })
+  const blank = (): OLine => ({ key: `${Date.now()}-${Math.random()}`, name: '', form: '', instruction: '', qty: isService ? '1' : '0.0', cost: '', price: '', disc: '0.0', batch: '', expiry: '', taxable: !isService })
   const [lines, setLines] = useState<OLine[]>([blank()])
   const [pay, setPay] = useState<Record<PayKey, string>>({ cash: '0.0', mpesa: '0.0', card: '0.0', cheque: '0.0' })
   const [refs, setRefs] = useState({ status: '', mpesa: '', card: '', cheque: '' })
-  const [patient, setPatient] = useState({ name: '', phone: '', narration: '' })
+  const emptyPatient = () => ({ location: d.location, category: d.patientCategory.toUpperCase(), payable: PAYABLE_BY[0].label, pharma: '0.00', narration: '', name: '', age: '', phone: '' })
+  const [patient, setPatient] = useState(emptyPatient)
+  const [number, setNumber] = useState('')
+  const [now, setNow] = useState(Date.now())
   const [jasper, setJasper] = useState(true)
   const [sms, setSms] = useState(false)
   const [all, setAll] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [pick, setPick] = useState<{ kind: 'product'; key: string } | { kind: 'patient' } | null>(null)
+  const [pick, setPick] = useState<{ kind: 'product'; key: string } | { kind: 'category' } | { kind: 'payable' } | { kind: 'location' } | null>(null)
   const [adjust, setAdjust] = useState(false)
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [])
+  useEffect(() => {
+    void peekNumber(mode, d).then(setNumber)
+  }, [mode, d.billPrefix, d.servicePrefix])
+  useEffect(() => {
+    // The chemist's location arrives a moment after the screen opens.
+    setPatient((p) => ({ ...p, location: p.location || d.location, category: p.category || d.patientCategory.toUpperCase() }))
+  }, [d.location, d.patientCategory])
 
   const reset = () => {
     setLines([blank()])
     setPay({ cash: '0.0', mpesa: '0.0', card: '0.0', cheque: '0.0' })
     setRefs({ status: '', mpesa: '', card: '', cheque: '' })
-    setPatient({ name: '', phone: '', narration: '' })
+    setPatient(emptyPatient())
     setAll(false)
   }
 
@@ -964,11 +1008,23 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: 'bill' | 'return';
         max,
       }
     })
+  const patientFromSale = async (s: Sale) => {
+    const c = s.customerId !== undefined ? await db.customers.get(s.customerId) : undefined
+    setPatient((p) => ({
+      ...p,
+      category: p.category && p.category !== d.patientCategory.toUpperCase() ? p.category : c?.name.toUpperCase() ?? p.category,
+      name: p.name || s.patientName || '',
+      age: p.age || s.patientAge || '',
+      phone: p.phone || s.patientPhone || c?.phone || '',
+      location: s.location || p.location,
+      payable: PAYABLE_BY.find((x) => x.method === s.payments[0]?.method)?.label ?? p.payable,
+    }))
+  }
   useEffect(() => {
     if (!fromSale || !isReturn) return
     const idx = fromSale.lines.map((_, i) => i).filter((i) => fromSale.lines[i].qty - (fromSale.lines[i].refundedQty ?? 0) > 0)
     setLines(linesFromSale(fromSale, idx, () => 0))
-    void db.customers.get(fromSale.customerId ?? -1).then((c) => c && setPatient((p) => ({ ...p, name: c.name.toUpperCase(), phone: c.phone ?? '' })))
+    void patientFromSale(fromSale)
     setTab('detail')
   }, [fromSale?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -978,7 +1034,10 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: 'bill' | 'return';
     const discount = toCents(l.disc || '0')
     return { qty, price, discount, cost: toCents(l.cost || '0'), amount: Math.max(0, Math.round(qty * price) - discount), totalCost: Math.round(qty * toCents(l.cost || '0')) }
   })
-  const bill = calc.reduce((s, c) => s + c.amount, 0)
+  const gross = calc.reduce((s, c) => s + c.amount, 0)
+  const pharmaPct = isReturn ? 0 : Math.min(100, Math.max(0, n(patient.pharma)))
+  const pharmaDisc = Math.round((gross * pharmaPct) / 100)
+  const bill = gross - pharmaDisc
   const paid = Object.fromEntries(PAY_FIELDS.map(([k]) => [k, toCents(pay[k] || '0')])) as Record<PayKey, number>
   const received = paid.cash + paid.mpesa + paid.card + paid.cheque
   const change = Math.max(0, received - bill)
@@ -992,7 +1051,7 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: 'bill' | 'return';
   const takeProduct = (key: string, p: Product) => {
     if (lines.some((l) => l.key !== key && l.productId === p.id)) return toast(`${p.name} is already on the bill — change its Qty`, 'error')
     const cur = lines.find((l) => l.key === key)
-    setLine(key, { productId: p.id, name: p.name, sku: p.sku, cost: c2(p.cost), price: c2(p.price), qty: cur && n(cur.qty) > 0 ? cur.qty : '1', taxable: p.taxable, batch: cur?.batch || p.location || '' })
+    setLine(key, { productId: p.id, name: p.name, sku: p.sku, cost: c2(p.cost), price: c2(p.price), qty: cur && n(cur.qty) > 0 ? cur.qty : '1', taxable: p.taxable, batch: cur?.batch || (isService ? '' : p.location || '') })
   }
   const typedName = (key: string, name: string) => {
     const p = products.find((x) => labelOf(x).toUpperCase() === name.trim().toUpperCase() || x.name.toUpperCase() === name.trim().toUpperCase())
@@ -1002,14 +1061,15 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: 'bill' | 'return';
 
   /* ADJUST OTC Medicine Issue/Bill (returns) */
   const loadBills = async (): Promise<AdjRow[]> => {
-    const sales = (await db.sales.filter((s) => !s.refundOf && s.status !== 'voided' && s.status !== 'refunded').toArray()).sort((a, b) => b.createdAt - a.createdAt).slice(0, 500)
+    const service = new Set((await db.jobs.toArray()).map((j) => j.saleId))
+    const sales = (await db.sales.filter((s) => !s.refundOf && s.status !== 'voided' && s.status !== 'refunded' && !service.has(s.id)).toArray()).sort((a, b) => b.createdAt - a.createdAt).slice(0, 500)
     const names = new Map(customers.map((c) => [c.id!, c.name.toUpperCase()]))
     const out: AdjRow[] = []
     for (const s of sales) {
       for (const [i, l] of s.lines.entries()) {
         const onForm = lines.filter((x) => x.saleId === s.id && x.saleLine === i).reduce((t, x) => t + n(x.qty), 0)
         const stock = l.productId ? (await db.products.get(l.productId))?.stock ?? 0 : 0
-        out.push({ key: `${s.id}#${i}`, docDate: dmy(s.createdAt), docNo: billNo(s, d.billPrefix), party: names.get(s.customerId ?? -1) ?? d.patientCategory, product: l.name, org: l.qty, avail: stock, pend: Math.max(0, l.qty - (l.refundedQty ?? 0) - onForm), batch: l.batch, expiry: l.expiry })
+        out.push({ key: `${s.id}#${i}`, docDate: dmy(s.createdAt), docNo: billNo(s, d.billPrefix), party: s.patientName || names.get(s.customerId ?? -1) || d.patientCategory, product: l.name, org: l.qty, avail: stock, pend: Math.max(0, l.qty - (l.refundedQty ?? 0) - onForm), batch: l.batch, expiry: l.expiry })
       }
     }
     return out
@@ -1025,47 +1085,76 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: 'bill' | 'return';
       add.push(...linesFromSale(s, [i], () => qty))
     }
     setLines((ls) => [...ls.filter((l) => l.name.trim()), ...add])
-    if (setBase && first?.customerId !== undefined) {
-      const c = await db.customers.get(first.customerId)
-      if (c) setPatient((p) => ({ ...p, name: p.name || c.name.toUpperCase(), phone: p.phone || c.phone || '' }))
-    }
+    if (setBase && first) await patientFromSale(first)
     setTab('detail')
   }
 
   const notes = () => [patient.narration.trim(), refs.status.trim() && `STATUS ${refs.status.trim().toUpperCase()}`].filter(Boolean).join(' · ') || undefined
+  const patientInfo = () => ({
+    location: patient.location.trim().toUpperCase() || undefined,
+    patientName: patient.name.trim().toUpperCase() || undefined,
+    patientAge: patient.age.trim() || undefined,
+    patientPhone: patient.phone.trim() || undefined,
+  })
+  const payableMethod = PAYABLE_BY.find((x) => x.label === patient.payable.trim().toUpperCase())?.method
+
+  /** The patient's account (Patient Category other than the walk-in category). */
+  const accountFor = async (): Promise<Customer | undefined> => {
+    const cat = patient.category.trim().toUpperCase()
+    if (!cat || cat === d.patientCategory.toUpperCase()) return undefined
+    const found = customers.find((c) => c.name.toUpperCase() === cat)
+    if (found) {
+      if (patient.phone.trim() && !found.phone) await db.customers.update(found.id!, { phone: patient.phone.trim() })
+      return found
+    }
+    const id = (await db.customers.add({ name: cat, phone: patient.phone.trim() || undefined, balance: 0, creditLimit: 0, createdAt: Date.now() } as Customer)) as number
+    return db.customers.get(id)
+  }
 
   const saveBill = async () => {
     const filled = lines.map((l, i) => ({ l, c: calc[i] })).filter(({ l }) => l.name.trim())
     if (!filled.length) {
       setTab('detail')
-      throw new Error('DETAIL: type or look up at least one medicine')
+      throw new Error(`DETAIL: type or look up at least one ${isService ? 'service' : 'medicine'}`)
     }
     const noQty = filled.find(({ c }) => c.qty <= 0)
     if (noQty) throw new Error(`${noQty.l.name}: enter the Qty`)
     const noPrice = filled.find(({ c }) => c.price <= 0)
-    if (noPrice) throw new Error(`${noPrice.l.name}: enter the Selling Price`)
-    if (paid.mpesa > 0 && !refs.mpesa.trim()) throw new Error('PAYMENT DETAILS: type the MPESA Number (confirmation code) for the M-Pesa amount')
-    if (paid.cheque > 0 && !refs.cheque.trim()) throw new Error('PAYMENT DETAILS: type the CHEQUE NO')
-    if (paid.mpesa + paid.card + paid.cheque > bill) throw new Error('Only cash can be more than the Bill Amount (the change is given in cash)')
-    const name = patient.name.trim().toUpperCase()
-    let customerId: number | undefined
-    if (name && name !== d.patientCategory.toUpperCase()) {
-      customerId = customers.find((c) => c.name.toUpperCase() === name)?.id ?? ((await db.customers.add({ name, phone: patient.phone.trim() || undefined, balance: 0, creditLimit: 0, createdAt: Date.now() } as Customer)) as number)
+    if (noPrice) throw new Error(`${noPrice.l.name}: enter the ${isService ? 'Rate' : 'Selling Price'}`)
+    if (!payableMethod) {
+      setTab('patient')
+      throw new Error('PATIENT INFORMATION: pick Payable By from the list')
     }
-    if (received === 0 && customerId === undefined) {
+    const customer = await accountFor()
+    // Nothing typed under PAYMENT: the whole bill goes to the Payable By account.
+    const entered = { ...paid }
+    const mpesaRef = refs.mpesa.trim().toUpperCase()
+    if (received === 0 && payableMethod !== 'account') entered[payableMethod as PayKey] = bill
+    const got = entered.cash + entered.mpesa + entered.card + entered.cheque
+    if (entered.mpesa > 0 && !mpesaRef) {
       setTab('pay')
-      throw new Error('PAYMENT DETAILS: enter what the patient paid (CASH, MPESA, CREDIT CARD or CHEQUE)')
+      throw new Error(`${isService ? 'PAYMENT' : 'PAYMENT DETAILS'}: type the MPESA Number (confirmation code from the SMS)`)
     }
-    if (received < bill && customerId === undefined) {
+    if (entered.cheque > 0 && !refs.cheque.trim()) {
       setTab('pay')
-      throw new Error(`Received ${amt(received)} is less than the Bill Amount ${amt(bill)}. Enter the rest, or name the patient (PATIENT INFORMATION) to put it on account.`)
+      throw new Error('Type the CHEQUE NO')
+    }
+    if (entered.mpesa + entered.card + entered.cheque > bill) throw new Error('Only cash can be more than the Bill Amount (the change is given in cash)')
+    const owing = Math.max(0, bill - got)
+    if (owing > 0) {
+      if (!customer) {
+        setTab(received ? 'pay' : 'patient')
+        throw new Error(`${amt(owing)} is not paid. Enter the payment, or set Patient Category to the customer whose account it goes on.`)
+      }
+      if (customer.blacklisted) throw new Error(`${customer.name} is blacklisted in the Party Master — take the full payment`)
+      if (customer.billType === 'PAY NOW') throw new Error(`${customer.name} is PAY NOW in the Party Master — take the full payment`)
     }
     const payments: Payment[] = []
-    if (paid.cash > 0) payments.push({ method: 'cash', amount: paid.cash })
-    if (paid.mpesa > 0) payments.push({ method: 'mpesa', amount: paid.mpesa, reference: refs.mpesa.trim().toUpperCase() })
-    if (paid.card > 0) payments.push({ method: 'card', amount: paid.card, reference: refs.card.trim() || undefined })
-    if (paid.cheque > 0) payments.push({ method: 'cheque', amount: paid.cheque, reference: refs.cheque.trim() })
-    if (received < bill) payments.push({ method: 'account', amount: bill - received })
+    if (entered.cash > 0) payments.push({ method: 'cash', amount: entered.cash })
+    if (entered.mpesa > 0) payments.push({ method: 'mpesa', amount: entered.mpesa, reference: mpesaRef })
+    if (entered.card > 0) payments.push({ method: 'card', amount: entered.card, reference: refs.card.trim() || undefined })
+    if (entered.cheque > 0) payments.push({ method: 'cheque', amount: entered.cheque, reference: refs.cheque.trim() })
+    if (owing > 0) payments.push({ method: 'account', amount: owing })
     const saleLines: SaleLine[] = filled.map(({ l, c }) => ({
       productId: l.productId,
       name: l.name.trim().toUpperCase(),
@@ -1080,8 +1169,26 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: 'bill' | 'return';
       batch: l.batch.trim() || undefined,
       expiry: l.expiry.trim() || undefined,
     }))
-    const sale = await completeSale({ lines: saleLines, discount: 0, payments, customerId, userId: user!.id ?? 0, note: notes() })
-    toast(`Bill ${billNo(sale, d.billPrefix)} issued${sale.change ? ` — change ${amt(sale.change)}` : ''}`)
+    const sale = await completeSale({ lines: saleLines, discount: pharmaDisc, payments, customerId: customer?.id, userId: user!.id ?? 0, note: notes(), patient: patientInfo() })
+    if (isService) {
+      // The Service Request/Bill register lists service jobs; this one is billed and done.
+      const jobNo = await nextNumber('JOB')
+      await db.jobs.add({
+        jobNo,
+        customerId: customer?.id,
+        customerName: (patient.name.trim() || customer?.name || d.patientCategory).toUpperCase(),
+        phone: patient.phone.trim() || customer?.phone,
+        complaint: patient.narration.trim() || saleLines.map((l) => l.name).join(', '),
+        lines: saleLines,
+        labour: 0,
+        status: 'collected',
+        mechanic: user!.name,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        saleId: sale.id,
+      })
+      toast(`Service bill ${d.servicePrefix}-${Number(jobNo.split('-').pop())}-${String(new Date().getFullYear()).slice(-2)} saved${sale.change ? ` — change ${amt(sale.change)}` : ''}`)
+    } else toast(`Bill ${billNo(sale, d.billPrefix)} issued${sale.change ? ` — change ${amt(sale.change)}` : ''}`)
     return sale
   }
 
@@ -1095,7 +1202,8 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: 'bill' | 'return';
     if (loose) throw new Error(`${loose.l.name} is not from a bill — use ADJUST OTC Medicine Issue/Bill`)
     const over = filled.find(({ l, c }) => c.qty > (l.max ?? 0))
     if (over) throw new Error(`${over.l.name}: only ${over.l.max} can still be returned`)
-    const method = (PAY_FIELDS.find(([k]) => paid[k] > 0)?.[0] ?? 'cash') as Payment['method']
+    // Money goes back the way typed under PAYMENT DETAILS, else by Payable By.
+    const method = (PAY_FIELDS.find(([k]) => paid[k] > 0)?.[0] ?? payableMethod ?? 'cash') as Payment['method']
     const bySale = new Map<number, Record<number, number>>()
     for (const { l, c } of filled) {
       const m = bySale.get(l.saleId!) ?? {}
@@ -1103,10 +1211,12 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: 'bill' | 'return';
       bySale.set(l.saleId!, m)
     }
     let last: Sale | undefined
+    let back = 0
     for (const [saleId, qtyByLine] of bySale) {
-      last = await refundSale(saleId, { qtyByLine, restock: true, method, userId: user!.id ?? 0, reason: notes() })
+      last = await refundSale(saleId, { qtyByLine, restock: true, method, userId: user!.id ?? 0, reason: notes(), patient: patientInfo() })
+      back += -last.total
     }
-    toast(`Return recorded — ${amt(filled.reduce((s, { c }) => s + c.amount, 0))} back to the patient (${method.toUpperCase()})`)
+    toast(`Return recorded — ${amt(back)} back to the patient (${method === 'account' ? 'credited to the account' : method.toUpperCase()})`)
     return last
   }
 
@@ -1126,25 +1236,30 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: 'bill' | 'return';
   }
   useEntryKeys({ save: () => void save(), back: onClose, newRow: addRow })
 
-  const account = isReturn ? 'OTC MEDICINE RETURN' : 'OTC MEDICINE ISSUE'
+  const account = isReturn ? 'OTC MEDICINE RETURN' : isService ? 'OP service Bill' : 'OTC MEDICINE ISSUE'
   const W = { name: 140, form: 55, instr: 145, qty: 50, cost: 55, tcost: 70, price: 70, disc: 70, amt: 70, batch: 95, exp: 95 }
   const payLabelStyle: CSSProperties = { textAlign: 'right', paddingRight: 14 }
   const readOnlyPrice = isReturn
-  const title = isReturn ? 'OTC Medicine Isse Return' : 'OTC Medicine Issue/Bill'
+  const title = isReturn ? 'OTC Medicine Isse Return' : isService ? 'Service Request/Bill' : 'OTC Medicine Issue/Bill'
   const summary = useMemo(() => ({ bill, received, change }), [bill, received, change])
+  const tabs = isService
+    ? [
+        { id: 'detail' as const, label: 'DETAIL' },
+        { id: 'pay' as const, label: 'PAYMENT' },
+        { id: 'patient' as const, label: 'PATIENT INFORMATION' },
+      ]
+    : [
+        { id: 'pay' as const, label: 'PAYMENT DETAILS' },
+        { id: 'detail' as const, label: 'DETAIL' },
+        { id: 'patient' as const, label: 'PATIENT INFORMATION' },
+      ]
+  const time = new Date(now)
+  const pad2 = (x: number) => String(x).padStart(2, '0')
 
   return (
     <div className="ma-panel-inner" style={{ paddingTop: 10 }}>
       <EntryHeader title={title} adjust={isReturn ? 'OTC Medicine Issue/Bill' : undefined} onAdjust={() => setAdjust(true)} onView={onClose} onRefresh={reset} />
-      <SubTabs
-        tabs={[
-          { id: 'pay', label: 'PAYMENT DETAILS' },
-          { id: 'detail', label: 'DETAIL' },
-          { id: 'patient', label: 'PATIENT INFORMATION' },
-        ]}
-        value={tab}
-        onChange={setTab}
-      />
+      <SubTabs tabs={tabs} value={tab} onChange={setTab} />
       {tab === 'pay' && (
         <div style={{ ...panel, paddingTop: 40, display: 'flex', gap: 60 }}>
           <div className="ma-form" style={{ gridTemplateColumns: '110px 80px', rowGap: 8, alignSelf: 'flex-start', alignContent: 'start' }}>
@@ -1170,6 +1285,9 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: 'bill' | 'return';
             <span style={payLabelStyle} className="ma-label">Change To Be Return</span>
             <Cell value={c2(isReturn ? 0 : summary.change)} width={75} right readOnly label="Change To Be Return" />
           </div>
+          <div className="ma-label" style={{ alignSelf: 'flex-end', maxWidth: 260, whiteSpace: 'normal' }}>
+            {isReturn ? 'Type the amount under the way the money goes back, or leave it all 0.0 to use Payable By.' : 'Leave everything at 0.0 to put the whole bill on the Payable By account (PATIENT INFORMATION).'}
+          </div>
         </div>
       )}
       {tab === 'detail' && (
@@ -1180,62 +1298,98 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: 'bill' | 'return';
             </span>
             <Btn onClick={addRow}>NEW ROW(F7)</Btn>
           </div>
-          <table style={{ borderCollapse: 'separate', borderSpacing: '6px 4px' }}>
-            <thead>
-              <tr>
-                {[['S NO', 30], ['Medicine Name', W.name + 26], ['Type', W.form], ['Instruction', W.instr], ['Qty', W.qty], ['Cost Rate', W.cost], ['Total Cost', W.tcost], ['Selling Price', W.price], ['Disc', W.disc], ['Amount', W.amt], ['Batch No', W.batch], ['Exp Dt', W.exp], ['', 20]].map(([h, w]) => (
-                  <th key={String(h) || 'x'} style={{ ...head, width: w as number }}>
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {lines.map((l, i) => {
-                const c = calc[i]
-                return (
-                  <tr key={l.key} style={{ verticalAlign: 'top' }}>
-                    <td style={{ fontSize: 11, paddingTop: 4 }}>{i + 1}</td>
+          {isService ? (
+            <table style={{ borderCollapse: 'separate', borderSpacing: '6px 4px' }}>
+              <thead>
+                <tr>
+                  {[['S NO', 30], ['Service', 166], ['Qty', 50], ['Rate', 100], ['Amount', 75], ['', 20]].map(([h, w]) => (
+                    <th key={String(h) || 'x'} style={{ ...head, width: w as number }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((l, i) => (
+                  <tr key={l.key}>
+                    <td style={{ fontSize: 11 }}>{i + 1}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>
-                      <input
-                        className="ma-input"
-                        style={{ width: W.name, borderColor: !l.name && i === 0 ? '#e57373' : undefined }}
-                        value={l.name}
-                        list="ma-otc-products"
-                        placeholder={isReturn ? 'Use ADJUST to pick' : 'Type or look up'}
-                        aria-label="Medicine Name"
-                        readOnly={isReturn}
-                        onChange={(e) => typedName(l.key, e.target.value)}
-                      />
-                      {!isReturn && <LookupBtn title="Look up a medicine" onClick={() => setPick({ kind: 'product', key: l.key })} />}
+                      <input className="ma-input" style={{ width: 140 }} value={l.name} list="ma-otc-products" placeholder="Type or look up" aria-label="Service" onChange={(e) => typedName(l.key, e.target.value)} />
+                      <LookupBtn title="Look up a service (Services Master)" onClick={() => setPick({ kind: 'product', key: l.key })} />
                     </td>
-                    <td><Cell value={l.form} onChange={(v) => setLine(l.key, { form: v.toUpperCase() })} width={W.form} placeholder="TAB" label="Type" /></td>
-                    <td>
-                      <textarea className="ma-input" style={{ width: W.instr, height: 42, resize: 'vertical', fontSize: 11 }} value={l.instruction} placeholder="e.g. 1 x 3 for 5 days" aria-label="Instruction" onChange={(e) => setLine(l.key, { instruction: e.target.value })} />
-                    </td>
-                    <td><Cell value={l.qty} onChange={(v) => setLine(l.key, { qty: v })} width={W.qty} right label="Qty" placeholder={l.max !== undefined ? `max ${l.max}` : undefined} /></td>
-                    <td><Cell value={l.cost} onChange={(v) => setLine(l.key, { cost: v })} width={W.cost} right readOnly={readOnlyPrice} label="Cost Rate" /></td>
-                    <td><Cell value={c2(c.totalCost)} width={W.tcost} right readOnly label="Total Cost" /></td>
-                    <td><Cell value={l.price} onChange={(v) => setLine(l.key, { price: v })} width={W.price} right readOnly={readOnlyPrice} label="Selling Price" /></td>
-                    <td><Cell value={l.disc} onChange={(v) => setLine(l.key, { disc: v })} width={W.disc} right readOnly={readOnlyPrice} label="Disc" /></td>
-                    <td><Cell value={c2(c.amount)} width={W.amt} right readOnly label="Amount" /></td>
-                    <td><Cell value={l.batch} onChange={(v) => setLine(l.key, { batch: v.toUpperCase() })} width={W.batch} placeholder="Batch no." label="Batch No" /></td>
-                    <td><Cell value={l.expiry} onChange={(v) => setLine(l.key, { expiry: v })} width={W.exp} placeholder="dd-mm-yyyy" label="Exp Dt" /></td>
-                    <td>
-                      <DeleteX title="Remove this row" onClick={() => setLines((ls) => (ls.length > 1 ? ls.filter((x) => x.key !== l.key) : [blank()]))} />
-                    </td>
+                    <td><Cell value={l.qty} onChange={(v) => setLine(l.key, { qty: v })} width={50} right label="Qty" /></td>
+                    <td><Cell value={l.price} onChange={(v) => setLine(l.key, { price: v })} width={100} right label="Rate" placeholder="Charge per service" /></td>
+                    <td><Cell value={c2(calc[i].amount)} width={75} right readOnly label="Amount" /></td>
+                    <td>{lines.length > 1 && <DeleteX title="Remove this row" onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))} />}</td>
                   </tr>
-                )
-              })}
-              <tr>
-                <td style={{ fontSize: 11 }}>SUM</td>
-                <td colSpan={8} />
-                <td>
-                  <Cell value={c2(bill)} width={W.amt} right readOnly label="SUM" />
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                ))}
+                <tr>
+                  <td style={{ fontSize: 11 }}>SUM</td>
+                  <td colSpan={3} />
+                  <td>
+                    <Cell value={c2(gross)} width={75} right readOnly label="SUM" />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          ) : (
+            <table style={{ borderCollapse: 'separate', borderSpacing: '6px 4px' }}>
+              <thead>
+                <tr>
+                  {[['S NO', 30], ['Medicine Name', W.name + 26], ['Type', W.form], ['Instruction', W.instr], ['Qty', W.qty], ['Cost Rate', W.cost], ['Total Cost', W.tcost], ['Selling Price', W.price], ['Disc', W.disc], ['Amount', W.amt], ['Batch No', W.batch], ['Exp Dt', W.exp], ['', 20]].map(([h, w]) => (
+                    <th key={String(h) || 'x'} style={{ ...head, width: w as number }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((l, i) => {
+                  const c = calc[i]
+                  return (
+                    <tr key={l.key} style={{ verticalAlign: 'top' }}>
+                      <td style={{ fontSize: 11, paddingTop: 4 }}>{i + 1}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        <input
+                          className="ma-input"
+                          style={{ width: W.name, borderColor: !l.name && i === 0 ? '#e57373' : undefined }}
+                          value={l.name}
+                          list="ma-otc-products"
+                          placeholder={isReturn ? 'Use ADJUST to pick' : 'Type or look up'}
+                          aria-label="Medicine Name"
+                          readOnly={isReturn}
+                          onChange={(e) => typedName(l.key, e.target.value)}
+                        />
+                        {!isReturn && <LookupBtn title="Look up a medicine" onClick={() => setPick({ kind: 'product', key: l.key })} />}
+                      </td>
+                      <td><Cell value={l.form} onChange={(v) => setLine(l.key, { form: v.toUpperCase() })} width={W.form} placeholder="TAB" label="Type" /></td>
+                      <td>
+                        <textarea className="ma-input" style={{ width: W.instr, height: 42, resize: 'vertical', fontSize: 11 }} value={l.instruction} placeholder="e.g. 1 x 3 for 5 days" aria-label="Instruction" onChange={(e) => setLine(l.key, { instruction: e.target.value })} />
+                      </td>
+                      <td><Cell value={l.qty} onChange={(v) => setLine(l.key, { qty: v })} width={W.qty} right label="Qty" placeholder={l.max !== undefined ? `max ${l.max}` : undefined} /></td>
+                      <td><Cell value={l.cost} onChange={(v) => setLine(l.key, { cost: v })} width={W.cost} right readOnly={readOnlyPrice} label="Cost Rate" /></td>
+                      <td><Cell value={c2(c.totalCost)} width={W.tcost} right readOnly label="Total Cost" /></td>
+                      <td><Cell value={l.price} onChange={(v) => setLine(l.key, { price: v })} width={W.price} right readOnly={readOnlyPrice} label="Selling Price" /></td>
+                      <td><Cell value={l.disc} onChange={(v) => setLine(l.key, { disc: v })} width={W.disc} right readOnly={readOnlyPrice} label="Disc" /></td>
+                      <td><Cell value={c2(c.amount)} width={W.amt} right readOnly label="Amount" /></td>
+                      <td><Cell value={l.batch} onChange={(v) => setLine(l.key, { batch: v.toUpperCase() })} width={W.batch} placeholder="Batch no." label="Batch No" /></td>
+                      <td><Cell value={l.expiry} onChange={(v) => setLine(l.key, { expiry: v })} width={W.exp} placeholder="dd-mm-yyyy" label="Exp Dt" /></td>
+                      <td>
+                        <DeleteX title="Remove this row" onClick={() => setLines((ls) => (ls.length > 1 ? ls.filter((x) => x.key !== l.key) : [blank()]))} />
+                      </td>
+                    </tr>
+                  )
+                })}
+                <tr>
+                  <td style={{ fontSize: 11 }}>SUM</td>
+                  <td colSpan={8} />
+                  <td>
+                    <Cell value={c2(gross)} width={W.amt} right readOnly label="SUM" />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          )}
           <datalist id="ma-otc-products">
             {products.map((p) => (
               <option key={p.id} value={labelOf(p)} />
@@ -1244,30 +1398,68 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: 'bill' | 'return';
         </div>
       )}
       {tab === 'patient' && (
-        <div style={{ ...panel, paddingTop: 30 }}>
-          <div className="ma-form" style={{ gridTemplateColumns: '130px 300px', rowGap: 8 }}>
-            <Field label="Patient Category">
+        <div style={{ ...panel, paddingTop: 34, display: 'flex', gap: 40 }}>
+          <div className="ma-form" style={{ gridTemplateColumns: '130px 220px', rowGap: 8, alignSelf: 'flex-start', alignContent: 'start' }}>
+            <Field label="Location">
               <span style={{ display: 'inline-flex' }}>
-                <input className="ma-input" style={{ width: 220 }} value={patient.name} list="ma-otc-patients" placeholder={`Blank = ${d.patientCategory}; or the patient's name`} onChange={(e) => setPatient({ ...patient, name: e.target.value.toUpperCase() })} aria-label="Patient" />
-                <LookupBtn title="Look up a patient / customer" onClick={() => setPick({ kind: 'patient' })} />
+                <Input value={patient.location} onChange={(v) => setPatient({ ...patient, location: v.toUpperCase() })} width={140} placeholder="Stock location" />
+                <LookupBtn title="Pick a location" onClick={() => setPick({ kind: 'location' })} />
               </span>
             </Field>
-            <Field label="Phone">
-              <Input value={patient.phone} onChange={(v) => setPatient({ ...patient, phone: v })} width={140} placeholder="e.g. 0712 345 678" />
+            <Field label={isReturn ? 'Return No.' : 'Bill No.'}>
+              <Input value={number || '(auto)'} readOnly width={100} />
             </Field>
+            <Field label="Date">
+              <Input value={dmy(now, '/')} readOnly width={84} />
+            </Field>
+            <Field label="Patient Category">
+              <span style={{ display: 'inline-flex' }}>
+                <input className="ma-input" style={{ width: 140 }} value={patient.category} list="ma-otc-patients" placeholder={`${d.patientCategory}, or the account holder`} aria-label="Patient Category" onChange={(e) => setPatient({ ...patient, category: e.target.value.toUpperCase() })} />
+                <LookupBtn title="Look up a customer account" onClick={() => setPick({ kind: 'category' })} />
+              </span>
+            </Field>
+            <Field label="Payable By">
+              <span style={{ display: 'inline-flex' }}>
+                <input className="ma-input" style={{ width: 140 }} value={patient.payable} list="ma-otc-payable" placeholder="Account the bill goes to" aria-label="Payable By" onChange={(e) => setPatient({ ...patient, payable: e.target.value.toUpperCase() })} />
+                <LookupBtn title="Pick how it is paid" onClick={() => setPick({ kind: 'payable' })} />
+              </span>
+            </Field>
+            <Field label="Pharma %">
+              <Input value={isReturn ? '0.00' : patient.pharma} onChange={(v) => setPatient({ ...patient, pharma: v })} width={75} readOnly={isReturn} style={{ textAlign: 'right' }} placeholder="Discount %" />
+            </Field>
+            <span />
+            <span className="ma-label" style={{ fontSize: 10 }}>
+              {isReturn ? 'Any bill discount is shared out on the return automatically.' : pharmaDisc ? `Discount ${amt(pharmaDisc)} off ${amt(gross)}` : 'Discount on the whole bill, e.g. 5'}
+            </span>
             <Field label="Narration">
-              <Input value={patient.narration} onChange={(v) => setPatient({ ...patient, narration: v })} width={260} placeholder={isReturn ? 'Why it is returned' : 'Note on the bill (optional)'} />
+              <textarea className="ma-input" style={{ width: 200, height: 44, resize: 'vertical' }} value={patient.narration} placeholder={isReturn ? 'Why it is returned' : isService ? 'What was done (optional)' : 'Note on the bill (optional)'} aria-label="Narration" onChange={(e) => setPatient({ ...patient, narration: e.target.value })} />
             </Field>
-            <Field label="Location">
-              <Input value={d.location} readOnly width={160} />
+          </div>
+          <div className="ma-form" style={{ gridTemplateColumns: '110px 160px', rowGap: 8, alignSelf: 'flex-start', alignContent: 'start' }}>
+            <Field label="Patient Name">
+              <Input value={patient.name} onChange={(v) => setPatient({ ...patient, name: v })} width={150} placeholder="Who the medicine is for" />
+            </Field>
+            <Field label="Age">
+              <Input value={patient.age} onChange={(v) => setPatient({ ...patient, age: v })} width={100} placeholder="e.g. 34 or 6 MONTHS" />
+            </Field>
+            <Field label="Contact No">
+              <Input value={patient.phone} onChange={(v) => setPatient({ ...patient, phone: v })} width={100} placeholder="e.g. 0712 345 678" />
             </Field>
             <Field label="User Name">
-              <Input value={user?.name.toUpperCase() ?? ''} readOnly width={160} />
+              <Input value={user?.name.toUpperCase() ?? ''} readOnly width={100} />
+            </Field>
+            <Field label="Time">
+              <Input value={`${pad2(time.getHours())} : ${pad2(time.getMinutes())} : ${pad2(time.getSeconds())}`} readOnly width={100} />
             </Field>
           </div>
           <datalist id="ma-otc-patients">
             {customers.map((c) => (
               <option key={c.id} value={c.name.toUpperCase()} />
+            ))}
+          </datalist>
+          <datalist id="ma-otc-payable">
+            {PAYABLE_BY.map((p) => (
+              <option key={p.label} value={p.label} />
             ))}
           </datalist>
         </div>
@@ -1308,7 +1500,7 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: 'bill' | 'return';
 
       {pick?.kind === 'product' && (
         <PickList
-          title="Medicine"
+          title={isService ? 'Service' : 'Medicine'}
           options={[...products].sort((a, b) => a.name.localeCompare(b.name)).map(labelOf)}
           onClose={() => setPick(null)}
           onPick={(v) => {
@@ -1318,19 +1510,222 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: 'bill' | 'return';
           }}
         />
       )}
-      {pick?.kind === 'patient' && (
+      {pick?.kind === 'category' && (
         <PickList
-          title="Patient / Customer"
-          options={customers.map((c) => c.name.toUpperCase())}
+          title="Patient Category"
+          options={[d.patientCategory.toUpperCase(), ...customers.map((c) => c.name.toUpperCase())]}
           onClose={() => setPick(null)}
           onPick={(v) => {
             const c = customers.find((x) => x.name.toUpperCase() === v)
-            setPatient({ ...patient, name: v, phone: patient.phone || c?.phone || '' })
+            setPatient({ ...patient, category: v, phone: patient.phone || c?.phone || '', payable: c && c.billType !== 'PAY NOW' && !c.blacklisted ? 'CREDIT ACCOUNT' : patient.payable })
             setPick(null)
           }}
         />
       )}
+      {pick?.kind === 'payable' && (
+        <PickList title="Payable By" options={PAYABLE_BY.map((p) => p.label)} onClose={() => setPick(null)} onPick={(v) => { setPatient({ ...patient, payable: v }); setPick(null) }} />
+      )}
+      {pick?.kind === 'location' && (
+        <PickList title="Location" options={d.locations} onClose={() => setPick(null)} onPick={(v) => { setPatient({ ...patient, location: v }); setPick(null) }} />
+      )}
       {adjust && <AdjustmentDialog sources={[{ value: 'otc-bill', label: 'OTC Bill' }]} load={() => loadBills()} onApply={(p, b) => void applyBills(p, b)} onClose={() => setAdjust(false)} />}
+    </div>
+  )
+}
+
+/* ══════════════════════ PARTY MASTER ══════════════════════════════════════ */
+const PARTY_TYPES = ['CUSTOMER', 'SUPPLIERS'] as const
+const BILL_TYPES = ['PAY LATER', 'PAY NOW'] as const
+
+/** Customer or supplier card (Party Master → +). Writes the real customers / suppliers tables. */
+export function PartyEntry({ party, onClose }: { party?: { kind: 'customer' | 'supplier'; id: number }; onClose: () => void }) {
+  const toast = useToast()
+  const d = useMedDefaults()
+  const customers = useLiveQuery(() => db.customers.toArray(), [], [] as Customer[])
+  const suppliers = useLiveQuery(() => db.suppliers.toArray(), [], [])
+  const empty = { name: '', type: 'CUSTOMER', blacklisted: 'NO', address: '', poBox: '', phone: '', kraPin: '', email: '', contactPerson: '', contactPhone: '', groupAccount: '', billType: 'PAY LATER', creditLimit: '0.00' }
+  const [f, setF] = useState(empty)
+  const [loaded, setLoaded] = useState(!party)
+  const [jasper, setJasper] = useState(true)
+  const [sms, setSms] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [pick, setPick] = useState<'type' | 'group' | 'bill' | null>(null)
+  const set = (k: keyof typeof empty) => (v: string) => setF((x) => ({ ...x, [k]: v }))
+
+  useEffect(() => {
+    if (!party) return
+    void (party.kind === 'supplier' ? db.suppliers.get(party.id) : db.customers.get(party.id)).then((r) => {
+      if (!r) return toast('That party no longer exists', 'error')
+      const c = r as Customer
+      setF({
+        name: r.name,
+        type: party.kind === 'supplier' ? 'SUPPLIERS' : 'CUSTOMER',
+        blacklisted: r.blacklisted || /blacklist/i.test(r.notes ?? '') ? 'YES' : 'NO',
+        address: r.address ?? r.notes ?? '',
+        poBox: r.poBox ?? '',
+        phone: r.phone ?? '',
+        kraPin: r.kraPin ?? '',
+        email: r.email ?? '',
+        contactPerson: r.contactPerson ?? '',
+        contactPhone: r.contactPhone ?? '',
+        groupAccount: r.groupAccount ?? '',
+        billType: r.billType ?? 'PAY LATER',
+        creditLimit: party.kind === 'customer' ? c2(c.creditLimit ?? 0) : '0.00',
+      })
+      setLoaded(true)
+    })
+  }, [party?.id, party?.kind]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const isSupplier = f.type === 'SUPPLIERS'
+  const groups = [...new Set(['SUNDRY DEBTORS', 'SUNDRY CREDITORS', ...[...customers, ...suppliers].map((p) => (p.groupAccount ?? '').toUpperCase()).filter(Boolean)])]
+
+  const save = async () => {
+    if (saving || !loaded) return
+    const name = f.name.trim().toUpperCase()
+    if (!name) return toast('Facilty Name is required', 'error')
+    if (!PARTY_TYPES.includes(f.type as (typeof PARTY_TYPES)[number])) return toast('Type must be CUSTOMER or SUPPLIERS (use the lookup)', 'error')
+    if (!BILL_TYPES.includes(f.billType as (typeof BILL_TYPES)[number])) return toast('Bill Type must be PAY LATER or PAY NOW (use the lookup)', 'error')
+    if (f.email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim())) return toast('Email Address does not look right, e.g. orders@clinic.co.ke', 'error')
+    const clash = (isSupplier ? suppliers : customers).find((p) => p.name.toUpperCase() === name && !(party && p.id === party.id && (party.kind === 'supplier') === isSupplier))
+    if (clash) return toast(`${name} is already in the Party Master`, 'error')
+    const rec = {
+      name,
+      phone: f.phone.trim() || undefined,
+      email: f.email.trim() || undefined,
+      address: f.address.trim() || undefined,
+      poBox: f.poBox.trim() || undefined,
+      kraPin: f.kraPin.trim().toUpperCase() || undefined,
+      contactPerson: f.contactPerson.trim().toUpperCase() || undefined,
+      contactPhone: f.contactPhone.trim() || undefined,
+      groupAccount: f.groupAccount.trim().toUpperCase() || (isSupplier ? 'SUNDRY CREDITORS' : 'SUNDRY DEBTORS'),
+      billType: f.billType as 'PAY LATER' | 'PAY NOW',
+      blacklisted: f.blacklisted === 'YES',
+    }
+    setSaving(true)
+    try {
+      if (isSupplier) {
+        if (party?.kind === 'supplier') await db.suppliers.update(party.id, rec)
+        else await db.suppliers.add(rec)
+      } else {
+        const creditLimit = toCents(f.creditLimit || '0')
+        if (party?.kind === 'customer') await db.customers.update(party.id, { ...rec, creditLimit })
+        else await db.customers.add({ ...rec, balance: 0, creditLimit, createdAt: Date.now() } as Customer)
+      }
+      toast(`${name} saved`)
+      if (jasper)
+        printSheet(
+          `${d.companyName} — Party Master`,
+          [
+            ['Facilty Name', name],
+            ['Type', f.type],
+            ['Group Account', rec.groupAccount],
+            ['Bill Type', rec.billType],
+            ['Blacklisted', f.blacklisted],
+            ['Address', rec.address ?? ''],
+            ['P.O Box No', rec.poBox ?? ''],
+            ['Tel No', rec.phone ?? ''],
+            ['KRA PIN', rec.kraPin ?? ''],
+            ['Email Address', rec.email ?? ''],
+            ['Contact Person', rec.contactPerson ?? ''],
+            ['Contacts No', rec.contactPhone ?? ''],
+          ],
+          [],
+          [],
+          [],
+        )
+      if (sms) openSms(rec.contactPhone ?? rec.phone, `${d.companyName}: your details are saved with us. Thank you.`)
+      onClose()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+  useEntryKeys({ save: () => void save(), back: onClose })
+
+  return (
+    <div className="ma-panel-inner" style={{ paddingTop: 10 }}>
+      <EntryHeader title={`Party Master${party ? ` — ${f.name}` : ''}`} onView={onClose} onRefresh={() => !party && setF(empty)} />
+      <SubTabs tabs={[{ id: 'header', label: 'HEADER' }]} value="header" onChange={() => {}} />
+      <div style={{ ...panel, paddingTop: 34, display: 'flex', gap: 40 }}>
+        <div className="ma-form" style={{ gridTemplateColumns: '140px 220px', rowGap: 8, alignSelf: 'flex-start', alignContent: 'start' }}>
+          <Field label="Facilty Name">
+            <input className="ma-input" style={{ width: 200, borderColor: f.name.trim() ? undefined : '#e57373' }} value={f.name} autoFocus placeholder="Name as it should print" aria-label="Facilty Name" onChange={(e) => set('name')(e.target.value.toUpperCase())} />
+          </Field>
+          <Field label="Type">
+            <span style={{ display: 'inline-flex' }}>
+              <input className="ma-input" style={{ width: 140 }} value={f.type} list="ma-party-types" readOnly={!!party} placeholder="CUSTOMER or SUPPLIERS" aria-label="Type" onChange={(e) => set('type')(e.target.value.toUpperCase())} />
+              {!party && <LookupBtn title="Pick the type" onClick={() => setPick('type')} />}
+            </span>
+          </Field>
+          <Field label="Blacklisted (Yes/No)">
+            <Select value={f.blacklisted} onChange={set('blacklisted')} options={['NO', 'YES']} width={75} />
+          </Field>
+          <Field label="Address">
+            <textarea className="ma-input" style={{ width: 190, height: 44, resize: 'vertical' }} value={f.address} placeholder="Street / building, town" aria-label="Address" onChange={(e) => set('address')(e.target.value)} />
+          </Field>
+          <Field label="P.O Box No">
+            <Input value={f.poBox} onChange={set('poBox')} width={100} placeholder="e.g. 1234-00100" />
+          </Field>
+          <Field label="Tel No">
+            <Input value={f.phone} onChange={set('phone')} width={200} placeholder="e.g. 0712 345 678" />
+          </Field>
+          <Field label="KRA PIN">
+            <Input value={f.kraPin} onChange={(v) => set('kraPin')(v.toUpperCase())} width={100} placeholder="e.g. P051234567X" />
+          </Field>
+          {!isSupplier && (
+            <Field label="Credit Limit">
+              <Input value={f.creditLimit} onChange={set('creditLimit')} width={100} style={{ textAlign: 'right' }} placeholder="0.00 = no limit" />
+            </Field>
+          )}
+        </div>
+        <div className="ma-form" style={{ gridTemplateColumns: '110px 220px', rowGap: 8, alignSelf: 'flex-start', alignContent: 'start' }}>
+          <Field label="Email Address">
+            <Input value={f.email} onChange={set('email')} width={200} placeholder="e.g. orders@clinic.co.ke" />
+          </Field>
+          <Field label="Contact Person">
+            <Input value={f.contactPerson} onChange={set('contactPerson')} width={200} placeholder="Who to talk to" />
+          </Field>
+          <Field label="Contacts No">
+            <Input value={f.contactPhone} onChange={set('contactPhone')} width={200} placeholder="Contact person's phone" />
+          </Field>
+          <Field label="Group Account">
+            <span style={{ display: 'inline-flex' }}>
+              <input className="ma-input" style={{ width: 140 }} value={f.groupAccount} list="ma-party-groups" placeholder={isSupplier ? 'SUNDRY CREDITORS' : 'SUNDRY DEBTORS'} aria-label="Group Account" onChange={(e) => set('groupAccount')(e.target.value.toUpperCase())} />
+              <LookupBtn title="Pick a group account" onClick={() => setPick('group')} />
+            </span>
+          </Field>
+          <Field label="Bill Type">
+            <span style={{ display: 'inline-flex' }}>
+              <input className="ma-input" style={{ width: 140 }} value={f.billType} list="ma-party-bill" placeholder="PAY LATER or PAY NOW" aria-label="Bill Type" onChange={(e) => set('billType')(e.target.value.toUpperCase())} />
+              <LookupBtn title="Pick the bill type" onClick={() => setPick('bill')} />
+            </span>
+          </Field>
+          <span />
+          <span className="ma-label" style={{ fontSize: 10, whiteSpace: 'normal' }}>
+            PAY LATER may take goods on account; PAY NOW and blacklisted parties must pay in full.
+          </span>
+        </div>
+        <datalist id="ma-party-types">{PARTY_TYPES.map((t) => <option key={t} value={t} />)}</datalist>
+        <datalist id="ma-party-groups">{groups.map((g) => <option key={g} value={g} />)}</datalist>
+        <datalist id="ma-party-bill">{BILL_TYPES.map((t) => <option key={t} value={t} />)}</datalist>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, paddingLeft: 190 }}>
+        <Btn onClick={onClose}>Back (F3)</Btn>
+        <Btn onClick={() => void save()} disabled={saving || !loaded}>
+          Save (F2)
+        </Btn>
+        <span style={{ width: 380 }} />
+        <Check checked={jasper} onChange={setJasper} dark title="Print the party card after saving">
+          Jasper Print?
+        </Check>
+        <Check checked={sms} onChange={setSms} dark title="Open an SMS to the party after saving">
+          Send Sms
+        </Check>
+      </div>
+      {pick === 'type' && <PickList title="Type" options={[...PARTY_TYPES]} onClose={() => setPick(null)} onPick={(v) => { set('type')(v); setPick(null) }} />}
+      {pick === 'group' && <PickList title="Group Account" options={groups} onClose={() => setPick(null)} onPick={(v) => { set('groupAccount')(v); setPick(null) }} />}
+      {pick === 'bill' && <PickList title="Bill Type" options={[...BILL_TYPES]} onClose={() => setPick(null)} onPick={(v) => { set('billType')(v); setPick(null) }} />}
     </div>
   )
 }

@@ -47,6 +47,18 @@ export interface Supplier {
   phone?: string
   email?: string
   notes?: string
+  /** Party Master details. */
+  address?: string
+  poBox?: string
+  kraPin?: string
+  contactPerson?: string
+  /** Phone of the contact person. */
+  contactPhone?: string
+  /** Ledger group, e.g. SUNDRY DEBTORS / SUNDRY CREDITORS. */
+  groupAccount?: string
+  /** PAY LATER = may take goods on account; PAY NOW = must pay on the spot. */
+  billType?: 'PAY LATER' | 'PAY NOW'
+  blacklisted?: boolean
 }
 
 export interface Product {
@@ -90,6 +102,18 @@ export interface Customer {
   balance: number
   creditLimit: number
   notes?: string
+  /** Party Master details. */
+  address?: string
+  poBox?: string
+  kraPin?: string
+  contactPerson?: string
+  /** Phone of the contact person. */
+  contactPhone?: string
+  /** Ledger group, e.g. SUNDRY DEBTORS / SUNDRY CREDITORS. */
+  groupAccount?: string
+  /** PAY LATER = may take goods on account; PAY NOW = must pay on the spot. */
+  billType?: 'PAY LATER' | 'PAY NOW'
+  blacklisted?: boolean
   createdAt: number
 }
 
@@ -145,6 +169,11 @@ export interface Sale {
   refundOf?: number
   /** Chemist that issued it, as printed on the receipt, e.g. "CHEM2 - SCL KAYOLE". */
   branch?: string
+  /** PATIENT INFORMATION of OTC / service bills. */
+  location?: string
+  patientName?: string
+  patientAge?: string
+  patientPhone?: string
 }
 
 export interface ParkedSale {

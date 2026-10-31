@@ -22,6 +22,8 @@ export interface CheckoutInput {
   userId: number
   shiftId?: number
   note?: string
+  /** PATIENT INFORMATION typed on the OTC / service bill. */
+  patient?: Pick<Sale, 'location' | 'patientName' | 'patientAge' | 'patientPhone'>
 }
 
 /**
@@ -67,6 +69,7 @@ export async function completeSale(input: CheckoutInput): Promise<Sale> {
       status: 'completed',
       note: input.note,
       branch,
+      ...input.patient,
     }
     sale.id = await db.sales.add(sale)
 
@@ -104,6 +107,7 @@ export interface RefundRequest {
   userId: number
   shiftId?: number
   reason?: string
+  patient?: Pick<Sale, 'location' | 'patientName' | 'patientAge' | 'patientPhone'>
 }
 
 /** Refund some or all lines of a sale. Creates a negative sale record for reporting. */
@@ -153,6 +157,7 @@ export async function refundSale(saleId: number, req: RefundRequest): Promise<Sa
       note: req.reason,
       refundOf: original.id,
       branch,
+      ...req.patient,
     }
     refund.id = await db.sales.add(refund)
 

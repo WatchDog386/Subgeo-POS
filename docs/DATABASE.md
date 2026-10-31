@@ -19,7 +19,8 @@ internet or the server is down.
 - **Migrations:** `server/migrations/*.sql`. They run on server start and with
   `npm run db:migrate`. `004_relational.sql` creates the relational tables;
   `005_document_lines.sql` adds document lines, cheque payments and the OTC
-  line details.
+  line details; `006_party_patient.sql` adds the Party Master details and the
+  patient on bills.
 - **Rebuild:** `npm run db:rebuild` empties the relational tables and rebuilds
   them from `sync_records`. It is safe to run at any time; the tills don't notice.
   The server also rebuilds by itself after an update that changes how records
@@ -39,7 +40,7 @@ internet or the server is down.
 | `branches` | The chemists: number (1 → `CHEM1`), name, location, phone, active | — |
 | `users` | Staff: user name, name, role (`owner` = admin, `manager`, `cashier`, `purchase`), chemist, active. Password hashes are **not** copied here. | `branch_id → branches` (NULL for the admin) |
 | `categories` | Medicine groups | — |
-| `suppliers` | Vendors / suppliers (Party Master, suppliers) | — |
+| `suppliers` | Vendors / suppliers (Party Master): phone, email, address, P.O box, KRA PIN, contact person and number, group account, bill type, blacklisted | — |
 | `staff_messages` | Messages between staff (*Messages* page) | `from_id`, `to_id → users` (to NULL = everyone) |
 | `staff_message_reads` | Who has opened which message | `message_id → staff_messages`, `user_id → users` |
 
@@ -49,10 +50,10 @@ internet or the server is down.
 |---|---|---|
 | `products` | Medicines and services: SKU, barcode, prices, stock, re-order level | `category_id → categories`, `supplier_id → suppliers` |
 | `stock_movements` | Every stock change: sale, refund, receive, adjust, damage, count, transfer | `product_id → products`, `user_id → users` |
-| `customers` | Customers / debtors and what they owe | — |
+| `customers` | Customers / debtors and what they owe, with the same Party Master details as suppliers | — |
 | `shifts` | Day shifts: float, counted and expected cash | `user_id → users` |
 | `shift_cash_movements` | Cash in / out during a shift | `shift_id → shifts` |
-| `sales` | Bills and refunds (a refund has a negative total) | `customer_id`, `user_id`, `shift_id`, `refund_of → sales` |
+| `sales` | Bills and refunds (a refund has a negative total), with the PATIENT INFORMATION: patient name, age, contact, location | `customer_id`, `user_id`, `shift_id`, `refund_of → sales` |
 | `sale_lines` | Medicines on a bill, with type (dosage form), instruction, batch and expiry | `sale_id → sales`, `product_id → products` |
 | `sale_payments` | How a bill was paid: cash, mpesa, card, cheque, account (with the M-Pesa code / card or cheque no.) | `sale_id → sales` |
 | `parked_sales`, `parked_sale_lines` | Bills put on hold at the till | `customer_id`, `user_id`, `product_id` |
@@ -140,7 +141,8 @@ the server refuses a change, the till puts the server's copy back and shows
 | Delivery Note | goes **out** | — |
 | Whole Sale Invoice | goes out, except lines adjusted from a delivery note (already out) | **charged** the invoice total |
 | Credit Note / Credit Note - Direct Invoice | comes **back** | **credited** the total |
-| OTC Medicine Issue/Bill | goes out | the unpaid part, when a patient is named |
+| OTC Medicine Issue/Bill | goes out | the unpaid part, when Patient Category is a customer (not for PAY NOW or blacklisted parties) |
+| Service Request/Bill | — (services carry no stock) | as the OTC bill; also files a service request in its register |
 | OTC Medicine Isse Return | comes back | the refund goes out in cash / M-Pesa / card / cheque |
 
 Editing a document undoes its old stock and account effects before the new

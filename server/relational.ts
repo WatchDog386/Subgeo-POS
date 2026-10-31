@@ -12,7 +12,7 @@ import { chemCode } from '../src/db/seedData'
 type Rec = Record<string, unknown>
 
 /** Bump when the projection changes: the server rebuilds the tables on boot. */
-export const RELATIONAL_VERSION = 2
+export const RELATIONAL_VERSION = 3
 
 const int = (v: unknown, d: number | null = null): number | null => {
   const n = Number(v)
@@ -70,6 +70,18 @@ const first = (v: Record<string, string>, keys: string[]) => {
   return null
 }
 
+/** Party Master columns shared by customers and suppliers. */
+const partyCols = (d: Rec) => ({
+  address: str(d.address),
+  po_box: str(d.poBox),
+  kra_pin: str(d.kraPin),
+  contact_person: str(d.contactPerson),
+  contact_phone: str(d.contactPhone),
+  group_account: str(d.groupAccount),
+  bill_type: d.billType === 'PAY NOW' || d.billType === 'PAY LATER' ? d.billType : null,
+  blacklisted: bool(d.blacklisted, false),
+})
+
 const byName = (table: 'suppliers' | 'customers', name: string | null, scope?: number): number | null => {
   if (!name) return null
   const row = (table === 'suppliers'
@@ -103,7 +115,7 @@ const PROJECTORS: Record<string, (id: number, d: Rec, scope: number) => void> = 
       phone: str(d.phone),
     }),
   categories: (id, d) => upsert('categories', { id, name: str(d.name) ?? '', color: str(d.color) }),
-  suppliers: (id, d) => upsert('suppliers', { id, name: str(d.name) ?? '', phone: str(d.phone), email: str(d.email), notes: str(d.notes) }),
+  suppliers: (id, d) => upsert('suppliers', { id, name: str(d.name) ?? '', phone: str(d.phone), email: str(d.email), notes: str(d.notes), ...partyCols(d) }),
   messages: (id, d) => {
     upsert('staff_messages', {
       id,
@@ -156,6 +168,7 @@ const PROJECTORS: Record<string, (id: number, d: Rec, scope: number) => void> = 
       credit_limit: int(d.creditLimit, 0),
       notes: str(d.notes),
       created_at: int(d.createdAt, 0),
+      ...partyCols(d),
     }),
   shifts: (id, d, scope) => {
     upsert('shifts', {
@@ -196,6 +209,10 @@ const PROJECTORS: Record<string, (id: number, d: Rec, scope: number) => void> = 
       refund_of: int(d.refundOf) === id ? null : ref('sales', d.refundOf),
       branch_label: str(d.branch),
       note: str(d.note),
+      location: str(d.location),
+      patient_name: str(d.patientName),
+      patient_age: str(d.patientAge),
+      patient_phone: str(d.patientPhone),
     })
     replaceChildren(
       'sale_lines',

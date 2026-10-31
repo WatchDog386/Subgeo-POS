@@ -202,6 +202,32 @@ describe('relational company database', () => {
     expect((await purchase.db.db.messages.get(id))?.body).toBe('Friday 6pm')
   })
 
+  it('stores Party Master details and the patient on a bill', async () => {
+    const cid = (await cashier.db.db.customers.add({ name: 'ABC CLINIC', phone: '0711000000', contactPerson: 'DR OTIENO', contactPhone: '0722000000', kraPin: 'P051234567X', poBox: '12-00100', groupAccount: 'SUNDRY DEBTORS', billType: 'PAY LATER', blacklisted: false, balance: 0, creditLimit: 0, createdAt: Date.now() })) as number
+    const pid = (await cashier.db.db.products.add(product('IBU200', 5))) as number
+    const sale = await cashier.sales.completeSale({
+      lines: [{ productId: pid, name: 'Med IBU200', sku: 'IBU200', qty: 1, unitPrice: 120_00, unitCost: 50_00, discount: 0, taxable: true, instruction: '1 x 3' }],
+      discount: 0,
+      payments: [{ method: 'cheque', amount: 120_00, reference: 'CHQ 0042' }],
+      customerId: cid,
+      userId: cashier.user.id,
+      patient: { patientName: 'JANE W', patientAge: '34', patientPhone: '0733000000', location: 'MAIN STORE' },
+    })
+    await cashier.sync.syncNow()
+    expect(one('SELECT contact_person, contact_phone, kra_pin, po_box, group_account, bill_type, blacklisted FROM customers WHERE id = ?', cid)).toEqual({
+      contact_person: 'DR OTIENO',
+      contact_phone: '0722000000',
+      kra_pin: 'P051234567X',
+      po_box: '12-00100',
+      group_account: 'SUNDRY DEBTORS',
+      bill_type: 'PAY LATER',
+      blacklisted: 0,
+    })
+    expect(one('SELECT patient_name, patient_age, patient_phone, location FROM sales WHERE id = ?', sale.id)).toEqual({ patient_name: 'JANE W', patient_age: '34', patient_phone: '0733000000', location: 'MAIN STORE' })
+    expect(one('SELECT method, reference FROM sale_payments WHERE sale_id = ?', sale.id)).toEqual({ method: 'cheque', reference: 'CHQ 0042' })
+    expect(one('SELECT instruction FROM sale_lines WHERE sale_id = ?', sale.id)).toEqual({ instruction: '1 x 3' })
+  })
+
   it('sets references to NULL when a parent is deleted, never losing history', async () => {
     await cashier.db.db.products.delete(productId)
     await new Promise((r) => setTimeout(r, 20))

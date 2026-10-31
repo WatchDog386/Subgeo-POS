@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
-import type { Customer, DocLine, Product, Sale, ServiceJob, Supplier } from '../../db/types'
+import type { DocLine, Product, Sale, ServiceJob, Supplier } from '../../db/types'
 import { toCents } from '../../lib/money'
 import { useSession } from '../../session'
 import { useToast } from '../../components/ui'
@@ -24,7 +24,7 @@ import {
   yy,
 } from '../data'
 import { MODULE_GROUPS } from '../nav'
-import { OtcEntry, WHOLESALE_RULES, WholesaleEntry } from './EntryScreens'
+import { OtcEntry, PartyEntry, WHOLESALE_RULES, WholesaleEntry } from './EntryScreens'
 import {
   EyeIcon,
   FindIcon,
@@ -118,6 +118,8 @@ const DEFS: Record<string, ModuleDef> = {
       C('billNo', 'Bill No.', 100),
       C('date', 'Date', 98),
       C('category', 'Patient Category', 200),
+      C('patient', 'Patient Name', 150),
+      C('contact', 'Contact No', 110),
       C('payable', 'Payable By', 190),
       C('narration', 'Narration', 200),
       C('amount', 'Bill Amount', 75, 'right'),
@@ -132,8 +134,11 @@ const DEFS: Record<string, ModuleDef> = {
     yellowChk: true,
     tools: BASE_TOOLS,
     cols: [
+      C('returnNo', 'Return No.', 100),
       C('date', 'Date', 100),
       C('category', 'Patient Category', 200),
+      C('patient', 'Patient Name', 150),
+      C('contact', 'Contact No', 110),
       C('payable', 'Payable By', 190),
       C('narration', 'Narration', 200),
       C('amount', 'Bill Amount', 75, 'right'),
@@ -149,6 +154,7 @@ const DEFS: Record<string, ModuleDef> = {
     cols: [
       C('billNo', 'SERV Bill No', 100),
       C('patient', 'Patient Name', 150),
+      C('contact', 'Contact No', 110),
       C('location', 'Location', 190),
       C('category', 'Patient Category', 190),
       C('amount', 'Bill Amount', 75, 'right'),
@@ -164,7 +170,7 @@ const DEFS: Record<string, ModuleDef> = {
     source: 'docs',
     prefix: 'SQ',
     tools: ['mail', 'add', 'list', 'note', 'chat', 'edit', 'copyAll', 'print', 'scanner', 'fax', 'download', 'docs'],
-    cols: [C('location', 'Location', 200), C('docNo', 'Quote.No', 100), C('date', 'Date', 75), C('customer', 'Customer Name', 190), C('user', 'User', 410)],
+    cols: [C('location', 'Location', 200), C('docNo', 'Quote.No', 100), C('date', 'Date', 75), C('customer', 'Customer Name', 190), C('contact', 'Contact No', 110), C('total', 'Total', 75, 'right'), C('user', 'User', 225)],
     fields: [
       { key: 'location', kind: 'location' },
       { key: 'docNo', kind: 'docno' },
@@ -182,6 +188,7 @@ const DEFS: Record<string, ModuleDef> = {
       C('location', 'Location', 200),
       C('date', 'Date', 75),
       C('customer', 'Customer Name', 190),
+      C('contact', 'Contact No', 110),
       C('invoiceNo', 'Invoice No', 100),
       C('docNo', 'Delivery No.', 100),
       C('quoteNo', 'Quote.No', 100),
@@ -209,6 +216,7 @@ const DEFS: Record<string, ModuleDef> = {
       C('docNo', 'Return No', 100),
       C('date', 'Date', 75),
       C('customer', 'Organization Name', 190),
+      C('contact', 'Contact No', 110),
       C('quoteNo', 'Quotation No', 100),
       C('user', 'User', 100),
       C('total', 'Net Amt', 75, 'right'),
@@ -230,7 +238,7 @@ const DEFS: Record<string, ModuleDef> = {
     source: 'docs',
     prefix: 'WSI',
     tools: ['mail', 'add', 'list', 'note', 'chat', 'edit', 'globe', 'copyAll', 'print', 'scanner', 'fax', 'download', 'docs'],
-    cols: [C('location', 'Location', 200), C('quoteNo', 'Quote.No', 100), C('date', 'Date', 75), C('customer', 'Customer Name', 190), C('user', 'User', 100), C('_', '', 310)],
+    cols: [C('location', 'Location', 200), C('quoteNo', 'Quote.No', 100), C('date', 'Date', 75), C('customer', 'Customer Name', 190), C('contact', 'Contact No', 110), C('total', 'Total', 75, 'right'), C('user', 'User', 100), C('_', '', 125)],
     fields: [
       { key: 'location', kind: 'location' },
       { key: 'docNo', kind: 'docno' },
@@ -246,7 +254,7 @@ const DEFS: Record<string, ModuleDef> = {
     source: 'docs',
     prefix: 'CRN',
     tools: BASE_TOOLS,
-    cols: [C('location', 'Location', 200), C('docNo', 'CR Note.No', 100), C('date', 'Date', 75), C('customer', 'Customer Name', 190), C('partyId', 'Party ID', 75), C('user', 'User', 100), C('_', '', 235)],
+    cols: [C('location', 'Location', 200), C('docNo', 'CR Note.No', 100), C('date', 'Date', 75), C('customer', 'Customer Name', 190), C('contact', 'Contact No', 110), C('partyId', 'Party ID', 75), C('total', 'Total', 75, 'right'), C('user', 'User', 100), C('_', '', 50)],
     fields: [
       { key: 'location', kind: 'location' },
       { key: 'docNo', kind: 'docno' },
@@ -267,6 +275,7 @@ const DEFS: Record<string, ModuleDef> = {
       C('date', 'Date', 100),
       C('advDetails', 'Adv Details', 250),
       C('customer', 'Received From', 200),
+      C('contact', 'Contact No', 110),
       C('depositTo', 'Deposit To', 200),
       C('docNo', 'Receipt No', 100),
       C('total', 'Total', 75, 'right'),
@@ -296,6 +305,10 @@ const DEFS: Record<string, ModuleDef> = {
       C('pobox', 'P.O Box No', 100),
       C('phone', 'Telephone', 110),
       C('email', 'Email', 160),
+      C('contactPerson', 'Contact Person', 150),
+      C('contactPhone', 'Contacts No', 110),
+      C('kraPin', 'KRA PIN', 110),
+      C('billType', 'Bill Type', 90),
     ],
   },
   'services-master': {
@@ -314,6 +327,7 @@ const DEFS: Record<string, ModuleDef> = {
       C('docNo', 'Payment Vouche', 95),
       C('voucherDate', 'Voucher Date', 100),
       C('supplierName', 'Supplier Name', 215),
+      C('contact', 'Contact No', 110),
       C('fromAccount', 'From Account', 250),
       C('refNo', 'REF NO#', 100),
       C('ref', 'REF', 250),
@@ -365,6 +379,7 @@ const DEFS: Record<string, ModuleDef> = {
       C('indentDate', 'Indent Date', 205),
       C('docNo', 'PO No', 190),
       C('vendorName', 'Vendor Name', 210),
+      C('contact', 'Contact No', 110),
       C('address', 'Address', 220),
     ],
     fields: [
@@ -534,6 +549,12 @@ function useRows(slug: string, def: ModuleDef): RawRow[] {
     [def.source],
     [] as ServiceJob[],
   )
+  // Bills raised from a Service Request belong to that register, not the OTC list.
+  const serviceSaleIds = useLiveQuery(
+    async () => (def.source === 'otc' ? new Set((await db.jobs.toArray()).map((j) => j.saleId).filter((x): x is number => x !== undefined)) : new Set<number>()),
+    [def.source],
+    new Set<number>(),
+  )
   const jobSales = useLiveQuery(
     async () => {
       const ids = jobs.map((j) => j.saleId).filter((x): x is number => x !== undefined)
@@ -542,19 +563,28 @@ function useRows(slug: string, def: ModuleDef): RawRow[] {
     [jobs],
     [] as (Sale | undefined)[],
   )
-  const suppliers = useLiveQuery(() => (def.source === 'party' ? db.suppliers.toArray() : Promise.resolve([] as Supplier[])), [def.source], [] as Supplier[])
+  // Suppliers: the Party Master list, and the contact numbers of vendors on documents.
+  const suppliers = useLiveQuery(() => db.suppliers.toArray(), [], [] as Supplier[])
   const services = useLiveQuery(
     () => (def.source === 'services' ? db.products.filter((p) => !p.trackStock).toArray() : Promise.resolve([] as Product[])),
     [def.source],
     [] as Product[],
   )
   const uname = (id?: number) => (id !== undefined ? users.get(id)?.name.toUpperCase() ?? '' : '')
+  /** Contact number of a party by name: contact person's phone, else its own phone. */
+  const contactOf = (name?: string) => {
+    const n = (name ?? '').trim().toUpperCase()
+    if (!n) return ''
+    const p = [...customers.values()].find((c) => c.name.toUpperCase() === n) ?? suppliers.find((x) => x.name.toUpperCase() === n)
+    return p?.contactPhone || p?.phone || ''
+  }
+  const custPhone = (id?: number) => (id !== undefined ? customers.get(id)?.contactPhone || customers.get(id)?.phone || '' : '')
 
   return useMemo(() => {
     switch (def.source) {
       case 'otc':
         return sales
-          .filter((s) => !s.refundOf)
+          .filter((s) => !s.refundOf && !serviceSaleIds.has(s.id!))
           .map((s) => ({
             id: `s${s.id}`,
             ts: s.createdAt,
@@ -563,11 +593,13 @@ function useRows(slug: string, def: ModuleDef): RawRow[] {
               billNo: billNo(s, d.billPrefix),
               date: dmy(s.createdAt),
               category: s.customerId !== undefined ? (customers.get(s.customerId)?.name ?? d.patientCategory).toUpperCase() : d.patientCategory,
+              patient: s.patientName ?? '',
+              contact: s.patientPhone || custPhone(s.customerId),
               payable: payableBy(s, customers),
               narration: `${s.note ? `${s.note} ` : ''}-${uname(s.userId)}`,
               amount: amt(s.total),
               user: uname(s.userId),
-              location: d.location,
+              location: s.location || d.location,
             },
           }))
       case 'otc-return': {
@@ -581,13 +613,16 @@ function useRows(slug: string, def: ModuleDef): RawRow[] {
               ts: s.createdAt,
               detail: s,
               cells: {
+                returnNo: `RTN-${seqOf(s.receiptNo)}-${yy(s.createdAt)}`,
                 date: dmy(s.createdAt),
-                category: d.patientCategory,
+                category: s.customerId !== undefined ? (customers.get(s.customerId)?.name ?? d.patientCategory).toUpperCase() : d.patientCategory,
+                patient: s.patientName ?? orig?.patientName ?? '',
+                contact: s.patientPhone || orig?.patientPhone || custPhone(s.customerId),
                 payable: payableBy(s, customers),
-                narration: `${orig ? `RET ${billNo(orig, d.billPrefix)} ` : ''}-${uname(s.userId)}`,
+                narration: `${orig ? `RET ${billNo(orig, d.billPrefix)} ` : ''}${s.note ? `${s.note} ` : ''}-${uname(s.userId)}`,
                 amount: amt(-s.total),
                 user: uname(s.userId),
-                location: d.location,
+                location: s.location || d.location,
               },
             }
           })
@@ -596,8 +631,8 @@ function useRows(slug: string, def: ModuleDef): RawRow[] {
         const saleMap = new Map<number, Sale>()
         for (const s of jobSales) if (s) saleMap.set(s.id!, s)
         return jobs.map((j) => {
-          const total = j.labour + j.lines.reduce((s, l) => s + l.qty * l.unitPrice - l.discount, 0)
           const sale = j.saleId !== undefined ? saleMap.get(j.saleId) : undefined
+          const total = sale?.total ?? j.labour + j.lines.reduce((s, l) => s + l.qty * l.unitPrice - l.discount, 0)
           const paid = (m: 'cash' | 'mpesa' | 'card' | 'cheque' | 'account') => (sale ? amt(paidBy(sale, m)) : '0.00')
           return {
             id: `j${j.id}`,
@@ -606,8 +641,9 @@ function useRows(slug: string, def: ModuleDef): RawRow[] {
             cells: {
               billNo: `${d.servicePrefix}-${seqOf(j.jobNo)}-${yy(j.createdAt)}`,
               patient: (j.customerName || 'OTC CLIENT').toUpperCase(),
-              location: d.location,
-              category: d.patientCategory,
+              contact: j.phone || sale?.patientPhone || custPhone(j.customerId),
+              location: sale?.location || d.location,
+              category: j.customerId !== undefined ? (customers.get(j.customerId)?.name ?? d.patientCategory).toUpperCase() : d.patientCategory,
               amount: amt(total),
               cash: paid('cash'),
               mpesa: paid('mpesa'),
@@ -618,37 +654,26 @@ function useRows(slug: string, def: ModuleDef): RawRow[] {
           }
         })
       }
-      case 'party':
+      case 'party': {
+        const card = (p: Supplier, kind: 'SUPPLIERS' | 'CUSTOMER') => ({
+          name: p.name.toUpperCase(),
+          group: p.groupAccount || (kind === 'SUPPLIERS' ? 'SUNDRY CREDITORS' : 'SUNDRY DEBTORS'),
+          type: kind,
+          blacklisted: p.blacklisted || /blacklist/i.test(p.notes ?? '') ? 'YES' : 'NO',
+          address: p.address || p.notes || '-',
+          pobox: p.poBox || '-',
+          phone: p.phone || '-',
+          email: p.email || '-',
+          contactPerson: p.contactPerson || '-',
+          contactPhone: p.contactPhone || '-',
+          kraPin: p.kraPin || '-',
+          billType: p.billType || 'PAY LATER',
+        })
         return [
-          ...suppliers.map((s) => ({
-            id: `sup${s.id}`,
-            ts: s.id ?? 0,
-            cells: {
-              name: s.name.toUpperCase(),
-              group: 'Sundry Creditors',
-              type: 'SUPPLIERS',
-              blacklisted: 'NO',
-              address: s.notes || '-',
-              pobox: '-',
-              phone: s.phone || '-',
-              email: s.email || '-',
-            },
-          })),
-          ...[...customers.values()].map((c) => ({
-            id: `cus${c.id}`,
-            ts: c.createdAt,
-            cells: {
-              name: c.name.toUpperCase(),
-              group: 'SUNDRY DEBTORS',
-              type: 'CUSTOMER',
-              blacklisted: /blacklist/i.test(c.notes ?? '') ? 'YES' : 'NO',
-              address: c.notes || '-',
-              pobox: '-',
-              phone: c.phone || '-',
-              email: c.email || '-',
-            },
-          })),
+          ...suppliers.map((s) => ({ id: `sup${s.id}`, ts: s.id ?? 0, cells: card(s, 'SUPPLIERS') })),
+          ...[...customers.values()].map((c) => ({ id: `cus${c.id}`, ts: c.createdAt, cells: card(c, 'CUSTOMER') })),
         ].sort((a, b) => b.ts - a.ts)
+      }
       case 'services':
         return services
           .sort((a, b) => b.createdAt - a.createdAt)
@@ -658,9 +683,13 @@ function useRows(slug: string, def: ModuleDef): RawRow[] {
             cells: { name: p.name.toUpperCase(), charges: amt(p.price), outsource: p.brand === 'OUTSOURCED' ? 'YES' : 'NO' },
           }))
       case 'docs':
-        return docs.map((doc) => ({ id: `d${doc.id}`, ts: doc.createdAt, cells: doc.values, docLines: doc.lines }))
+        return docs.map((doc) => {
+          const v = doc.values
+          const contact = v.contact || v.phoneNo || contactOf(v.customer || v.vendorName || v.supplierName)
+          return { id: `d${doc.id}`, ts: doc.createdAt, cells: { ...v, contact }, docLines: doc.lines }
+        })
     }
-  }, [def.source, sales, jobs, jobSales, suppliers, customers, services, docs, d, users]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [def.source, sales, jobs, jobSales, suppliers, customers, services, docs, d, users, serviceSaleIds]) // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /* ── Screen ────────────────────────────────────────────────────────────── */
@@ -693,7 +722,7 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
   const [edit, setEdit] = useState<RawRow | 'new' | null>(null)
   const [action, setAction] = useState('SELECT')
   // Full-page entry screens (EntryScreens.tsx) that replace the list while open.
-  const [screen, setScreen] = useState<{ kind: 'wholesale'; editId?: number } | { kind: 'otc'; mode: 'bill' | 'return'; sale?: Sale } | null>(null)
+  const [screen, setScreen] = useState<{ kind: 'wholesale'; editId?: number } | { kind: 'otc'; mode: 'bill' | 'return' | 'service'; sale?: Sale } | { kind: 'party'; row?: RawRow } | null>(null)
 
   const colKey = def.cols.find((c) => c.label === col)?.key
   const filtered = all
@@ -736,7 +765,8 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
   const newDoc = () => {
     if (def.source === 'otc') setScreen({ kind: 'otc', mode: 'bill' })
     else if (def.source === 'otc-return') setScreen({ kind: 'otc', mode: 'return' })
-    else if (def.source === 'service') nav('/service')
+    else if (def.source === 'service') setScreen({ kind: 'otc', mode: 'service' })
+    else if (def.source === 'party') setScreen({ kind: 'party' })
     else if (WHOLESALE_RULES[slug]) setScreen({ kind: 'wholesale' })
     else if (def.entry === 'grid') setEntering(true)
     else setEdit('new')
@@ -748,6 +778,7 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
     else if (def.source === 'otc-return') setView(t)
     else if (def.source === 'service') nav('/service')
     else if (WHOLESALE_RULES[slug]) setScreen({ kind: 'wholesale', editId: Number(String(t.id).slice(1)) })
+    else if (def.source === 'party') setScreen({ kind: 'party', row: t })
     else setEdit(t)
   }
   const viewDoc = () => {
@@ -828,6 +859,8 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
   if (entering) return <GridEntry slug={slug} def={def} onClose={() => setEntering(false)} />
   if (screen?.kind === 'wholesale') return <WholesaleEntry slug={slug} def={def} editId={screen.editId} onClose={() => setScreen(null)} />
   if (screen?.kind === 'otc') return <OtcEntry mode={screen.mode} fromSale={screen.sale} onClose={() => setScreen(null)} />
+  if (screen?.kind === 'party')
+    return <PartyEntry party={screen.row ? { kind: String(screen.row.id).startsWith('sup') ? 'supplier' : 'customer', id: Number(String(screen.row.id).replace(/\D/g, '')) } : undefined} onClose={() => setScreen(null)} />
 
   return (
     <div className="ma-panel-inner" style={{ paddingTop: 10 }}>
@@ -958,7 +991,6 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
       )}
       {view && <ViewDialog def={def} row={view} onClose={() => setView(null)} />}
       {edit && def.source === 'docs' && <DocDialog slug={slug} def={def} row={edit === 'new' ? undefined : edit} onClose={() => setEdit(null)} />}
-      {edit && def.source === 'party' && <PartyDialog row={edit === 'new' ? undefined : edit} onClose={() => setEdit(null)} />}
       {edit && def.source === 'services' && <ServiceDialog row={edit === 'new' ? undefined : edit} onClose={() => setEdit(null)} />}
     </div>
   )
@@ -1545,80 +1577,6 @@ function FieldRow({ label, req, children }: { label: string; req?: boolean; chil
       </label>
       <span>{children}</span>
     </>
-  )
-}
-
-/* ── Party Master entry (writes the real customer / supplier tables) ───── */
-function PartyDialog({ row, onClose }: { row?: RawRow; onClose: () => void }) {
-  const toast = useToast()
-  const isSup = row ? String(row.id).startsWith('sup') : false
-  const id = row ? Number(String(row.id).replace(/\D/g, '')) : undefined
-  const existing = useLiveQuery(async () => (id === undefined ? undefined : isSup ? db.suppliers.get(id) : db.customers.get(id)), [id, isSup])
-  const [type, setType] = useState(isSup ? 'SUPPLIERS' : 'CUSTOMER')
-  const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
-  const [email, setEmail] = useState('')
-  const [address, setAddress] = useState('')
-  const [limit, setLimit] = useState('0')
-  const [loaded, setLoaded] = useState(false)
-  if (existing && !loaded) {
-    setName(existing.name)
-    setPhone(existing.phone ?? '')
-    setEmail(existing.email ?? '')
-    setAddress(existing.notes ?? '')
-    if (!isSup) setLimit(String((existing as Customer).creditLimit / 100))
-    setLoaded(true)
-  }
-
-  const save = async () => {
-    if (!name.trim()) return toast('Facilty Name is required', 'error')
-    const base = { name: name.trim(), phone: phone.trim() || undefined, email: email.trim() || undefined, notes: address.trim() || undefined }
-    if (type === 'SUPPLIERS') {
-      if (row && isSup) await db.suppliers.update(id!, base)
-      else await db.suppliers.add(base)
-    } else {
-      const creditLimit = Math.round((parseFloat(limit) || 0) * 100)
-      if (row && !isSup) await db.customers.update(id!, { ...base, creditLimit })
-      else await db.customers.add({ ...base, balance: 0, creditLimit, createdAt: Date.now() })
-    }
-    toast('Party saved')
-    onClose()
-  }
-  return (
-    <Dialog
-      title={`Party Master - ${row ? 'Edit' : 'New'}`}
-      onClose={onClose}
-      width={460}
-      footer={
-        <>
-          <Btn onClick={save}>Save</Btn>
-          <Btn onClick={onClose}>cancel</Btn>
-        </>
-      }
-    >
-      <div className="ma-form">
-        <FieldRow label="Facilty Name" req>
-          <Input value={name} onChange={setName} width={220} autoFocus />
-        </FieldRow>
-        <FieldRow label="Type">
-          <Select value={type} onChange={setType} options={['CUSTOMER', 'SUPPLIERS']} width={220} />
-        </FieldRow>
-        <FieldRow label="Address">
-          <Input value={address} onChange={setAddress} width={220} />
-        </FieldRow>
-        <FieldRow label="Telephone">
-          <Input value={phone} onChange={setPhone} width={220} />
-        </FieldRow>
-        <FieldRow label="Email">
-          <Input value={email} onChange={setEmail} width={220} />
-        </FieldRow>
-        {type === 'CUSTOMER' && (
-          <FieldRow label="Credit Limit">
-            <Input value={limit} onChange={setLimit} width={220} />
-          </FieldRow>
-        )}
-      </div>
-    </Dialog>
   )
 }
 
