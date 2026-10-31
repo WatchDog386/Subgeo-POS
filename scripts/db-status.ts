@@ -1,5 +1,8 @@
 // Show server DB state: npm run db:status
 // Prints the SQLite file path, applied migrations and row counts per table.
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { dbPath, isMigrated, sql } from '../server/db'
 
 console.log(`SQLite file: ${dbPath}`)
@@ -10,7 +13,7 @@ const tables = (
   }[]
 ).map((r) => r.name)
 
-const migrationFiles = ['001_init.sql', '002_products.sql', '003_sync.sql']
+const migrationFiles = fs.readdirSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'server', 'migrations')).filter((f) => f.endsWith('.sql')).sort()
 console.log(
   migrationFiles.map((f) => `  ${f}: ${isMigrated(f) ? 'applied' : 'PENDING (restart the server or run db:migrate)'}`).join('\n'),
 )

@@ -1,9 +1,10 @@
 // Production reset for the server SQLite DB: npm run db:reset -- --yes
 // Clears every chemist's synced data (medicines, sales, customers, …), the old
-// products/settings mirrors and M-Pesa history. STAFF ACCOUNTS, CHEMISTS AND
+// settings mirror and M-Pesa history. STAFF ACCOUNTS, CHEMISTS AND
 // SCHEMA ARE KEPT. Requires --yes to run. Records are marked deleted (not
 // dropped), so every till removes them too on its next sync.
 import { dbPath, sql } from '../server/db'
+import { rebuildRelational } from '../server/relational'
 
 if (process.argv[2] !== '--yes') {
   console.error('This erases all chemist data and mpesa history (keeps staff and chemists). Re-run with: npm run db:reset -- --yes')
@@ -11,7 +12,7 @@ if (process.argv[2] !== '--yes') {
 }
 
 sql.transaction(() => {
-  for (const t of ['products', 'settings', 'mpesa_transactions']) {
+  for (const t of ['settings', 'mpesa_transactions']) {
     const info = sql.prepare(`DELETE FROM "${t}"`).run()
     console.log(`cleared ${t}: ${info.changes} row(s)`)
   }
@@ -26,4 +27,6 @@ sql.transaction(() => {
 })()
 
 console.log(`\nkept: staff & chemists (${(sql.prepare("SELECT COUNT(*) AS n FROM sync_records WHERE tbl IN ('users', 'branches')").get() as { n: number }).n}), migrations (${(sql.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get() as { n: number }).n})`)
+rebuildRelational()
+console.log('relational tables rebuilt')
 console.log(`done — ${dbPath}`)

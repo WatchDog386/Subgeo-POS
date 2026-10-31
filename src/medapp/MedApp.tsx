@@ -116,6 +116,11 @@ export default function MedApp() {
         <div className="ma-company">
           {defaults.companyName}
           {branchCode && `-${branchCode}`}
+          {(defaults.licenceFrom || defaults.licenceTo) && (
+            <div style={{ fontSize: 9, fontWeight: 'normal', marginTop: 2 }}>
+              ( {defaults.licenceFrom || '…'} TO {defaults.licenceTo || '…'} )
+            </div>
+          )}
         </div>
         <button type="button" className="ma-logout" title="Log Out" aria-label="Log Out" onClick={lock}>
           <LogoutIcon />

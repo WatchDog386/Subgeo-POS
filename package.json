@@ -15,7 +15,8 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:status": "tsx scripts/db-status.ts",
     "db:backup": "tsx scripts/backup-db.ts",
-    "db:reset": "tsx scripts/db-reset.ts"
+    "db:reset": "tsx scripts/db-reset.ts",
+    "db:rebuild": "tsx scripts/db-rebuild.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

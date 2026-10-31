@@ -13,7 +13,6 @@ import { parsePdf } from '../lib/pdf'
 import { printBarcodeLabel } from '../lib/printReceipt'
 import { useSession } from '../session'
 import { Badge, Empty, ListPanel, Modal, PageHeader, errorText, useToast } from '../components/ui'
-import { quotationImportSummary, quotationProductSkus } from '../db/quotationProducts'
 
 const CSV_HEADER = ['sku', 'name', 'barcode', 'regNumber', 'category', 'brand', 'cost', 'price', 'stock', 'reorderLevel', 'location', 'taxable', 'serialized', 'trackStock']
 
@@ -60,8 +59,6 @@ export default function InventoryPage() {
   const stockValue = products.filter((p) => p.trackStock && p.stock > 0).reduce((s, p) => s + p.stock * p.cost, 0)
   const lowCount = products.filter((p) => p.active && p.trackStock && p.stock <= p.reorderLevel).length
   const inactiveCount = products.filter((p) => !p.active).length
-  const quoteProducts = products.filter((product) => quotationProductSkus.has(product.sku))
-  const quoteSetupCount = quoteProducts.filter((product) => !product.barcode || product.price <= 0 || !product.active).length
 
   const exportCsv = () => {
     const data = products.map((p) => [
@@ -209,14 +206,6 @@ export default function InventoryPage() {
           </>
         }
       />
-      {quoteProducts.length > 0 && (
-        <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-950">
-          <div className="font-semibold">Quotation {quotationImportSummary.reference}: {quoteProducts.length} medicines in the catalog</div>
-          <p className="mt-1 text-blue-800">
-            {quoteSetupCount} still need barcode, selling price, or activation. The quoted {quotationImportSummary.requestedUnits} units are not counted as on-hand stock; record a receipt after availability is confirmed.
-          </p>
-        </div>
-      )}
       {/* Mobile: search + category dropdown + low-stock toggle (replaces the dark bar and toolbar) */}
       <div className="mb-3 flex items-center gap-2 sm:hidden">
         <input
@@ -447,10 +436,6 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
       // New medicines without a code get the next free MED-#### code.
       if (!p.sku?.trim()) p.sku = await nextMedicineCode()
       if (p.active && toCents(price) <= 0) throw new Error('Set a selling price above zero before activating this medicine')
-      if (p.active && quotationProductSkus.has(p.sku.trim())) {
-        if (!p.barcode?.trim()) throw new Error('Add the barcode before activating this quoted medicine')
-        if (p.trackStock !== false && (p.stock ?? 0) <= 0) throw new Error('Receive stock before activating this quoted medicine')
-      }
       const clash = await db.products.where('sku').equals(p.sku.trim()).first()
       if (clash && clash.id !== p.id) throw new Error(`SKU ${p.sku} is already used by ${clash.name}`)
       let barcode = p.barcode?.trim()

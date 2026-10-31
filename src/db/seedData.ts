@@ -7,8 +7,9 @@ import type { Branch, User } from './types'
 export const SEED_BRANCH: Branch & { id: number } = {
   id: 1,
   number: 1,
-  name: 'SCL UMOJA 3',
-  location: 'UMOJA 3',
+  // Rename it in Chemists → Edit after the first sign-in.
+  name: 'CHEMIST 1',
+  location: '',
   phone: '',
   active: true,
   createdAt: 0,

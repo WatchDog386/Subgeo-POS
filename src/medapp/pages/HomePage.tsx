@@ -95,7 +95,7 @@ function QuickAccess() {
         <span className="ma-label" style={{ fontSize: 12 }}>
           Role
         </span>
-        <Select value={role} onChange={setRole} options={['SELECT', 'PHARMACY']} width={86} round />
+        <Select value={role} onChange={setRole} options={['SELECT', ...new Set(TRANSACTIONS.map((t) => t.role.toUpperCase()))]} width={86} round />
       </div>
       <div style={{ display: 'flex', alignItems: 'center', marginTop: 9 }}>
         <SearchBar value={q} onChange={setQ} width={553} />

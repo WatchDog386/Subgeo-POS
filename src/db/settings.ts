@@ -5,7 +5,7 @@ import type { Settings } from './types'
 
 export const DEFAULT_SETTINGS: Settings = {
   shopName: 'Subgeo Chemist',
-  address: 'Nairobi, Kenya',
+  address: '',
   phone: '',
   kraPin: '',
   vatRate: 16,

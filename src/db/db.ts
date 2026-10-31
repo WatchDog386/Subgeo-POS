@@ -3,6 +3,7 @@ import type {
   Branch,
   Category,
   Customer,
+  DocRecord,
   LogEntry,
   ParkedSale,
   Product,
@@ -10,10 +11,13 @@ import type {
   Sale,
   ServiceJob,
   Shift,
+  StaffMessage,
+  StaffTask,
   StockMovement,
   Supplier,
   User,
 } from './types'
+import { LEGACY_DOCS_PREFIX, LEGACY_TASKS_KEY, convertLegacyDocs, convertLegacyTasks } from './legacyDemo'
 import { BRANCH_TABLES, COUNTER_FIELDS, GLOBAL_KV_KEYS, GLOBAL_TABLES, SYNCED_TABLES, isLocalKvKey, isMetaField, isSeqKvKey } from './syncSchema'
 
 export interface KV {
@@ -89,6 +93,9 @@ const notifyChange = () => {
   }
 }
 
+/** Tables that existed at schema v3 (later versions add docs, tasks, messages). */
+const V3_TABLES = new Set(['users', 'branches', 'categories', 'suppliers', 'products', 'customers', 'sales', 'parked', 'movements', 'purchaseOrders', 'shifts', 'jobs', 'logs', 'kv'])
+
 export class PosDB extends Dexie {
   users!: EntityTable<User, 'id'>
   branches!: EntityTable<Branch, 'id'>
@@ -103,6 +110,9 @@ export class PosDB extends Dexie {
   shifts!: EntityTable<Shift, 'id'>
   jobs!: EntityTable<ServiceJob, 'id'>
   logs!: EntityTable<LogEntry, 'id'>
+  docs!: EntityTable<DocRecord, 'id'>
+  tasks!: EntityTable<StaffTask, 'id'>
+  messages!: EntityTable<StaffMessage, 'id'>
   kv!: EntityTable<KV, 'key'>
   outbox!: EntityTable<Tombstone, 'seq'>
 
@@ -155,7 +165,8 @@ export class PosDB extends Dexie {
         // Everything already on this till is queued for upload to the server.
         const now = Date.now()
         for (const name of SYNCED_TABLES) {
-          if (name === 'users' || name === 'branches') continue
+          // Tables added by later versions don't exist yet at this step.
+          if (name === 'users' || name === 'branches' || !V3_TABLES.has(name)) continue
           await tx
             .table(name)
             .toCollection()
@@ -165,6 +176,32 @@ export class PosDB extends Dexie {
               r._ts = now
               for (const f of COUNTER_FIELDS[name] ?? []) r[`_d_${f}`] = 0
             })
+        }
+      })
+
+    // v4: documents, tasks and staff messages get their own tables (one record
+    // each) instead of one kv list per screen, which two tills saving at the
+    // same time used to overwrite. The old lists are converted with stable ids
+    // (the server converts its copy the same way, so nothing doubles up).
+    this.version(4)
+      .stores({
+        docs: '++id, slug, docNo, createdAt, _dirty',
+        tasks: '++id, status, assigneeId, createdAt, _dirty',
+        messages: '++id, at, toId, fromId, _dirty',
+      })
+      .upgrade(async (tx) => {
+        markRemote(tx)
+        const kv = tx.table('kv')
+        const rows = (await kv.toArray()) as (KV & { _dirty?: number; _ts?: number })[]
+        for (const r of rows) {
+          const meta = { _dirty: r._dirty ?? 0, _ts: r._ts ?? 0 }
+          if (r.key.startsWith(LEGACY_DOCS_PREFIX)) {
+            for (const d of convertLegacyDocs(r.key, r.value)) await tx.table('docs').put({ ...d, ...meta })
+            await kv.delete(r.key)
+          } else if (r.key === LEGACY_TASKS_KEY) {
+            for (const t of convertLegacyTasks(r.value)) await tx.table('tasks').put({ ...t, ...meta })
+            await kv.delete(r.key)
+          }
         }
       })
 

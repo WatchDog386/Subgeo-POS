@@ -7,7 +7,9 @@ import { sql } from './db'
 import { hashPassword } from '../src/lib/sha256'
 import { SEED_BRANCH, SEED_PURCHASE, SEED_USERS, chemCode } from '../src/db/seedData'
 import { COUNTER_FIELDS, GLOBAL_KV_KEYS, GLOBAL_TABLES, SYNCED_TABLES, isLocalKvKey, isSeqKvKey } from '../src/db/syncSchema'
-import type { Branch, Product, Role, User } from '../src/db/types'
+import type { Branch, Product, Role, StaffMessage, User } from '../src/db/types'
+import { LEGACY_DOCS_PREFIX, LEGACY_TASKS_KEY, convertLegacyDocs, convertLegacyTasks } from '../src/db/legacyDemo'
+import { ensureRelational, project } from './relational'
 
 type Rec = Record<string, unknown>
 type Row = { tbl: string; scope: number; id: string; data: string | null; deleted: number; ts: number; seq: number }
@@ -55,6 +57,40 @@ function writeRow(tbl: string, scope: number, id: string | number, data: Rec | n
     updated_by: userId,
     updated_at: Date.now(),
   })
+  // Keep the relational tables (migrations/004) in step.
+  project(tbl, scope, String(id), data)
+}
+
+const isLegacyKvKey = (key: string) => key.startsWith(LEGACY_DOCS_PREFIX) || key === LEGACY_TASKS_KEY
+
+/**
+ * Old builds kept documents and tasks as one kv list per screen. Turn every
+ * such list into one docs/tasks record per entry (stable ids: the tills
+ * convert their own copies the same way) and delete the list. Runs on boot and
+ * after a push from a till still on an old build, so nothing typed there is lost.
+ */
+function convertLegacyKv(scope?: number): number {
+  const where = scope === undefined ? '' : ' AND scope = ?'
+  const rows = sql
+    .prepare(`SELECT * FROM sync_records WHERE tbl = 'kv' AND deleted = 0 AND (id LIKE ? OR id = ?)${where}`)
+    .all(`${LEGACY_DOCS_PREFIX}%`, LEGACY_TASKS_KEY, ...(scope === undefined ? [] : [scope])) as (Row & { updated_by: number | null })[]
+  let n = 0
+  for (const row of rows) {
+    const value = (JSON.parse(row.data ?? '{}') as Rec).value
+    const recs: [string, Rec][] =
+      row.id === LEGACY_TASKS_KEY
+        ? convertLegacyTasks(value).map((t) => ['tasks', t])
+        : convertLegacyDocs(row.id, value).map((d) => ['docs', d as unknown as Rec])
+    for (const [t, rec] of recs) {
+      const cur = getRow(t, row.scope, rec.id as number)
+      if (cur && cur.ts > row.ts) continue // changed (or deleted) on a new till since
+      if (cur && !cur.deleted && cur.data === JSON.stringify(rec)) continue
+      writeRow(t, row.scope, rec.id as number, rec, row.ts, row.updated_by)
+      n++
+    }
+    writeRow('kv', row.scope, row.id, null, row.ts, row.updated_by)
+  }
+  return n
 }
 
 function listTable<T = Rec>(tbl: string, scope: number): T[] {
@@ -86,6 +122,10 @@ function toPulled(row: Row) {
  * id can clash). */
 export function ensureSeeds(): void {
   sql.transaction(() => {
+    // The chemist first: staff accounts point at it.
+    if (!(sql.prepare("SELECT 1 FROM sync_records WHERE tbl = 'branches' LIMIT 1").get())) {
+      writeRow('branches', 0, SEED_BRANCH.id, SEED_BRANCH as unknown as Rec, 0, null)
+    }
     if (!(sql.prepare("SELECT 1 FROM sync_records WHERE tbl = 'users' LIMIT 1").get())) {
       for (const u of SEED_USERS) writeRow('users', 0, u.id, u as unknown as Rec, 0, null)
     } else if (
@@ -97,10 +137,9 @@ export function ensureSeeds(): void {
       const home = branches().find((b) => b.active) ?? branches()[0]
       if (home) writeRow('users', 0, next, { ...SEED_PURCHASE, id: next, branchId: home.id } as unknown as Rec, Date.now(), null)
     }
-    if (!(sql.prepare("SELECT 1 FROM sync_records WHERE tbl = 'branches' LIMIT 1").get())) {
-      writeRow('branches', 0, SEED_BRANCH.id, SEED_BRANCH as unknown as Rec, 0, null)
-    }
   })()
+  ensureRelational()
+  sql.transaction(() => convertLegacyKv())()
 }
 
 /* ── Auth ─────────────────────────────────────────────────────────────────── */
@@ -175,6 +214,16 @@ function denyReason(user: AuthedUser, tbl: string, scope: number, id: string | n
 
   if (scope !== 0) return scope === user.branchId ? undefined : 'Not your chemist'
   if (tbl === 'categories' || tbl === 'suppliers') return undefined
+  if (tbl === 'messages') {
+    const was = existing as unknown as StaffMessage | undefined
+    if (!incoming) return was?.fromId === user.id ? undefined : 'You can only delete messages you sent'
+    if (!was) return (incoming as unknown as StaffMessage).fromId === user.id ? undefined : 'A message must be sent as yourself'
+    if (was.fromId === user.id) return undefined
+    // Everyone else may only mark it read.
+    const { readBy: _a, ...before } = existing!
+    const { readBy: _b, ...after } = incoming
+    return JSON.stringify(before) === JSON.stringify(after) ? undefined : 'Only the sender can change a message'
+  }
   if (tbl === 'kv') return user.role === 'manager' ? undefined : 'Only the admin or a manager can change shared settings'
   if (tbl === 'users') {
     if (String(id) !== String(user.id) || !incoming || !existing) return 'Only the admin can manage staff'
@@ -269,6 +318,7 @@ syncRouter.post('/sync/push', requireAuth, (req, res) => {
     rejected.push({ t, id, reason, current: row ? toPulled(row) : null })
   }
 
+  let legacyPushed = false
   try {
     sql.transaction(() => {
       for (const c of changes) {
@@ -300,6 +350,7 @@ syncRouter.post('/sync/push', requireAuth, (req, res) => {
           if (t === 'kv' && isSeqKvKey(String(id))) next.value = Math.max(Number(existing.value ?? 0), Number(data.value ?? 0))
         }
         writeRow(t, scope, id, next, Math.max(ts, row?.ts ?? 0), user.id)
+        if (t === 'kv' && isLegacyKvKey(String(id))) legacyPushed = true
       }
       for (const d of deletes) {
         const t = String(d.t)
@@ -315,6 +366,7 @@ syncRouter.post('/sync/push', requireAuth, (req, res) => {
         }
         writeRow(t, scope, id, null, Math.max(Number(d.at) || Date.now(), row.ts), user.id)
       }
+      if (legacyPushed) convertLegacyKv(branchId)
     })()
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : String(e) })

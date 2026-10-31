@@ -3,10 +3,12 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
 import type { LogEntry, Product } from '../../db/types'
 import { useToast } from '../../components/ui'
+import { useSession } from '../../session'
+import { logActivity } from '../../db/logs'
 import { downloadCsv, parseCsv } from '../../lib/csv'
 import { amt, dmy, getKv, inRange, parseDmy, payableBy, setKv, todayDmy, useCustomerMap, useKv, useMedDefaults } from '../data'
 import { ApproveSheetIcon, EditDocIcon, OpenFolderIcon } from '../icons'
-import { Btn, Check, DateField, Dialog, Grid, IBtn, Input, LookupField, Radio, Rows, SearchBar, Select, TransferArrows, matches, useTransfer, type Col } from '../ui'
+import { Btn, Check, DateField, Dialog, Grid, IBtn, Input, LookupField, Radio, Rows, SearchBar, Select, SuggestInput, TransferArrows, matches, useTransfer, type Col } from '../ui'
 import { At, Canvas, L, Title } from './layout'
 import { C, DEFAULT_PERIODS, PeriodsEditor, PickGrid, ResultDialog, useProductRows } from './reportKit'
 
@@ -325,7 +327,7 @@ export function BrsReport() {
   const toast = useToast()
   const fileRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
-  const [bank, setBank] = useState('----Select----')
+  const [bank, setBank] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const stored = useKv<BrsRow[]>('medapp:brs', [])
@@ -335,14 +337,14 @@ export function BrsReport() {
     if (!file) return toast('Choose an Excel (CSV) file first', 'error')
     const data = parseCsv(await file.text())
     const body = data[0] && /type/i.test(data[0][0] ?? '') ? data.slice(1) : data
-    const parsed: BrsRow[] = body.map((r) => ({ type: r[0] ?? '', cheque: r[1] ?? '', date: r[2] ?? '', dr: r[3] ?? '', cr: r[4] ?? '', bank: bank === '----Select----' ? '' : bank }))
+    const parsed: BrsRow[] = body.map((r) => ({ type: r[0] ?? '', cheque: r[1] ?? '', date: r[2] ?? '', dr: r[3] ?? '', cr: r[4] ?? '', bank: bank.trim() }))
     await setKv('medapp:brs', [...stored, ...parsed])
     toast(`${parsed.length} statement lines uploaded`)
   }
   const view = () =>
     setRows(
       stored
-        .filter((r) => bank === '----Select----' || r.bank === bank)
+        .filter((r) => !bank.trim() || r.bank === bank.trim())
         .filter((r) => {
           const ts = parseDmy(r.date.replace(/\./g, '/'))
           return ts === undefined || inRange(ts, from, to)
@@ -376,7 +378,7 @@ export function BrsReport() {
         <L>Bank Name</L>
       </At>
       <At x={343} y={91}>
-        <Select value={bank} onChange={setBank} options={['----Select----', 'MPESA', 'EQUITY BANK', 'KCB BANK', 'CO-OP BANK']} width={102} plain round />
+        <SuggestInput value={bank} onChange={setBank} suggestions={stored.map((r) => r.bank)} placeholder="Bank / wallet, e.g. MPESA (blank = all)" width={150} />
       </At>
       <At x={458} y={90}>
         <L>From</L>
@@ -403,6 +405,8 @@ export function BrsReport() {
 /* ── Audit Trail Report ────────────────────────────────────────────────── */
 export function AuditTrailReport() {
   const users = useLiveQuery(async () => (await db.users.toArray()).map((u) => u.name.toUpperCase()), [], [] as string[])
+  // Actions that really occur in this chemist's log.
+  const actions = useLiveQuery(async () => [...new Set((await db.logs.toArray()).map((l) => l.action))].sort(), [], [] as string[])
   const [user, setUser] = useState('')
   const [txn, setTxn] = useState('')
   const [op, setOp] = useState('Select')
@@ -446,7 +450,7 @@ export function AuditTrailReport() {
         <L>Transaction</L>
       </At>
       <At x={357} y={70}>
-        <LookupField value={txn} onChange={setTxn} options={['Signed in', 'Till locked', 'Sale', 'Refund', 'Settings updated', 'Shift']} title="Transaction" />
+        <LookupField value={txn} onChange={setTxn} options={actions} title="Transaction" />
       </At>
       <At x={545} y={68}>
         <L>Select Operation</L>
@@ -485,6 +489,7 @@ export function AuditTrailReport() {
 /* ── Exception Report ──────────────────────────────────────────────────── */
 export function ExceptionReport() {
   const toast = useToast()
+  const { user } = useSession()
   const [kind, setKind] = useState('')
   const [rows, setRows] = useState<Cells[]>([])
   const cols = [C('doc', 'Doc No', 150), C('dt', 'Doc Dt', 150), C('txn', 'Transaction', 690)]
@@ -510,6 +515,16 @@ export function ExceptionReport() {
       for (const p of await db.purchaseOrders.filter((x) => x.status === 'partial').toArray()) out.push({ doc: p.poNo, dt: dmy(p.createdAt), txn: 'LPO PARTIALLY RECEIVED' })
     }
     setRows(out)
+  }
+  /** Record who reviewed which exceptions (Activity Log, synced). */
+  const review = async () => {
+    if (!rows.length) return toast('View a report with exceptions first', 'error')
+    await logActivity('system', `Exceptions reviewed (${kind})`, {
+      detail: rows.map((r) => `${String(r.doc)}: ${String(r.txn)}`).join('; ').slice(0, 2000),
+      userId: user?.id,
+      userName: user?.name,
+    })
+    toast(`${rows.length} exception(s) marked reviewed in the Activity Log`)
   }
   return (
     <Canvas height={600}>
@@ -538,7 +553,7 @@ export function ExceptionReport() {
       </At>
       <ResultBlock y={73} height={390} cols={cols} rows={rows} />
       <At x={12} y={537} top>
-        <IBtn lg title="Mark Reviewed" style={{ width: 32, height: 32 }} onClick={() => toast(rows.length ? `${rows.length} exception(s) reviewed` : 'Nothing to review')}>
+        <IBtn lg title="Mark Reviewed" style={{ width: 32, height: 32 }} onClick={() => void review()}>
           <ApproveSheetIcon />
         </IBtn>
       </At>

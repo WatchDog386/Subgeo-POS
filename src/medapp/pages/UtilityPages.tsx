@@ -13,9 +13,9 @@ import { saveStaff } from '../../db/staff'
 import { useSession } from '../../session'
 import { useToast } from '../../components/ui'
 import { download, downloadCsv, parseCsv } from '../../lib/csv'
-import { amt, dmy, getKv, nextDocNo, parseDmy, saveDoc, setKv, useDocs, useKv, useMedDefaults, yy } from '../data'
+import { amt, dmy, getKv, nextDocNo, parseDmy, saveDoc, saveMedDefault, setKv, useDocs, useKv, useMedDefaults, yy, type MedDefaults } from '../data'
 import { CheckGreenIcon, OrangeArrow, SearchLens } from '../icons'
-import { Btn, Check, Dialog, Grid, IBtn, Input, LookupField, matches, PickList, Radio, Rows, SearchBar, Select, TransferArrows, useTransfer, type Col, type Row } from '../ui'
+import { Btn, Check, Dialog, Grid, IBtn, Input, LookupField, matches, PickList, Radio, Rows, SearchBar, Select, SuggestInput, TransferArrows, useTransfer, type Col, type Row } from '../ui'
 import { At, Canvas, L, Title } from './layout'
 import { ResultDialog } from './reportKit'
 import ChemistsPage from './ChemistsPage'
@@ -341,6 +341,12 @@ function ForceClose() {
   const [rows, setRows] = useState<Row[]>([])
   const [chk, setChk] = useState<Set<string | number>>(new Set())
   const sups = useLiveQuery(() => db.suppliers.toArray(), [], [] as Supplier[])
+  // Reasons used before (from the Activity Log), offered as suggestions.
+  const pastReasons = useLiveQuery(
+    async () => (await db.logs.filter((l) => l.action.startsWith('Force To Close')).toArray()).map((l) => /reason: (.*)$/.exec(l.detail ?? '')?.[1] ?? ''),
+    [],
+    [] as string[],
+  )
 
   const show = async () => {
     if (tx === 'Local Purchase Order') {
@@ -365,7 +371,7 @@ function ForceClose() {
   }
 
   const update = async () => {
-    if (!chk.size || !reason) return toast('Select a transaction and the close reason', 'error')
+    if (!chk.size || !reason.trim()) return toast('Tick the transaction(s) and type the close reason', 'error')
     await logActivity('system', `Force To Close (${tx || 'manual'})`, { detail: `${chk.size} record(s), reason: ${reason}`, userId: user?.id, userName: user?.name })
     for (const id of chk) {
       const n = Number(String(id).slice(1))
@@ -404,7 +410,7 @@ function ForceClose() {
         />
       </At>
       <At x={14} y={480}>
-        <Select value={reason} onChange={setReason} options={['', 'COMPLETED', 'TRIAGE REQUIRED', 'NO SUCH SUPPLY']} width={140} />
+        <SuggestInput value={reason} onChange={setReason} suggestions={pastReasons} placeholder="Close reason, e.g. COMPLETED / NO SUCH SUPPLY" width={260} />
         <Btn style={{ width: 74 }} onClick={update}>Update</Btn>
       </At>
     </Canvas>
@@ -439,7 +445,7 @@ function RegenerateLink() {
     }
     if (!values.date) values.date = dmy(Date.now())
     if (!values.location) values.location = d.location
-    await saveDoc(t.to, values)
+    await saveDoc(t.to, values, undefined, user?.id)
     await logActivity('system', `ReGenerate Link ${found.values.docNo} -> ${values.docNo}`, { detail: t.label, userId: user?.id, userName: user?.name })
     toast(`${values.docNo} created from ${found.values.docNo}`)
   }
@@ -492,6 +498,10 @@ function PayRoll() {
   const [year, setYear] = useState(String(new Date().getFullYear()))
   const users = useLiveQuery(() => db.users.toArray(), [], [] as User[])
   const pool = users.filter((u) => group === 'ALL STAFF' || u.role === group.toLowerCase())
+  // Years that have sales, up to this year.
+  const firstSale = useLiveQuery(async () => (await db.sales.orderBy('createdAt').first())?.createdAt, [])
+  const thisYear = new Date().getFullYear()
+  const yearOptions = Array.from({ length: thisYear - new Date(firstSale ?? Date.now()).getFullYear() + 1 }, (_, i) => String(thisYear - i))
   const t = useTransfer<number>(pool.map((u) => u.id!))
   const [result, setResult] = useState<{ cols: Col[]; rows: Record<string, string>[] } | null>(null)
 
@@ -516,9 +526,9 @@ function PayRoll() {
     <Canvas height={620}>
       <Title x={128} y={26}>Pay Roll Automation</Title>
       <At x={14} y={80}>
-        <Select value={group} onChange={setGroup} options={['ALL STAFF', 'OWNER', 'MANAGER', 'CASHIER']} width={120} />
+        <Select value={group} onChange={setGroup} options={['ALL STAFF', ...new Set(users.map((u) => u.role.toUpperCase()))]} width={120} />
         <Select value={month} onChange={setMonth} options={MONTHS.map((m, i) => ({ value: String(i), label: m }))} width={110} />
-        <Select value={year} onChange={setYear} options={['2024', '2025', '2026', '2027']} width={80} />
+        <Select value={year} onChange={setYear} options={yearOptions} width={80} />
       </At>
       <At x={14} y={130} top>
         <div style={{ display: 'flex', gap: 16 }}>
@@ -791,6 +801,7 @@ function Reconciliation() {
   const toast = useToast()
   const stmt = useKv<ReconcileStmt[]>('medapp:recon:stmt', [])
   const [bank, setBank] = useState('MPESA')
+  const [fileName, setFileName] = useState('')
   const [monthWise, setMonthWise] = useState(false)
   const [asOn, setAsOn] = useState(today())
   const [rows, setRows] = useState<Row[]>([])
@@ -875,10 +886,10 @@ function Reconciliation() {
       <Title x={100} y={26}>Reconciliation</Title>
       <At x={14} y={80}>
         <L>File</L>
-        <Input value="" onChange={() => {}} width={160} readOnly />
+        <Input value={fileName} width={160} readOnly placeholder="CSV with Ref, Date, Amount" />
         <label className="filebtn">
           Browse
-          <input type="file" accept=".csv,text/csv" hidden onChange={(e) => e.target.files?.[0] && void importFile(e.target.files[0])} />
+          <input type="file" accept=".csv,text/csv" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) { setFileName(f.name); void importFile(f) } }} />
         </label>
         <Btn style={{ width: 64 }} onClick={recon}>Recon</Btn>
         <Btn style={{ width: 88 }} onClick={() => setRows(rows.filter((r) => r.cells.remarks !== 'RECONCILED'))}>Non Recon</Btn>
@@ -1441,6 +1452,24 @@ function Sync() {
 }
 
 /* ═══════════════════════ DEFAULT VALUES MANAGEMENT ════════════════════════ */
+const DEFAULT_HINTS: Record<string, string> = {
+  companyName: 'Printed on bills, e.g. SUBGEO CHEMIST LTD',
+  shopName: 'Shop name on receipts',
+  address: 'Street / P.O. Box, town',
+  phone: 'e.g. 0712 345 678',
+  kraPin: 'e.g. P051234567X',
+  receiptFooter: 'Thank-you / returns note',
+  currency: 'e.g. KES',
+  mpesaTill: 'Till or paybill number',
+  location: 'Main stock location of this chemist',
+  locations: 'Comma separated, e.g. MAIN STORE, SHELF A',
+  patientCategory: 'e.g. OTC CLIENTS',
+  billPrefix: 'Start of bill numbers, e.g. CHPL-OTC',
+  servicePrefix: 'Start of service bill numbers',
+  licenceFrom: 'dd-mm-yyyy',
+  licenceTo: 'dd-mm-yyyy',
+}
+
 function DefaultValues() {
   const toast = useToast()
   const d = useMedDefaults()
@@ -1456,11 +1485,11 @@ function DefaultValues() {
     { label: 'Receipt Footer', value: String(sv.receiptFooter ?? ''), store: 'setting', key: 'receiptFooter' },
     { label: 'Currency', value: String(sv.currency ?? ''), store: 'setting', key: 'currency' },
     { label: 'M-Pesa Till', value: String(sv.mpesaTill ?? ''), store: 'setting', key: 'mpesaTill' },
-    { label: 'Location', value: d.location, store: 'medapp', key: 'location' },
+    { label: 'Location (this chemist)', value: d.location, store: 'medapp', key: 'location' },
+    { label: 'Stock Locations (this chemist)', value: d.locations.join(', '), store: 'medapp', key: 'locations' },
     { label: 'Patient Category', value: d.patientCategory, store: 'medapp', key: 'patientCategory' },
     { label: 'Bill Prefix', value: d.billPrefix, store: 'medapp', key: 'billPrefix' },
     { label: 'Service Prefix', value: d.servicePrefix, store: 'medapp', key: 'servicePrefix' },
-    { label: 'Branch Code', value: d.branchCode, store: 'medapp', key: 'branchCode' },
     { label: 'Licenced From', value: d.licenceFrom, store: 'medapp', key: 'licenceFrom' },
     { label: 'Licenced To', value: d.licenceTo, store: 'medapp', key: 'licenceTo' },
   ]
@@ -1472,7 +1501,11 @@ function DefaultValues() {
   const save = async () => {
     if (!edit) return
     if (edit.store === 'setting') await saveSettings({ [edit.key]: val } as unknown as Partial<Settings>)
-    else await setKv('medapp:defaults', { ...d, [edit.key]: val })
+    else if (edit.key === 'locations') {
+      const list = val.split(',').map((x) => x.trim().toUpperCase()).filter(Boolean)
+      if (!list.length) return toast('Type at least one location, e.g. MAIN STORE, SHELF A', 'error')
+      await saveMedDefault('locations', list)
+    } else await saveMedDefault(edit.key as keyof MedDefaults, val.trim())
     toast('Value updated')
     setEdit(null)
   }
@@ -1520,7 +1553,7 @@ function DefaultValues() {
         <Dialog title={`Update Value - ${edit.label}`} onClose={() => setEdit(null)} width={380} footer={<><Btn onClick={save}>Save</Btn><Btn onClick={() => setEdit(null)}>cancel</Btn></>}>
           <div className="ma-form" style={{ gridTemplateColumns: '60px 1fr' }}>
             <L bold>Value</L>
-            <Input value={val} onChange={setVal} width={250} autoFocus />
+            <Input value={val} onChange={setVal} width={250} autoFocus placeholder={DEFAULT_HINTS[edit.key] ?? 'Type the new value'} onEnter={() => void save()} />
           </div>
         </Dialog>
       )}
@@ -1690,9 +1723,27 @@ function UpdateAcBal() {
     if (!rows.length) return toast('No on-account activity in the period', 'error')
     setResult({ cols: [C('name', 'Customer', 170), C('computed', 'Computed', 90, 'right'), C('stored', 'Stored Balance', 100, 'right'), C('diff', 'Difference (Payment)', 130, 'right')], rows })
   }
+  /** Check every voucher of the period for a missing, unreadable or future date. */
   const vch = async () => {
-    const n = (await db.sales.where('createdAt').between(parseDmy(from) ?? 0, (parseDmy(to) ?? Date.now()) + 864e5).count()) + (await db.jobs.where('createdAt').between(parseDmy(from) ?? 0, (parseDmy(to) ?? Date.now()) + 864e5).count())
-    toast(`${n} voucher(s) checked for valid dates in the period`)
+    const f = parseDmy(from)
+    const t = parseDmy(to)
+    if (f === undefined || t === undefined) return toast('Dates must be dd-mm-yyyy', 'error')
+    const end = t + 864e5
+    const now = Date.now() + 864e5
+    const bad: Record<string, string>[] = []
+    for (const s of await db.sales.where('createdAt').between(f, end).toArray()) if (s.createdAt > now) bad.push({ doc: s.receiptNo, date: dmy(s.createdAt), issue: 'Bill dated in the future' })
+    for (const j of await db.jobs.where('createdAt').between(f, end).toArray()) if (j.createdAt > now) bad.push({ doc: j.jobNo, date: dmy(j.createdAt), issue: 'Service request dated in the future' })
+    const dateKeys = /date$/i
+    for (const d of await db.docs.where('createdAt').between(f, end).toArray()) {
+      for (const [k, v] of Object.entries(d.values)) {
+        if (!dateKeys.test(k) || !v) continue
+        const ms = parseDmy(v)
+        if (ms === undefined) bad.push({ doc: d.docNo ?? d.slug, date: v, issue: `${k}: not a dd-mm-yyyy date` })
+        else if (ms > now) bad.push({ doc: d.docNo ?? d.slug, date: v, issue: `${k}: in the future` })
+      }
+    }
+    if (!bad.length) return toast('Every voucher in the period has a valid date')
+    setResult({ cols: [C('doc', 'Voucher', 140), C('date', 'Date', 100), C('issue', 'Problem', 260)], rows: bad })
   }
 
   return (

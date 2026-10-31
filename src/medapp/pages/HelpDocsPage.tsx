@@ -14,7 +14,7 @@ export const HELP_DOCS: HelpDoc[] = [
     label: 'About EMR-Lite',
     title: 'About EMR-Lite 9.5.21',
     body: [
-      'EMR-Lite is the pharmacy point of sale used at SUBGEO CHEMIST LTD (branch CHEM3). It handles OTC medicine bills, medicine returns, service bills, whole-sale documents, party and services masters, and the daily store reports.',
+      'EMR-Lite is the pharmacy point of sale used at every chemist of the company (CHEM1, CHEM2, …); each chemist sees its own medicines, sales and stock. It handles OTC medicine bills, medicine returns, service bills, whole-sale documents, party and services masters, and the daily store reports.',
       'The Continuous service version 9.5.21 runs entirely offline. All data lives on this computer; use Data Management to back it up.',
     ],
   },

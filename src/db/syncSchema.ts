@@ -3,9 +3,11 @@
 
 /** Tables shared by every chemist (company-wide). */
 // Order matters: a new chemist must reach the server before the cashiers assigned to it.
-export const GLOBAL_TABLES = ['branches', 'users', 'categories', 'suppliers'] as const
-/** Tables that belong to one chemist. */
-export const BRANCH_TABLES = ['products', 'customers', 'sales', 'parked', 'movements', 'purchaseOrders', 'shifts', 'jobs', 'logs'] as const
+export const GLOBAL_TABLES = ['branches', 'users', 'categories', 'suppliers', 'messages'] as const
+/** Tables that belong to one chemist. Parents come before the records that
+ * point at them (a sale names its shift), so the server always has the parent
+ * when it links the child in the relational tables. */
+export const BRANCH_TABLES = ['products', 'customers', 'shifts', 'sales', 'parked', 'movements', 'purchaseOrders', 'jobs', 'logs', 'docs', 'tasks'] as const
 export const SYNCED_TABLES: readonly string[] = [...GLOBAL_TABLES, ...BRANCH_TABLES, 'kv']
 
 /** Fields that are counters: merged by adding deltas instead of overwriting. */

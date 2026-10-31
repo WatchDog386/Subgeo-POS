@@ -1,87 +1,14 @@
 import { useMemo, useState } from 'react'
-import { ArrowLeft, Inbox, Pencil, Search, Send } from 'lucide-react'
+import { useLiveQuery } from 'dexie-react-hooks'
+import { ArrowLeft, Inbox, Pencil, Search, Send, Trash2 } from 'lucide-react'
 import { Badge, Empty, Modal, PageHeader, Segmented, useToast, errorText } from '../components/ui'
+import { db } from '../db/db'
+import { chemCode } from '../db/seedData'
+import type { StaffMessage } from '../db/types'
+import { useSession } from '../session'
 
-interface Message {
-  id: number
-  from: string
-  to: string
-  subject: string
-  body: string[]
-  at: number
-  folder: 'inbox' | 'sent'
-}
-
-const NOW = Date.now()
-const DAY = 86_400_000
-
-const SEED: Message[] = [
-  {
-    id: 1,
-    from: 'MediSupply Ltd <orders@medisupply.co.ke>',
-    to: 'admin@subgeo.com',
-    subject: 'PO-000012 confirmed — dispatching tomorrow',
-    body: [
-      'Hi,',
-      'We confirm receipt of your purchase order PO-000012 for 24 boxes of paracetamol and 12 bottles of amoxicillin. The goods will be dispatched tomorrow morning and delivered to your Nairobi address.',
-      'Attached invoice is due on the 30th of this month.',
-      'Regards, MediSupply Ltd',
-    ],
-    at: NOW - DAY * 0.2,
-    folder: 'inbox',
-  },
-  {
-    id: 2,
-    from: 'M-Pesa <no-reply@safaricom.co.ke>',
-    to: 'admin@subgeo.com',
-    subject: 'Daily statement — yesterday\'s transactions',
-    body: [
-      'Your till statement for yesterday is ready.',
-      'Total received: KES 48,250 across 32 transactions.',
-      'You can reconcile these against your sales report in the app.',
-    ],
-    at: NOW - DAY * 0.8,
-    folder: 'inbox',
-  },
-  {
-    id: 3,
-    from: 'Grace Wanjiku <grace.w@gmail.com>',
-    to: 'admin@subgeo.com',
-    subject: 'Quote request — Ekon 500 battery pack',
-    body: [
-      'Hello,',
-      'I need a price for a replacement 60V 20Ah battery pack for an Ekon 500. Do you have it in stock, and can you fit it this week?',
-      'Thanks, Grace',
-    ],
-    at: NOW - DAY * 1.5,
-    folder: 'inbox',
-  },
-  {
-    id: 4,
-    from: 'KRA iTax <noreply@itax.kra.go.ke>',
-    to: 'admin@subgeo.com',
-    subject: 'Reminder — monthly VAT return due 20th',
-    body: [
-      'This is a reminder that your monthly VAT return for the previous tax period is due on the 20th.',
-      'Log in to iTax to file your return and avoid penalties.',
-    ],
-    at: NOW - DAY * 3,
-    folder: 'inbox',
-  },
-  {
-    id: 5,
-    from: 'admin@subgeo.com',
-    to: 'grace.w@gmail.com',
-    subject: 'Re: Quote request — Ekon 500 battery pack',
-    body: [
-      'Hi Grace,',
-      'Yes, the 60V 20Ah pack is in stock at KES 28,500 fitted. We can book you in for Thursday afternoon — just reply with your plate number.',
-      'Regards, Subgeo Chemist',
-    ],
-    at: NOW - DAY * 1.4,
-    folder: 'sent',
-  },
-]
+// Internal messages between staff of every chemist. Stored in the synced
+// `messages` table, so a message sent at one till shows at every till.
 
 function timeAgo(at: number) {
   const s = Math.max(0, Math.floor((Date.now() - at) / 1000))
@@ -94,60 +21,76 @@ function timeAgo(at: number) {
 
 export default function MessagesPage() {
   const toast = useToast()
-  const [messages, setMessages] = useState<Message[]>(SEED)
+  const { user } = useSession()
+  const me = user?.id ?? -1
+  const all = useLiveQuery(() => db.messages.orderBy('at').reverse().toArray(), [], [] as StaffMessage[])
+  const staff = useLiveQuery(() => db.users.filter((u) => u.active).toArray(), [], [])
+  const branches = useLiveQuery(() => db.branches.toArray(), [], [])
   const [folder, setFolder] = useState<'inbox' | 'sent'>('inbox')
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<number | null>(null)
   const [compose, setCompose] = useState(false)
   const [draft, setDraft] = useState({ to: '', subject: '', body: '' })
 
+  const inbox = all.filter((m) => m.fromId !== me && (m.toId === undefined || m.toId === me))
+  const sent = all.filter((m) => m.fromId === me)
+  const unread = inbox.filter((m) => !m.readBy.includes(me)).length
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return messages
-      .filter((m) => m.folder === folder)
-      .filter(
-        (m) =>
-          !q ||
-          m.from.toLowerCase().includes(q) ||
-          m.subject.toLowerCase().includes(q) ||
-          m.body.join(' ').toLowerCase().includes(q),
-      )
-      .sort((a, b) => b.at - a.at)
-  }, [messages, folder, query])
+    return (folder === 'inbox' ? inbox : sent).filter(
+      (m) => !q || [m.fromName, m.toName, m.subject, m.body].some((v) => v.toLowerCase().includes(q)),
+    )
+  }, [all, folder, query]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const open = visible.find((m) => m.id === selected) ?? visible[0]
 
-  const select = (id: number) => setSelected(id)
+  const select = (id: number) => {
+    setSelected(id)
+    const m = all.find((x) => x.id === id)
+    if (m && m.fromId !== me && !m.readBy.includes(me)) void db.messages.update(id, { readBy: [...m.readBy, me] })
+  }
+  const label = (u: { name: string; branchId?: number }) => {
+    const b = branches.find((x) => x.id === u.branchId)
+    return `${u.name}${b ? ` (${chemCode(b.number)})` : ' (ADMIN)'}`
+  }
 
-  const send = () => {
+  const send = async () => {
     try {
-      if (!draft.to.trim()) throw new Error('Enter at least one recipient.')
-      setMessages((prev) => [
-        {
-          id: Date.now(),
-          from: 'admin@subgeo.com',
-          to: draft.to.trim(),
-          subject: draft.subject.trim() || '(no subject)',
-          body: draft.body.split('\n').filter(Boolean),
-          at: Date.now(),
-          folder: 'sent',
-        },
-        ...prev,
-      ])
+      if (!user?.id) throw new Error('Sign in first.')
+      if (!draft.to) throw new Error('Choose who the message is for.')
+      if (!draft.subject.trim()) throw new Error('Type a subject, e.g. "Stock count on Friday".')
+      if (!draft.body.trim()) throw new Error('Type the message.')
+      const to = draft.to === 'ALL' ? undefined : staff.find((u) => String(u.id) === draft.to)
+      await db.messages.add({
+        fromId: user.id,
+        fromName: user.name,
+        toId: to?.id,
+        toName: to ? label(to) : 'EVERYONE',
+        subject: draft.subject.trim(),
+        body: draft.body.trim(),
+        at: Date.now(),
+        readBy: [],
+      } as StaffMessage)
       setDraft({ to: '', subject: '', body: '' })
       setCompose(false)
       setFolder('sent')
-      toast('Message added to Sent', 'ok')
+      toast('Message sent', 'ok')
     } catch (e) {
       toast(errorText(e), 'error')
     }
+  }
+  const remove = async (m: StaffMessage) => {
+    if (!confirm('Delete this message for everyone?')) return
+    await db.messages.delete(m.id!)
+    setSelected(null)
+    toast('Message deleted')
   }
 
   return (
     <div className="p-4 lg:p-6">
       <PageHeader
         title="Messages"
-        subtitle="Shop inbox — supplier orders, customer enquiries and account notices"
+        subtitle="Messages between staff of every chemist — they reach the other tills on the next sync"
         actions={
           <button className="btn-primary" onClick={() => setCompose(true)}>
             <Pencil size={16} /> Compose
@@ -165,8 +108,8 @@ export default function MessagesPage() {
           <div className="space-y-2.5 border-b border-slate-200 p-3">
             <Segmented
               options={{
-                inbox: `Inbox (${messages.filter((m) => m.folder === 'inbox').length})`,
-                sent: `Sent (${messages.filter((m) => m.folder === 'sent').length})`,
+                inbox: `Inbox (${inbox.length}${unread ? `, ${unread} new` : ''})`,
+                sent: `Sent (${sent.length})`,
               }}
               value={folder}
               onChange={(v) => {
@@ -187,29 +130,30 @@ export default function MessagesPage() {
 
           <div className="min-h-0 flex-1 overflow-y-auto">
             {visible.length === 0 ? (
-              <Empty>No messages here.</Empty>
+              <Empty>{folder === 'inbox' ? 'No messages for you yet. Messages other staff send you, or to everyone, appear here.' : 'Nothing sent yet. Press Compose to write to a colleague or to every chemist.'}</Empty>
             ) : (
               <ul className="divide-y divide-slate-100">
                 {visible.map((m) => {
                   const activeId = open?.id
                   const isActive = m.id === activeId
-                  const sender = m.folder === 'inbox' ? m.from.split('<')[0].trim() : m.to
+                  const sender = folder === 'inbox' ? m.fromName : m.toName
+                  const isNew = folder === 'inbox' && !m.readBy.includes(me)
                   return (
                     <li key={m.id}>
                       <button
                         type="button"
-                        onClick={() => select(m.id)}
+                        onClick={() => select(m.id!)}
                         className={`w-full px-4 py-3 text-left transition hover:bg-slate-50 ${
                           isActive ? 'border-l-[3px] border-brand-500 bg-brand-500/5 pl-[13px]' : 'border-l-[3px] border-transparent pl-[13px]'
                         }`}
                       >
                         <span className="flex items-center justify-between gap-2">
-                          <span className="truncate text-sm font-semibold text-slate-800">{sender}</span>
+                          <span className={`truncate text-sm ${isNew ? 'font-bold text-slate-900' : 'font-semibold text-slate-800'}`}>{sender}</span>
                           <span className="shrink-0 text-xs text-slate-400">{timeAgo(m.at)}</span>
                         </span>
                         <span className="mt-0.5 block truncate text-sm text-slate-600">{m.subject}</span>
                         <span className="mt-0.5 block truncate text-xs text-slate-400">
-                          {m.body[0] ?? ''}
+                          {m.body.split('\n')[0]}
                         </span>
                       </button>
                     </li>
@@ -242,16 +186,18 @@ export default function MessagesPage() {
                 <div className="min-w-0 flex-1">
                   <h2 className="truncate text-lg font-bold text-slate-900">{open.subject}</h2>
                   <p className="mt-0.5 truncate text-sm text-slate-500">
-                    {open.folder === 'inbox' ? 'From ' : 'To '}
-                    {open.folder === 'inbox' ? open.from : open.to}
+                    From {open.fromName} · To {open.toName}
                   </p>
                 </div>
-                <Badge tone={open.folder === 'inbox' ? 'blue' : 'slate'}>
-                  {open.folder === 'inbox' ? 'Inbox' : 'Sent'}
-                </Badge>
+                <Badge tone={open.fromId === me ? 'slate' : 'blue'}>{open.fromId === me ? 'Sent' : 'Inbox'}</Badge>
+                {open.fromId === me && (
+                  <button type="button" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-red-600" title="Delete" onClick={() => void remove(open)}>
+                    <Trash2 size={17} />
+                  </button>
+                )}
               </div>
               <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
-                {open.body.map((p, i) => (
+                {open.body.split(/\n+/).map((p, i) => (
                   <p key={i} className="max-w-2xl text-[15px] leading-relaxed text-slate-700">
                     {p}
                   </p>
@@ -281,8 +227,8 @@ export default function MessagesPage() {
               <button className="btn-ghost" onClick={() => setCompose(false)}>
                 Cancel
               </button>
-              <button className="btn-primary" onClick={send}>
-                <Send size={16} /> Add to Sent
+              <button className="btn-primary" onClick={() => void send()}>
+                <Send size={16} /> Send
               </button>
             </>
           }
@@ -292,13 +238,17 @@ export default function MessagesPage() {
               <label className="label" htmlFor="msg-to">
                 To
               </label>
-              <input
-                id="msg-to"
-                className="input"
-                placeholder="recipient@company.co.ke"
-                value={draft.to}
-                onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))}
-              />
+              <select id="msg-to" className="input" value={draft.to} onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))}>
+                <option value="">Choose a member of staff…</option>
+                <option value="ALL">EVERYONE (all chemists)</option>
+                {staff
+                  .filter((u) => u.id !== me)
+                  .map((u) => (
+                    <option key={u.id} value={String(u.id)}>
+                      {label(u)}
+                    </option>
+                  ))}
+              </select>
             </div>
             <div>
               <label className="label" htmlFor="msg-subject">
@@ -307,7 +257,7 @@ export default function MessagesPage() {
               <input
                 id="msg-subject"
                 className="input"
-                placeholder="Subject"
+                placeholder="What it is about, e.g. Stock count on Friday"
                 value={draft.subject}
                 onChange={(e) => setDraft((d) => ({ ...d, subject: e.target.value }))}
               />
@@ -319,14 +269,12 @@ export default function MessagesPage() {
               <textarea
                 id="msg-body"
                 className="input min-h-36 resize-y"
-                placeholder="Write your message…"
+                placeholder="Write the message. New lines start new paragraphs."
                 value={draft.body}
                 onChange={(e) => setDraft((d) => ({ ...d, body: e.target.value }))}
               />
             </div>
-            <p className="text-xs text-slate-400">
-              Stored locally on this device — connect email delivery in Settings to send for real.
-            </p>
+            <p className="text-xs text-slate-400">The message reaches the other tills on their next sync (within a few seconds when they are online).</p>
           </div>
         </Modal>
       )}

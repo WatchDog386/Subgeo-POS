@@ -1,6 +1,5 @@
 import { db, markRemote } from './db'
 import { SEED_BRANCH, SEED_USERS } from './seedData'
-import { sampleImageFor } from './sampleImages'
 
 /**
  * Make sure a fresh till can sign in before it has ever reached the server:
@@ -18,16 +17,4 @@ export async function seedIfEmpty(): Promise<void> {
       await db.branches.put({ ...SEED_BRANCH, _dirty: 0, _ts: 0 } as typeof SEED_BRANCH)
     }
   })
-}
-
-/** Backfill sample Unsplash photos on products that have none (existing installs). */
-export async function backfillSampleImages(): Promise<void> {
-  const cats = await db.categories.toArray()
-  const catName = new Map(cats.map((c) => [c.id!, c.name]))
-  const products = await db.products.toArray()
-  const updates = products
-    .filter((p) => !p.image)
-    .map((p) => ({ key: p.id!, changes: { image: sampleImageFor(p.sku, catName.get(p.categoryId ?? -1)) } }))
-    .filter((u) => u.changes.image)
-  if (updates.length) await db.products.bulkUpdate(updates)
 }

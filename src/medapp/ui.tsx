@@ -125,6 +125,47 @@ export function Input({
   )
 }
 
+let suggestSeq = 0
+/** Free text input that suggests values already used (no fixed list): the
+ * placeholder says what to type, the suggestions come from the shop's data. */
+export function SuggestInput({
+  value,
+  onChange,
+  suggestions,
+  placeholder,
+  width = 140,
+  onEnter,
+}: {
+  value: string
+  onChange: (v: string) => void
+  suggestions: string[]
+  placeholder: string
+  width?: number
+  onEnter?: () => void
+}) {
+  const [id] = useState(() => `ma-suggest-${++suggestSeq}`)
+  const list = [...new Set(suggestions.map((x) => x.trim()).filter(Boolean))].sort()
+  return (
+    <>
+      <input
+        className="ma-input"
+        style={{ width }}
+        value={value}
+        list={id}
+        placeholder={placeholder}
+        title={placeholder}
+        onChange={(e) => onChange(e.target.value.toUpperCase())}
+        onKeyDown={(e) => e.key === 'Enter' && onEnter?.()}
+      />
+      <datalist id={id}>
+        {list.map((x) => (
+          <option key={x} value={x} />
+        ))}
+      </datalist>
+    </>
+  )
+}
+
 export type Opt = string | { value: string; label: string }
 const optValue = (o: Opt) => (typeof o === 'string' ? o : o.value)
 const optLabel = (o: Opt) => (typeof o === 'string' ? o : o.label)

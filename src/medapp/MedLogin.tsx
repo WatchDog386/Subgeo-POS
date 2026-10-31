@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useSession } from '../session'
-import { APP_VERSION, DEFAULTS } from './data'
+import { APP_VERSION, BRAND_NAME } from './data'
 import { EmrLiteLogo, LogoutIcon, NotepadIcon, UsersIcon } from './icons'
 
 /** Medapp login screen: grey page, top bar, then User Name / Pass / Log In
@@ -47,7 +47,7 @@ export default function MedLogin() {
             <div>-</div>
           </div>
         </div>
-        <div className="ma-company">{DEFAULTS.companyName}</div>
+        <div className="ma-company">{BRAND_NAME}</div>
         <button type="button" className="ma-logout" title="Log Out" aria-label="Log Out" tabIndex={-1} disabled>
           <LogoutIcon />
         </button>
@@ -101,7 +101,7 @@ export default function MedLogin() {
             {msg}
           </div>
         )}
-        <div className="ma-login-brand">SUBGEO CHEMIST LTD</div>
+        <div className="ma-login-brand">{BRAND_NAME}</div>
       </div>
     </div>
   )

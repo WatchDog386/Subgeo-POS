@@ -261,3 +261,52 @@ export interface LogEntry {
   userId?: number
   userName?: string
 }
+
+/** A document of a medapp transaction screen (purchase indent, LPO, GRN,
+ * direct invoice, petty cash voucher, quotation, medicine master entry…).
+ * One record per document, so two tills saving at the same time never
+ * overwrite each other. */
+export interface DocRecord {
+  id: number
+  /** Transaction screen it belongs to, e.g. "purchase-indent". */
+  slug: string
+  /** Running document number, e.g. "PI-3-26" (copied from values.docNo). */
+  docNo?: string
+  /** The screen's fields, keyed by field name, as typed (dates dd-mm-yyyy, money 0.00). */
+  values: Record<string, string>
+  createdAt: number
+  updatedAt?: number
+  createdBy?: number
+}
+
+/** A task the admin (or anyone) assigns to staff of a chemist (Home → To-Do List). */
+export interface StaffTask {
+  id: number
+  text: string
+  doc?: string
+  createdAt: number
+  due?: number
+  assignerId?: number
+  assigner: string
+  /** Undefined = anyone at the chemist. */
+  assigneeId?: number
+  assignee: string
+  status: 'PENDING' | 'COMPLETED'
+  completedAt?: number
+  completedBy?: string
+}
+
+/** Internal message between staff (company-wide, every chemist). */
+export interface StaffMessage {
+  id?: number
+  fromId: number
+  fromName: string
+  /** Undefined = every member of staff. */
+  toId?: number
+  toName: string
+  subject: string
+  body: string
+  at: number
+  /** Users who opened it. */
+  readBy: number[]
+}

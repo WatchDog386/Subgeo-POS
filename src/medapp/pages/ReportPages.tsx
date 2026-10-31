@@ -7,7 +7,7 @@ import { useToast } from '../../components/ui'
 import { downloadCsv } from '../../lib/csv'
 import { amt, dmy, getKv, inRange, parseDmy, setKv, todayDmy, useKv, useMedDefaults, useUserMap } from '../data'
 import { MagnifierIcon, SearchLens, ZoomInIcon } from '../icons'
-import { Btn, Check, DateField, Grid, IBtn, Input, LookupField, Radio, Select, TransferArrows, useTransfer, type Col } from '../ui'
+import { Btn, Check, DateField, Grid, IBtn, Input, LookupField, Radio, Select, SuggestInput, TransferArrows, useTransfer, type Col } from '../ui'
 import { At, Canvas, L, Title } from './layout'
 import { C, ColumnChart, DEFAULT_PERIODS, PRODUCT_COLS, PeriodsEditor, PickGrid, ResultDialog, parsePeriods, useProductRows } from './reportKit'
 import {
@@ -916,10 +916,10 @@ function TimeTable() {
             </At>
           ))}
           <At x={279} y={90}>
-            <LookupField value={f.course} onChange={set('course')} options={['PHARMACY', 'NURSING', 'LABORATORY']} />
+            <SuggestInput value={f.course} onChange={set('course')} suggestions={saved.map((x) => x.course)} placeholder="Course, e.g. PHARMACY" width={178} />
           </At>
           <At x={279} y={119}>
-            <LookupField value={f.year} onChange={set('year')} options={['YEAR 1', 'YEAR 2', 'YEAR 3']} />
+            <SuggestInput value={f.year} onChange={set('year')} suggestions={saved.map((x) => x.year)} placeholder="Year of study, e.g. YEAR 1" width={178} />
           </At>
           <At x={279} y={148}>
             <LookupField value={f.faculty} onChange={set('faculty')} options={staff} />
@@ -939,10 +939,10 @@ function TimeTable() {
             <LookupField value={f.branch} onChange={set('branch')} options={locations} />
           </At>
           <At x={563} y={119}>
-            <LookupField value={f.section} onChange={set('section')} options={['A', 'B', 'C']} />
+            <SuggestInput value={f.section} onChange={set('section')} suggestions={saved.map((x) => x.section)} placeholder="Section / class, e.g. A" width={178} />
           </At>
           <At x={563} y={148}>
-            <Input value={f.subject} onChange={set('subject')} width={178} />
+            <Input value={f.subject} onChange={set('subject')} width={178} placeholder="Subject taught" />
           </At>
           <At x={749} y={148}>
             <Btn

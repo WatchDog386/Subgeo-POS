@@ -56,11 +56,54 @@ interface ModuleDef {
   yellowChk?: boolean
   prefix?: string
   fields?: Field[]
-  /** Options of the approval dropdown above the grid. */
-  approvals?: string[]
   /** 'grid': "+" opens an in-panel entry table with the list's headers instead of the pop-up form. */
   entry?: 'grid'
 }
+
+/** What to type in each field: shown greyed inside the empty input. */
+const FIELD_HINTS: Record<string, string> = {
+  accId: 'Account code, e.g. 4010',
+  address: 'Postal / street address',
+  advDetails: 'What the advance is for',
+  approx: 'Estimated cost, e.g. 2500.00',
+  cheque: 'Cheque number (blank if cash/M-Pesa)',
+  cost: 'Buying price per unit, e.g. 45.00',
+  customer: 'Type or look up the customer',
+  depositTo: 'Account the money goes to, e.g. MPESA',
+  expense: 'Expense account, e.g. PURCHASES MEDICINE',
+  faxNo: 'Fax (optional)',
+  fromAccount: 'Paying account, e.g. CASH / BANK',
+  group: 'Product group, e.g. SYRUPS, TABS/CAPSULES',
+  indentNo: 'Indent no. this follows, e.g. PI-3-26',
+  indentor: 'Who asked for the items',
+  invoice: "Supplier's invoice / receipt no.",
+  invoiceNo: 'Invoice number',
+  lpoNo: 'LPO no. this receives, e.g. PO-4-26',
+  name: 'Full name as it should print',
+  narration: 'What the payment is for',
+  packSize: 'Units per pack, e.g. 1 or 100',
+  partyId: 'Party code (optional)',
+  pettyCash: 'Petty cash account',
+  phoneNo: 'Phone, e.g. 0712 345 678',
+  purpose: 'Why: reorder, new stock, …',
+  quoteNo: 'Quotation no. this follows',
+  receivedBy: 'Who received the goods',
+  ref: 'Reference / description',
+  refNo: 'Reference number',
+  retail: 'Retail price per unit, e.g. 150.00',
+  status: 'e.g. GOOD RECEIVED, INDENT APPROVED',
+  supplierName: 'Type or look up the supplier',
+  total: 'Total value, e.g. 1746.00',
+  type: 'S = stock item, N = non-stock',
+  uom: 'Unit, e.g. ML, MG, TABS',
+  vendorName: 'Type or look up the vendor',
+  whole: 'Wholesale price per unit',
+}
+const hintFor = (f: Field): string | undefined =>
+  FIELD_HINTS[f.key] ?? (f.kind === 'date' ? 'dd-mm-yyyy' : f.kind === 'money' ? '0.00' : f.kind === 'party' ? 'Type or look up a name' : undefined)
+
+/** Fields filled from the newest record of the same register (what the shop usually types). */
+const REPEAT_FIELDS = new Set(['expense', 'status', 'receivedBy', 'fromAccount', 'pettyCash', 'depositTo', 'group', 'uom', 'type', 'packSize', 'indentor'])
 
 const C = (key: string, label: string, width: number, align?: 'right'): Col => ({ key, label, width, align })
 const BASE_TOOLS: ToolKey[] = ['mail', 'add', 'list', 'note', 'chat', 'edit', 'copy', 'print', 'scanner', 'fax', 'download', 'docs']
@@ -378,7 +421,6 @@ const DEFS: Record<string, ModuleDef> = {
       C('status', 'Status', 200),
       C('phoneNo', 'Phone No', 120),
     ],
-    approvals: ['APPROVAL REQUEST', 'APPROVED', 'PENDING', 'REJECTED'],
     entry: 'grid',
     fields: [
       { key: 'docNo', kind: 'docno' },
@@ -472,6 +514,8 @@ const TOOL_TITLES: Record<ToolKey, string> = {
 type RawRow = { id: string; ts: number; cells: Record<string, string>; detail?: Sale | ServiceJob }
 
 const PAGE = 50
+/** Approval workflow stamps (Modules list → approval dropdown + stamp). */
+const APPROVALS = ['APPROVAL REQUEST', 'APPROVED', 'REJECTED', 'ON HOLD'] as const
 const OPS = ['WHERE', '=', 'LIKE', 'START WITH', '>', '<']
 
 /* ── Data adapters ─────────────────────────────────────────────────────── */
@@ -636,8 +680,8 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
   const [op, setOp] = useState('WHERE')
   const [val, setVal] = useState('')
   const [applied, setApplied] = useState<{ col: string; op: string; val: string } | null>(null)
-  const approvals = def.approvals ?? ['SPECIMEN COLLECTED', 'APPROVED', 'PENDING', 'REJECTED']
-  const [approval, setApproval] = useState(approvals[0])
+  const [approval, setApproval] = useState<string>(APPROVALS[0])
+  const { user } = useSession()
   const [entering, setEntering] = useState(false)
   const [asc, setAsc] = useState(false)
   const [page, setPage] = useState(0)
@@ -709,6 +753,23 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
     if (!t) return toast('Select a record first', 'error')
     setView(t)
   }
+  /** Stamp the approval status on the chosen documents (synced to every till). */
+  const approve = async () => {
+    const rows = chosenRows()
+    if (!rows.length) return toast('Tick or select the record(s) to stamp first', 'error')
+    const hasStatus = def.fields?.some((f) => f.key === 'status')
+    const at = dmy(Date.now())
+    for (const r of rows) {
+      const id = Number(String(r.id).slice(1))
+      const doc = await db.docs.get(id)
+      if (!doc) continue
+      const values: Record<string, string> = { ...doc.values, approval, approvedBy: user?.name.toUpperCase() ?? '', approvedOn: at }
+      if (hasStatus) values.status = approval
+      await saveDoc(slug, values, id)
+    }
+    toast(`${rows.length} record(s) marked ${approval}`)
+  }
+
   const tool = (k: ToolKey) => {
     switch (k) {
       case 'mail': {
@@ -816,16 +877,14 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
           </>
         )}
         <span style={{ borderLeft: '1px solid #c3c3c3', height: 20 }} />
-        <Select value={approval} onChange={setApproval} width={170} options={approvals} />
-        <IBtn
-          title="Approve"
-          onClick={() => {
-            const n = chosenRows().length
-            toast(n ? `${n} record(s) approved` : 'Select a record first', n ? 'ok' : 'error')
-          }}
-        >
-          <StampIcon />
-        </IBtn>
+        {def.source === 'docs' && (
+          <>
+            <Select value={approval} onChange={setApproval} width={170} options={[...APPROVALS]} />
+            <IBtn title={`Set ${approval} on the ticked / selected record(s)`} onClick={() => void approve()}>
+              <StampIcon />
+            </IBtn>
+          </>
+        )}
         <span style={{ borderLeft: '1px solid #c3c3c3', height: 20 }} />
         <IBtn title="Sort" onClick={() => setAsc(!asc)}>
           <SortIcon />
@@ -924,6 +983,7 @@ function ViewDialog({ def, row, onClose }: { def: ModuleDef; row: RawRow; onClos
           .map((c) => (
             <FragmentRow key={c.key} label={c.label} value={row.cells[c.key] ?? ''} />
           ))}
+        {row.cells.approval && <FragmentRow label="Approval" value={`${row.cells.approval}${row.cells.approvedBy ? ` by ${row.cells.approvedBy}` : ''}${row.cells.approvedOn ? ` on ${row.cells.approvedOn}` : ''}`} />}
         {row.cells.attachment && <FragmentRow label="Document" value={row.cells.attachmentName || 'attachment'} />}
       </div>
       {row.cells.attachment &&
@@ -1323,17 +1383,28 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
   const d = useMedDefaults()
   const parties = useLiveQuery(async () => [...(await db.customers.toArray()), ...(await db.suppliers.toArray())].map((p) => p.name.toUpperCase()), [], [] as string[])
   const fields = def.fields ?? []
-  const [vals, setVals] = useState<Record<string, string>>(() => {
-    if (row) return { ...row.cells }
+  const register = useDocs(slug)
+  const blank = (last: Record<string, string>) => {
     const v: Record<string, string> = {}
     for (const f of fields) {
       if (f.kind === 'date') v[f.key] = dmy(Date.now())
-      else if (f.kind === 'user') v[f.key] = user?.name.toUpperCase() ?? ''
+      else if (f.kind === 'user' || f.key === 'receivedBy') v[f.key] = user?.name.toUpperCase() ?? ''
       else if (f.kind === 'location') v[f.key] = d.location
-      else v[f.key] = ''
+      else v[f.key] = REPEAT_FIELDS.has(f.key) ? last[f.key] ?? '' : ''
     }
     return v
-  })
+  }
+  const [vals, setVals] = useState<Record<string, string>>(() => (row ? { ...row.cells } : blank({})))
+  const [typed, setTyped] = useState(false)
+  // Usual values (expense account, status…) come from the newest record once the register has loaded.
+  const lastId = register[0]?.id
+  useEffect(() => {
+    if (!row && !typed && lastId !== undefined) setVals(blank(register[0].values))
+  }, [lastId, d.location]) // eslint-disable-line react-hooks/exhaustive-deps
+  const setField = (key: string, v: string) => {
+    setTyped(true)
+    setVals((cur) => ({ ...cur, [key]: v }))
+  }
   const [pick, setPick] = useState<string | null>(null)
   const [pickExtra, setPickExtra] = useState('') // current text of the party field being picked
   // One scanned document per entry (supplier invoice, receipt…), kept as a data URL.
@@ -1397,7 +1468,7 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
       delete values.attachment
       delete values.attachmentName
     }
-    await saveDoc(slug, values, row ? Number(String(row.id).slice(1)) : undefined)
+    await saveDoc(slug, values, row ? Number(String(row.id).slice(1)) : undefined, user?.id)
     if (slug === 'medicine') await upsertMedicine(values)
     toast(row ? 'Record updated' : 'Record saved')
     onClose()
@@ -1442,14 +1513,14 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
         {fields.map((f) => (
           <FieldRow key={f.key} label={label(f.key)} req={f.key === required}>
             {f.kind === 'location' ? (
-              <Select plain value={vals[f.key]} onChange={(v) => setVals({ ...vals, [f.key]: v })} options={d.locations} width={200} />
+              <Select plain value={vals[f.key]} onChange={(v) => setField(f.key, v)} options={d.locations} width={200} />
             ) : f.kind === 'docno' ? (
               <Input value={vals[f.key] || '(auto)'} readOnly width={200} />
             ) : f.kind === 'user' ? (
               <Input value={vals[f.key]} readOnly width={200} />
             ) : f.kind === 'party' ? (
               <span style={{ display: 'inline-flex' }}>
-                <Input value={vals[f.key]} onChange={(v) => setVals({ ...vals, [f.key]: v })} width={200} />
+                <Input value={vals[f.key]} onChange={(v) => setField(f.key, v)} width={200} placeholder={hintFor(f)} />
                 <button
                   type="button"
                   className="ma-lookup"
@@ -1463,7 +1534,7 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
                 </button>
               </span>
             ) : (
-              <Input value={vals[f.key]} onChange={(v) => setVals({ ...vals, [f.key]: v })} width={200} />
+              <Input value={vals[f.key]} onChange={(v) => setField(f.key, v)} width={200} placeholder={hintFor(f)} />
             )}
           </FieldRow>
         ))}
@@ -1507,7 +1578,7 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
           onClose={() => setPick(null)}
           onPick={(v) => {
             if (v.startsWith(PICKED_NEW)) void saveParty(pick, v.slice(PICKED_NEW.length))
-            else setVals({ ...vals, [pick]: v })
+            else setField(pick, v)
             setPick(null)
           }}
         />
@@ -1519,37 +1590,41 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
 /* ── In-panel entry table ("+" on Pur/GRN (Direct Invoice)) ───────────────
    Same title bar and table headers as the list; each row of the table is one
    new record, typed straight into the cells. */
-type EntryRow = { key: number; vals: Record<string, string>; file?: { name: string; data: string } }
-
-const ENTRY_DEFAULTS: Record<string, Record<string, string>> = {
-  'pur-grn-direct-invoice': { expense: 'PURCHASES MEDICINE', status: 'GOOD RECEIVED' },
-}
+type EntryRow = { key: number; vals: Record<string, string>; file?: { name: string; data: string }; dirty?: boolean }
 
 function GridEntry({ slug, def, onClose }: { slug: string; def: ModuleDef; onClose: () => void }) {
   const { user } = useSession()
   const toast = useToast()
   const d = useMedDefaults()
   const suppliers = useLiveQuery(() => db.suppliers.toArray(), [], [] as Supplier[])
+  const existing = useDocs(slug)
   const fields = def.fields ?? []
   const required = fields.find((f) => f.kind === 'party')?.key
+  const last = existing[0]?.values ?? {}
   const blank = (key: number): EntryRow => {
     const v: Record<string, string> = {}
     for (const f of fields) {
       if (f.kind === 'date') v[f.key] = dmy(Date.now())
       else if (f.kind === 'location') v[f.key] = d.location
       else if (f.kind === 'user' || f.key === 'receivedBy') v[f.key] = user?.name.toUpperCase() ?? ''
-      else v[f.key] = ENTRY_DEFAULTS[slug]?.[f.key] ?? ''
+      else v[f.key] = REPEAT_FIELDS.has(f.key) && f.key !== 'receivedBy' ? last[f.key] ?? '' : ''
     }
     return { key, vals: v }
   }
   const [rows, setRows] = useState<EntryRow[]>(() => [blank(1)])
+  // The register loads a moment after the screen: carry its usual values into untouched rows.
+  const lastKey = existing[0]?.id
+  useEffect(() => {
+    if (lastKey === undefined) return
+    setRows((list) => list.map((r) => (touched(r) ? r : { ...r, vals: blank(r.key).vals })))
+  }, [lastKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const [sel, setSel] = useState(1)
   const [saving, setSaving] = useState(false)
   const fileInput = useRef<HTMLInputElement | null>(null)
   const fileFor = useRef<number>(0)
   const kindOf = (key: string) => fields.find((f) => f.key === key)?.kind
   const pristine = blank(0).vals
-  const touched = (r: EntryRow) => !!r.file || Object.keys(r.vals).some((k) => kindOf(k) !== 'docno' && (r.vals[k] ?? '') !== (pristine[k] ?? ''))
+  const touched = (r: EntryRow) => !!r.file || !!r.dirty
 
   const set = (rk: number, key: string, v: string) =>
     setRows((list) =>
@@ -1561,7 +1636,7 @@ function GridEntry({ slug, def, onClose }: { slug: string; def: ModuleDef; onClo
           const s = suppliers.find((x) => x.name.toUpperCase() === v.trim().toUpperCase())
           if (s?.phone && !r.vals.phoneNo) vals.phoneNo = s.phone
         }
-        return { ...r, vals }
+        return { ...r, vals, dirty: true }
       }),
     )
   const addRow = () => {
@@ -1582,7 +1657,7 @@ function GridEntry({ slug, def, onClose }: { slug: string; def: ModuleDef; onClo
       r.onerror = () => rej(r.error)
       r.readAsDataURL(f)
     })
-    setRows((list) => list.map((r) => (r.key === fileFor.current ? { ...r, file: { name: f.name, data } } : r)))
+    setRows((list) => list.map((r) => (r.key === fileFor.current ? { ...r, file: { name: f.name, data }, dirty: true } : r)))
   }
 
   const save = async () => {
@@ -1612,7 +1687,7 @@ function GridEntry({ slug, def, onClose }: { slug: string; def: ModuleDef; onClo
         if (vendor && !(await db.suppliers.filter((s) => s.name.toUpperCase() === vendor).first())) {
           await db.suppliers.add({ name: vendor, phone: values.phoneNo || undefined, notes: 'Added from ' + def.title })
         }
-        await saveDoc(slug, values)
+        await saveDoc(slug, values, undefined, user?.id)
       }
       toast(`${todo.length} record(s) saved`)
       onClose()
@@ -1659,7 +1734,11 @@ function GridEntry({ slug, def, onClose }: { slug: string; def: ModuleDef; onClo
         value={v}
         list={kind === 'party' ? 'ma-entry-vendors' : undefined}
         inputMode={kind === 'money' ? 'decimal' : undefined}
-        placeholder={kind === 'date' ? 'dd-mm-yyyy' : undefined}
+        placeholder={(() => {
+          const f = fields.find((x) => x.key === c.key)
+          return f ? hintFor(f) : undefined
+        })()}
+        title={c.label}
         onFocus={() => setSel(r.key)}
         onChange={(e) => set(r.key, c.key, e.target.value)}
         onKeyDown={(e) => {

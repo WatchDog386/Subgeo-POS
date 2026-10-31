@@ -336,7 +336,7 @@ function TaskToDo({ initial, onBack, onSaved }: { initial?: string; onBack: () =
   const [pick, setPick] = useState(initial ?? '')
   const [shown, setShown] = useState<string | undefined>(initial)
   const [note, setNote] = useState('')
-  const [format, setFormat] = useState('SELECT')
+  const [format, setFormat] = useState<'ITEM' | 'ALL'>('ITEM')
   const [print, setPrint] = useState<'' | 'print' | 'draft'>('')
   const [jasper, setJasper] = useState(true)
   const [sms, setSms] = useState(false)
@@ -346,10 +346,27 @@ function TaskToDo({ initial, onBack, onSaved }: { initial?: string; onBack: () =
     if (!pick) return toast('Select a pending item first', 'error')
     setShown(pick)
   }
-  const doPrint = () => window.print()
+  /** Print the shown item or every pending item as a task sheet. */
+  const doPrint = (draft = false) => {
+    // Jasper Print? off = print the screen as it is; on = the formatted task sheet.
+    if (!jasper) return window.print()
+    const list = format === 'ALL' ? pending : item ? [item] : []
+    if (!list.length) return toast('Nothing to print — Show an item first', 'error')
+    const esc = (v: string) => v.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
+    const w = window.open('', '_blank', 'width=900,height=700')
+    if (!w) return toast('Allow pop-ups to print', 'error')
+    w.document.write(`<!doctype html><title>Task sheet</title><style>body{font:12px Arial;margin:24px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #999;padding:4px 6px;text-align:left}h1{font-size:16px}</style>
+<h1>${draft ? 'DRAFT — ' : ''}Purchase task sheet · ${esc(user?.name ?? '')} · ${dmy(Date.now())}</h1>
+<table><tr><th>Transaction</th><th>Doc</th><th>Doc Date</th><th>Task</th><th>Assigner</th><th>Assignee</th><th>Status</th>${note.trim() ? '<th>Remarks</th>' : ''}</tr>
+${list.map((r) => `<tr><td>${esc(r.kind)}</td><td>${esc(r.doc)}</td><td>${r.date ? dmy(r.date) : ''}</td><td>${esc(r.task)}</td><td>${esc(r.assigner)}</td><td>${esc(r.assignee)}</td><td>${esc(r.status)}</td>${note.trim() ? `<td>${esc(note)}</td>` : ''}</tr>`).join('')}
+</table>`)
+    w.document.close()
+    w.focus()
+    w.print()
+  }
   const save = async () => {
     if (!item) return toast('Select a pending item and press Show', 'error')
-    if (print === 'draft') doPrint()
+    if (print === 'draft') doPrint(true)
     if (sms) {
       const body = encodeURIComponent(`${item.kind} ${item.doc}: ${item.task} — ${note.trim() || 'done'}`)
       window.open(`sms:?body=${body}`, '_blank')
@@ -435,7 +452,7 @@ function TaskToDo({ initial, onBack, onSaved }: { initial?: string; onBack: () =
           Advances
         </Btn>
         <span style={{ width: 52 }} />
-        <Select value={format} onChange={setFormat} options={['SELECT', 'TASK SHEET', 'PURCHASE LIST']} width={78} />
+        <Select value={format} onChange={(v) => setFormat(v === 'ALL' ? 'ALL' : 'ITEM')} options={[{ value: 'ITEM', label: 'THIS ITEM' }, { value: 'ALL', label: 'ALL PENDING' }]} width={110} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <Radio name="pt-print" checked={print === 'print'} onChange={() => setPrint(print === 'print' ? '' : 'print')}>
             Print ?
