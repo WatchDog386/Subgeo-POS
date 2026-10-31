@@ -157,13 +157,15 @@ export default function InventoryPage() {
             categoryId: categoryId ?? prev?.categoryId,
             cost: m.cost !== undefined ? toCents(m.cost) : prev?.cost ?? 0,
             price: m.price !== undefined ? toCents(m.price) : prev?.price ?? 0,
-            stock: m.stock ?? prev?.stock ?? 0,
+            // The PDF is a delivery: its quantity adds to what is on the shelf.
+            stock: (prev?.stock ?? 0) + (m.stock ?? 0),
             reorderLevel: m.reorderLevel ?? prev?.reorderLevel ?? 0,
             location: m.location || prev?.location,
             taxable: m.taxable ?? prev?.taxable ?? true,
             serialized: m.serialized ?? prev?.serialized ?? false,
             trackStock: m.trackStock ?? prev?.trackStock ?? true,
-            active: prev?.active ?? true,
+            // New medicines need a selling price before they can be sold.
+            active: prev?.active ?? (m.price ?? 0) > 0,
             fitment: [],
             createdAt: prev?.createdAt ?? now,
             updatedAt: now,

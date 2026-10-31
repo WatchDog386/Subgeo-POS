@@ -149,6 +149,7 @@ Pick whichever method suits you:
 | Cashier | *Modules → OTC Medicine Issued/Bill* | Bills (or the *Sell* screen) |
 | Purchase | *Home → To-Do List* | Work through low stock, indents to turn into LPOs, LPOs to receive |
 | Purchase | *Modules → STEP 1 → STEP 2 → STEP 3* | Indent, then LPO (type the indent no.), then GRN (type the LPO no.). For supplier invoices without an LPO, use *Pur/GRN (Direct Invoice)* |
+| Purchase | *Modules → Pur/GRN (Direct Invoice) → Upload Supplier Invoice (PDF)* | Receive a whole supplier invoice / proforma / sales order at once (see below) |
 | Purchase | *Modules → Petty Cash Voucher* | Petty cash spent |
 | Admin | *Home → To-Do List → Task To-Do* | Assign tasks. They appear on the assignee's Home and move to *Pending-Completed* when done |
 | Admin | *Utilities → Chemists* | Watch all chemists; transfer stock between chemists |
@@ -172,3 +173,33 @@ Pick whichever method suits you:
 | *"Your chemist is closed or not set"* at sign-in | As admin, set the profile's **Chemist No.** and make sure that chemist is **active**. |
 | Till stuck on *Offline* | Check the internet. Everything keeps working and uploads later. Don't clear the browser data while changes are waiting. |
 | A report on the server looks out of date | Run `npm run db:rebuild` on the server. |
+
+## Receiving a supplier's invoice from its PDF
+
+Instead of typing a delivery line by line, as the PURCHASE account:
+
+1. Go to *Modules → Pur/GRN (Direct Invoice)* → **Upload Supplier Invoice (PDF)**
+   (the button is also on the **+** entry screen) and choose the PDF the
+   supplier sent.
+2. The review shows every line it read: item code, description, qty, unit
+   cost and amount. At the top, a green **✓ Lines add up to the invoice
+   subtotal** confirms nothing was missed. A red ⚠ means check the PDF
+   against the list.
+3. Each line is matched to a medicine you already have, by item code first,
+   then by name. Matches show in green; anything else shows as **NEW
+   MEDICINE**. To match a line to an existing medicine with a different
+   name, type that medicine's name in *Medicine in stock*.
+4. New medicines need a selling price. Type one per line, or set
+   **Markup % for new** (e.g. `33`) to price them all at cost + 33%, rounded up
+   to the shilling. Tick **VAT** for new medicines that carry VAT.
+5. Untick anything that did not arrive, fix a quantity if the delivery was
+   short, then press **Receive … line(s) into stock**.
+
+One Pur/GRN (Direct Invoice) is filed with the PDF attached. Stock goes up by
+each quantity, and the cost price becomes the invoice's unit cost; existing
+selling prices are kept, with a ⚠ where one is now below cost. The supplier
+is added to the Party Master if it is new. Uploading the same supplier and
+invoice number twice asks before adding the stock again.
+
+Only PDFs with selectable text can be read, i.e. the ones a supplier's system
+produces. A scanned photo of a paper invoice has no text to read.

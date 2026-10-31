@@ -25,6 +25,7 @@ import {
 } from '../data'
 import { MODULE_GROUPS } from '../nav'
 import { OtcEntry, PartyEntry, WHOLESALE_RULES, WholesaleEntry } from './EntryScreens'
+import { useInvoiceUpload } from './InvoiceImport'
 import {
   EyeIcon,
   FindIcon,
@@ -58,6 +59,8 @@ interface ModuleDef {
   fields?: Field[]
   /** 'grid': "+" opens an in-panel entry table with the list's headers instead of the pop-up form. */
   entry?: 'grid'
+  /** Offer "Upload Supplier Invoice (PDF)" (reads the lines and receives them into stock). */
+  importInvoice?: boolean
 }
 
 /** What to type in each field: shown greyed inside the empty input. */
@@ -437,6 +440,7 @@ const DEFS: Record<string, ModuleDef> = {
       C('phoneNo', 'Phone No', 120),
     ],
     entry: 'grid',
+    importInvoice: true,
     fields: [
       { key: 'docNo', kind: 'docno' },
       { key: 'mrnDate', kind: 'date' },
@@ -704,6 +708,7 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
   const nav = useNavigate()
   const toast = useToast()
   const all = useRows(slug, def)
+  const upload = useInvoiceUpload()
   const [quick, setQuick] = useState('')
   const [col, setCol] = useState('SELECT')
   const [op, setOp] = useState('WHERE')
@@ -880,6 +885,14 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
         <IBtn lg title="Filter" onClick={() => setShowFilter(!showFilter)}>
           <FunnelIcon />
         </IBtn>
+        {def.importInvoice && (
+          <span style={{ marginLeft: 24 }}>
+            <Btn onClick={upload.pick} disabled={upload.busy} title="Read a supplier invoice / proforma / sales order PDF and receive all its lines into stock">
+              {upload.busy ? 'Reading PDF…' : 'Upload Supplier Invoice (PDF)'}
+            </Btn>
+          </span>
+        )}
+        {upload.element}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, whiteSpace: 'nowrap' }}>
@@ -1280,6 +1293,7 @@ type EntryRow = { key: number; vals: Record<string, string>; file?: { name: stri
 function GridEntry({ slug, def, onClose }: { slug: string; def: ModuleDef; onClose: () => void }) {
   const { user } = useSession()
   const toast = useToast()
+  const upload = useInvoiceUpload(onClose)
   const d = useMedDefaults()
   const suppliers = useLiveQuery(() => db.suppliers.toArray(), [], [] as Supplier[])
   const existing = useDocs(slug)
@@ -1469,8 +1483,14 @@ function GridEntry({ slug, def, onClose }: { slug: string; def: ModuleDef; onClo
         >
           Upload Document
         </Btn>
+        {def.importInvoice && (
+          <Btn onClick={upload.pick} disabled={upload.busy} title="Read the whole supplier invoice PDF instead of typing it">
+            {upload.busy ? 'Reading PDF…' : 'Upload Supplier Invoice (PDF)'}
+          </Btn>
+        )}
+        {upload.element}
         <span className="ma-label" style={{ marginLeft: 6 }}>
-          Type each record into a row. Enter on the last cell adds a row.
+          Type each record into a row, or upload the supplier's PDF to receive every line at once.
         </span>
         <span style={{ marginLeft: 'auto', marginRight: 10 }}>
           <Rows n={rows.filter(touched).length} />
