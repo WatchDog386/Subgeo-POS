@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
@@ -411,6 +411,30 @@ const DEFS: Record<string, ModuleDef> = {
       { key: 'cost', kind: 'money' },
       { key: 'packSize', kind: 'money' },
       { key: 'type', kind: 'text' },
+    ],
+  },
+  /* Purchases dashboard — Petty Cash Issue (screenshot 12.24.48 (1)). */
+  'petty-cash-voucher': {
+    title: 'Petty Cash Voucher',
+    source: 'docs',
+    prefix: 'PCV',
+    hscroll: 0.65,
+    tools: BASE_TOOLS,
+    cols: [
+      C('location', 'Location', 310),
+      C('docNo', 'Vch No', 215),
+      C('vchDate', 'VchDate', 215),
+      C('pettyCash', 'Petty Cash A/C', 240),
+      C('accId', 'Acc ID', 170),
+      C('narration', 'Narration', 260),
+    ],
+    fields: [
+      { key: 'location', kind: 'location' },
+      { key: 'docNo', kind: 'docno' },
+      { key: 'vchDate', kind: 'date' },
+      { key: 'pettyCash', kind: 'text' },
+      { key: 'accId', kind: 'text' },
+      { key: 'narration', kind: 'text' },
     ],
   },
 }
@@ -887,7 +911,20 @@ function ViewDialog({ def, row, onClose }: { def: ModuleDef; row: RawRow; onClos
           .map((c) => (
             <FragmentRow key={c.key} label={c.label} value={row.cells[c.key] ?? ''} />
           ))}
+        {row.cells.attachment && <FragmentRow label="Document" value={row.cells.attachmentName || 'attachment'} />}
       </div>
+      {row.cells.attachment &&
+        (row.cells.attachment.startsWith('data:image') ? (
+          <img
+            src={row.cells.attachment}
+            alt={row.cells.attachmentName || 'entry document'}
+            style={{ maxWidth: '100%', maxHeight: 320, marginTop: 10, border: '1px solid #c3c3c3' }}
+          />
+        ) : (
+          <a href={row.cells.attachment} download={row.cells.attachmentName || 'document'} style={{ display: 'inline-block', marginTop: 10 }} className="ma-btn">
+            Open document ({row.cells.attachmentName || 'file'})
+          </a>
+        ))}
       {lines.length > 0 && (
         <div style={{ marginTop: 12 }}>
           <Grid
@@ -1286,17 +1323,69 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
   })
   const [pick, setPick] = useState<string | null>(null)
   const [pickExtra, setPickExtra] = useState('') // current text of the party field being picked
+  // One scanned document per entry (supplier invoice, receipt…), kept as a data URL.
+  const [file, setFile] = useState<{ name: string; data: string } | null>(() =>
+    row?.cells.attachment ? { name: row.cells.attachmentName || 'document', data: row.cells.attachment } : null,
+  )
+  const fileInput = useRef<HTMLInputElement | null>(null)
   const label = (key: string) => def.cols.find((c) => c.key === key)?.label || (key === 'docNo' ? 'Doc No' : key === 'total' ? 'Amount' : key)
   const required = fields.find((f) => f.kind === 'party')?.key
   /** Vendor fields write new suppliers; customer fields write new customers. */
   const partyIsSupplier = (key: string) => /vendor|supplier/i.test(key)
+
+  const pickFile = async (f: File) => {
+    if (f.size > 5 * 1024 * 1024) return toast('Document is too big (max 5 MB)', 'error')
+    const data = await new Promise<string>((res, rej) => {
+      const r = new FileReader()
+      r.onload = () => res(r.result as string)
+      r.onerror = () => rej(r.error)
+      r.readAsDataURL(f)
+    })
+    setFile({ name: f.name, data })
+  }
+
+  // The Medicine master is where a chemist's inventory starts: a new product is
+  // added to stock at its cost/retail prices; edits refresh the prices.
+  const upsertMedicine = async (values: Record<string, string>) => {
+    const name = values.name.trim()
+    if (!name) return
+    const cost = toCents(values.cost || '0')
+    const price = toCents(values.retail || values.whole || '0')
+    const existingP = await db.products.filter((p) => p.name.toUpperCase() === name.toUpperCase()).first()
+    if (existingP) await db.products.update(existingP.id!, { cost, price, updatedAt: Date.now() })
+    else {
+      await db.products.add({
+        sku: values.docNo,
+        name,
+        fitment: [],
+        cost,
+        price,
+        stock: 0,
+        reorderLevel: 0,
+        taxable: true,
+        serialized: false,
+        trackStock: !/^N/i.test((values.type || 'S').trim()),
+        active: true,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      })
+    }
+  }
 
   const save = async () => {
     if (required && !vals[required]?.trim()) return toast(`${label(required)} is required`, 'error')
     const values = { ...vals }
     if (!row && fields.some((f) => f.kind === 'docno')) values.docNo = await nextDocNo(def.prefix ?? 'DOC')
     for (const f of fields) if (f.kind === 'money' && values[f.key]) values[f.key] = (parseFloat(values[f.key]) || 0).toFixed(2)
+    if (file) {
+      values.attachment = file.data
+      values.attachmentName = file.name
+    } else {
+      delete values.attachment
+      delete values.attachmentName
+    }
     await saveDoc(slug, values, row ? Number(String(row.id).slice(1)) : undefined)
+    if (slug === 'medicine') await upsertMedicine(values)
     toast(row ? 'Record updated' : 'Record saved')
     onClose()
   }
@@ -1365,6 +1454,34 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
             )}
           </FieldRow>
         ))}
+        <FieldRow label="Doc Upload">
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <input
+              ref={fileInput}
+              type="file"
+              accept="image/*,.pdf,application/pdf"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                e.target.value = ''
+                if (f) void pickFile(f)
+              }}
+            />
+            <Btn round onClick={() => fileInput.current?.click()}>
+              Upload Document
+            </Btn>
+            {file && (
+              <>
+                <span className="ma-label" style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.name}>
+                  {file.name}
+                </span>
+                <button type="button" className="ma-lookup" title="Remove document" onClick={() => setFile(null)}>
+                  ×
+                </button>
+              </>
+            )}
+          </span>
+        </FieldRow>
       </div>
       {pick && (
         <PickList

@@ -8,7 +8,8 @@ import { EmrLiteLogo, LogoutIcon, NotepadIcon, UsersIcon } from './icons'
  *
  * Accounts are created by the admin in Utilities → User Management; each
  * cashier belongs to one chemist (CHEM number) and lands in that chemist.
- * Starter accounts: admin / subgeo22 (all chemists), subgeo / 0000 (CHEM1). */
+ * Starter accounts: admin / subgeo22 (all chemists), subgeo / 0000 (CHEM1),
+ * purchase (no password — the Purchases dashboard). */
 export default function MedLogin() {
   const { login } = useSession()
   const [name, setName] = useState('')
@@ -16,8 +17,11 @@ export default function MedLogin() {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
+  // The purchases dashboard signs in with no password.
+  const passwordless = name.trim().toLowerCase() === 'purchase'
+
   const submit = async () => {
-    if (busy || !pass || !name.trim()) return
+    if (busy || !name.trim() || (!pass && !passwordless)) return
     setBusy(true)
     setMsg(null)
     const r = await login(name, pass).catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) }))
@@ -85,8 +89,9 @@ export default function MedLogin() {
               onChange={(e) => setPass(e.target.value.slice(0, 64))}
               onKeyDown={(e) => e.key === 'Enter' && void submit()}
               autoComplete="current-password"
+              placeholder={passwordless ? '(none)' : undefined}
             />
-            <button type="button" className="ma-btn ma-login-btn" onClick={() => void submit()} disabled={busy || pass.length === 0 || !name.trim()}>
+            <button type="button" className="ma-btn ma-login-btn" onClick={() => void submit()} disabled={busy || !name.trim() || (!pass && !passwordless)}>
               {busy ? 'Signing in…' : 'Log In'}
             </button>
           </div>

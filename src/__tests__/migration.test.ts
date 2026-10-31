@@ -30,7 +30,7 @@ it('upgrades a v2 till to multi-chemist', async () => {
   const { seedIfEmpty } = await import('../db/seed')
   await seedIfEmpty()
   const users = await db.users.toArray()
-  expect(users.map((u) => u.username).sort()).toEqual(['admin', 'subgeo'])
+  expect(users.map((u) => u.username).sort()).toEqual(['admin', 'purchase', 'subgeo'])
   expect(users.every((u) => (u as { _dirty?: number })._dirty === 0)).toBe(true)
   const p = (await db.products.toArray())[0] as unknown as Record<string, unknown>
   expect(p.stock).toBe(4)

@@ -39,9 +39,29 @@ export const MODULE_GROUPS: MenuGroup[] = [
   },
 ]
 
-export function moduleGroupOf(slug: string): MenuGroup | undefined {
-  return MODULE_GROUPS.find((g) => g.items.some((i) => i.slug === slug))
+export function moduleGroupOf(slug: string, groups: MenuGroup[] = MODULE_GROUPS): MenuGroup | undefined {
+  return groups.find((g) => g.items.some((i) => i.slug === slug))
 }
+
+/** Modules sidebar for the purchase dashboard ("PURCHASE" login — screenshots
+ * 31 Oct 2026): the purchasing steps, medicine master and petty cash. */
+export const PURCHASE_MODULE_GROUPS: MenuGroup[] = [
+  {
+    label: 'PURCHASES',
+    items: [
+      { slug: 'purchase-indent', label: 'STEP 1: PURCHASE INDENT' },
+      { slug: 'local-purchase-order', label: 'STEP 2: LOCAL PURCHASE ORDER' },
+      { slug: 'pur-inv-grn', label: 'STEP 3: GRN- Good Recived Note' },
+      { slug: 'pur-grn-direct-invoice', label: 'Pur/GRN (Direct Invoice)' },
+      { slug: 'medicine', label: 'Medicine' },
+      { slug: 'party-master', label: 'Party Master' },
+    ],
+  },
+  {
+    label: 'PETTY CASH ISSUE',
+    items: [{ slug: 'petty-cash-voucher', label: 'Petty Cash Voucher' }],
+  },
+]
 
 /** Reports tab: the "Report List" tree. */
 export const REPORT_TREE: MenuItem[] = [

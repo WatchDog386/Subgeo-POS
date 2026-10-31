@@ -37,7 +37,21 @@ export const SEED_CASHIER: User & { id: number } = {
   branchId: 1,
 }
 
-export const SEED_USERS = [SEED_ADMIN, SEED_CASHIER]
+/** purchase — the purchases dashboard (indents, POs, GRNs, medicine master).
+ * Signs in with NO password: an empty-password hash is only accepted for this
+ * role (see server/sync.ts auth/login and session.tsx). */
+export const SEED_PURCHASE: User & { id: number } = {
+  id: 3,
+  name: 'PURCHASE',
+  username: 'purchase',
+  salt: 'seed-purchase',
+  passHash: hashPassword('seed-purchase', ''),
+  role: 'purchase',
+  active: true,
+  branchId: 1,
+}
+
+export const SEED_USERS = [SEED_ADMIN, SEED_CASHIER, SEED_PURCHASE]
 
 /** "CHEM1" for chemist number 1. */
 export function chemCode(number: number | undefined): string {

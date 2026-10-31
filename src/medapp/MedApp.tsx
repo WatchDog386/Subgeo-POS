@@ -3,6 +3,7 @@ import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from
 import './medapp.css'
 import { useSession } from '../session'
 import { APP_VERSION, useMedDefaults } from './data'
+import type { MenuGroup } from './nav'
 import {
   EmrLiteLogo,
   FileIcon,
@@ -18,7 +19,15 @@ import {
   UsersIcon,
 } from './icons'
 import SyncBadge from './SyncBadge'
-import { MODULE_GROUPS, REPORT_ITEMS, REPORT_TREE, UTILITY_EXPANDS, UTILITY_ITEMS, moduleGroupOf } from './nav'
+import {
+  MODULE_GROUPS,
+  PURCHASE_MODULE_GROUPS,
+  REPORT_ITEMS,
+  REPORT_TREE,
+  UTILITY_EXPANDS,
+  UTILITY_ITEMS,
+  moduleGroupOf,
+} from './nav'
 import HomePage from './pages/HomePage'
 import { ModuleListPage, ModulesEmpty } from './pages/ModulesPage'
 import FavouritesPage from './pages/FavouritesPage'
@@ -72,6 +81,9 @@ export default function MedApp() {
   const tab = tabOf(path)
   const [sideW, setSideW] = useState(254)
   const drag = useRef<{ x: number; w: number } | null>(null)
+  // The purchases dashboard has its own modules menu; every other role sees the
+  // cashier/manager menu.
+  const moduleGroups = user?.role === 'purchase' ? PURCHASE_MODULE_GROUPS : MODULE_GROUPS
 
   useEffect(() => {
     const move = (e: MouseEvent) => {
@@ -123,7 +135,7 @@ export default function MedApp() {
         {tab !== 'home' && (
           <>
             <aside className="ma-side" style={{ width: sideW }}>
-              <Sidebar tab={tab} path={path} />
+              <Sidebar tab={tab} path={path} moduleGroups={moduleGroups} />
             </aside>
             <div
               className="ma-split ma-noprint"
@@ -190,8 +202,8 @@ export default function MedApp() {
 }
 
 /* ── Sidebars ──────────────────────────────────────────────────────────── */
-function Sidebar({ tab, path }: { tab: Tab; path: string }) {
-  if (tab === 'modules') return <ModulesSidebar path={path} />
+function Sidebar({ tab, path, moduleGroups }: { tab: Tab; path: string; moduleGroups: MenuGroup[] }) {
+  if (tab === 'modules') return <ModulesSidebar path={path} groups={moduleGroups} />
   if (tab === 'reports') return <ReportsSidebar path={path} />
   if (tab === 'charts')
     return (
@@ -205,17 +217,17 @@ function Sidebar({ tab, path }: { tab: Tab; path: string }) {
   return <HelpSidebar path={path} />
 }
 
-function ModulesSidebar({ path }: { path: string }) {
+function ModulesSidebar({ path, groups }: { path: string; groups: MenuGroup[] }) {
   const nav = useNavigate()
   const activeSlug = path.startsWith('/modules/') ? path.slice('/modules/'.length) : ''
-  const [open, setOpen] = useState<string | undefined>(moduleGroupOf(activeSlug)?.label)
+  const [open, setOpen] = useState<string | undefined>(moduleGroupOf(activeSlug, groups)?.label)
   useEffect(() => {
-    const g = moduleGroupOf(activeSlug)
+    const g = moduleGroupOf(activeSlug, groups)
     if (g) setOpen(g.label)
-  }, [activeSlug])
+  }, [activeSlug, groups])
   return (
     <div className="ma-side-scroll">
-      {MODULE_GROUPS.map((g) => (
+      {groups.map((g) => (
         <div key={g.label}>
           <button
             type="button"

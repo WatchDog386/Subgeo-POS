@@ -1,6 +1,6 @@
 // All money values are stored as integer cents (KES x 100) to avoid float drift.
 
-export type Role = 'owner' | 'manager' | 'cashier'
+export type Role = 'owner' | 'manager' | 'cashier' | 'purchase'
 
 /** A chemist (pharmacy branch). Shown as CHEM<number>, e.g. CHEM1. */
 export interface Branch {

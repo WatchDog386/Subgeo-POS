@@ -36,7 +36,9 @@ export async function saveStaff(input: StaffInput, actor?: User | null): Promise
   if (input.id !== undefined && !existing) throw new Error('That user no longer exists')
   if (users.some((u) => u.username === username && u.id !== input.id)) throw new Error(`User name "${username}" is already taken`)
   const password = input.password ?? ''
-  if (!existing && !password) throw new Error('Set a password for the new user')
+  // PURCHASE-dashboard accounts may have no password at all.
+  const passwordless = !existing && !password && input.role === 'purchase'
+  if (!existing && !password && !passwordless) throw new Error('Set a password for the new user')
   if (password && password.length < PASSWORD_MIN) throw new Error(`Password must be at least ${PASSWORD_MIN} characters`)
 
   let branchId: number | undefined
@@ -49,13 +51,13 @@ export async function saveStaff(input: StaffInput, actor?: User | null): Promise
   const owners = users.filter((u) => u.role === 'owner' && u.active && u.id !== input.id)
   if (owners.length === 0 && (input.role !== 'owner' || !input.active)) throw new Error('Keep at least one active admin')
 
-  const salt = password ? newSalt() : existing!.salt
+  const salt = password || passwordless ? newSalt() : existing!.salt
   const rec: User = {
     ...(existing ?? {}),
     name,
     username,
     salt,
-    passHash: password ? hashPassword(salt, password) : existing!.passHash,
+    passHash: password ? hashPassword(salt, password) : passwordless ? hashPassword(salt, '') : existing!.passHash,
     role: input.role,
     branchId,
     active: input.active,

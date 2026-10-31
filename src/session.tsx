@@ -36,12 +36,13 @@ export const PERMS: Record<Role, Permission[]> = {
   owner: ['refund', 'discount', 'inventory', 'reports', 'settings', 'purchasing', 'users', 'logs', 'branches'],
   manager: ['refund', 'discount', 'inventory', 'reports', 'purchasing', 'logs'],
   cashier: ['discount'],
+  purchase: ['purchasing', 'inventory', 'reports'],
 }
 
 /** Minimum password length for new or changed passwords. */
 export { PASSWORD_MIN } from './db/staff'
 
-export const ROLE_LABEL: Record<Role, string> = { owner: 'ADMIN', manager: 'MANAGER', cashier: 'CASHIER' }
+export const ROLE_LABEL: Record<Role, string> = { owner: 'ADMIN', manager: 'MANAGER', cashier: 'CASHIER', purchase: 'PURCHASE' }
 
 type LoginResponse = { token: string; user: User & { id: number }; branches: (Branch & { id: number })[] }
 
@@ -196,7 +197,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const login = useCallback(
     async (username: string, pass: string): Promise<LoginResult> => {
       const uname = username.trim().toLowerCase()
-      if (!uname || !pass) return { ok: false, error: 'Enter your user name and password' }
+      // The purchase dashboard signs in with no password; the server only
+      // accepts one from an account whose role is "purchase".
+      if (!uname || (!pass && uname !== 'purchase')) return { ok: false, error: 'Enter your user name and password' }
       let u: User | undefined
       try {
         const r = await api<LoginResponse>('/auth/login', {

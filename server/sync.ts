@@ -5,7 +5,7 @@ import crypto from 'node:crypto'
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import { sql } from './db'
 import { hashPassword } from '../src/lib/sha256'
-import { SEED_BRANCH, SEED_USERS, chemCode } from '../src/db/seedData'
+import { SEED_BRANCH, SEED_PURCHASE, SEED_USERS, chemCode } from '../src/db/seedData'
 import { COUNTER_FIELDS, GLOBAL_KV_KEYS, GLOBAL_TABLES, SYNCED_TABLES, isLocalKvKey, isSeqKvKey } from '../src/db/syncSchema'
 import type { Branch, Product, Role, User } from '../src/db/types'
 
@@ -15,7 +15,7 @@ type AuthedUser = User & { id: number }
 type AuthedRequest = Request & { user: AuthedUser; token: string }
 
 const GLOBAL = new Set<string>(GLOBAL_TABLES)
-const ROLES: Role[] = ['owner', 'manager', 'cashier']
+const ROLES: Role[] = ['owner', 'manager', 'cashier', 'purchase']
 const PULL_LIMIT = 1000
 
 /* ── Record store ────────────────────────────────────────────────────────── */
@@ -80,11 +80,22 @@ function toPulled(row: Row) {
   }
 }
 
-/** Create the starter admin, CHEM1 cashier and Chemist 1 on a new server. */
+/** Create the starter admin, CHEM1 cashier and Chemist 1 on a new server.
+ * On companies that started before the purchases dashboard, add the passwordless
+ * purchase account (server-assigned id and the first open chemist, so no till
+ * id can clash). */
 export function ensureSeeds(): void {
   sql.transaction(() => {
     if (!(sql.prepare("SELECT 1 FROM sync_records WHERE tbl = 'users' LIMIT 1").get())) {
       for (const u of SEED_USERS) writeRow('users', 0, u.id, u as unknown as Rec, 0, null)
+    } else if (
+      !sql
+        .prepare("SELECT 1 FROM sync_records WHERE tbl = 'users' AND deleted = 0 AND json_extract(data, '$.username') = 'purchase' LIMIT 1")
+        .get()
+    ) {
+      const next = Number((sql.prepare("SELECT MAX(CAST(id AS INTEGER)) + 1 AS next FROM sync_records WHERE tbl = 'users'").get() as { next: number }).next) || 1
+      const home = branches().find((b) => b.active) ?? branches()[0]
+      if (home) writeRow('users', 0, next, { ...SEED_PURCHASE, id: next, branchId: home.id } as unknown as Rec, Date.now(), null)
     }
     if (!(sql.prepare("SELECT 1 FROM sync_records WHERE tbl = 'branches' LIMIT 1").get())) {
       writeRow('branches', 0, SEED_BRANCH.id, SEED_BRANCH as unknown as Rec, 0, null)
@@ -188,7 +199,15 @@ syncRouter.post('/auth/login', (req, res) => {
     return
   }
   const user = users().find((u) => u.username === username)
-  if (!user || !user.active || !safeEqual(hashPassword(user.salt, password), user.passHash)) {
+  // The purchases dashboard signs in with no password; only accounts whose
+  // role is "purchase" and whose hash is an empty-password hash accept it.
+  const passwordless =
+    password === '' && user?.role === 'purchase' && safeEqual(hashPassword(user.salt, ''), user.passHash)
+  if (
+    !user ||
+    !user.active ||
+    !(passwordless || safeEqual(hashPassword(user.salt, password), user.passHash))
+  ) {
     const n = (f?.n ?? 0) + 1
     failures.set(key, { n, until: n >= 8 ? Date.now() + 5 * 60_000 : 0 })
     res.status(401).json({ error: user && !user.active ? 'This account is disabled' : 'Invalid user name or password' })
