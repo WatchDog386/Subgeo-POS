@@ -117,7 +117,7 @@ function toPulled(row: Row) {
 }
 
 /** Create the starter admin, CHEM1 cashier and Chemist 1 on a new server.
- * On companies that started before the purchases dashboard, add the passwordless
+ * On companies that started before the purchases dashboard, add the
  * purchase account (server-assigned id and the first open chemist, so no till
  * id can clash). */
 export function ensureSeeds(): void {
@@ -140,6 +140,17 @@ export function ensureSeeds(): void {
   })()
   ensureRelational()
   sql.transaction(() => convertLegacyKv())()
+  // The purchases account used to have no password; it now has the admin's rights,
+  // so one without a password gets the admin's starter password subgeo22.
+  sql.transaction(() => {
+    for (const u of users()) {
+      if (u.role === 'purchase' && safeEqual(hashPassword(u.salt, ''), u.passHash)) {
+        const salt = crypto.randomBytes(8).toString('hex')
+        writeRow('users', 0, u.id, { ...u, salt, passHash: hashPassword(salt, 'subgeo22') } as unknown as Rec, Date.now(), null)
+        console.log(`Account "${u.username}" had no password: it is now subgeo22`)
+      }
+    }
+  })()
 }
 
 /* ── Auth ─────────────────────────────────────────────────────────────────── */
@@ -252,10 +263,8 @@ syncRouter.post('/auth/login', (req, res) => {
   }
   // Cashiers of different chemists may share a user name ("subgeo"): the password picks the account.
   const named = users().filter((u) => u.username === username)
-  const matches = (u: AuthedUser) =>
-    // The purchases dashboard signs in with no password; only accounts whose
-    // role is "purchase" and whose hash is an empty-password hash accept it.
-    password === '' ? u.role === 'purchase' && safeEqual(hashPassword(u.salt, ''), u.passHash) : safeEqual(hashPassword(u.salt, password), u.passHash)
+  // Every account needs its password (an empty one is never accepted).
+  const matches = (u: AuthedUser) => password !== '' && safeEqual(hashPassword(u.salt, password), u.passHash)
   const hit = named.filter(matches)
   const user = hit.find((u) => u.active) ?? hit[0] ?? (named.length === 1 ? named[0] : undefined)
   if (!user || !user.active || !hit.includes(user)) {

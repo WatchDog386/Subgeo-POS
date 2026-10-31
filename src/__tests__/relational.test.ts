@@ -115,7 +115,7 @@ describe('relational company database', () => {
   it('signs in all three dashboards (purchase with no password)', async () => {
     admin = await device('admin', 'subgeo22')
     cashier = await device('subgeo', '0001')
-    purchase = await device('purchase', '')
+    purchase = await device('purchase', 'subgeo22')
     expect(purchase.sync.getSyncState().status).toBe('idle')
   })
 

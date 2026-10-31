@@ -10,7 +10,7 @@
 |---|---|---|
 | `admin` | Admin | Every chemist: sales, stock value, debtors, staff, reports, chemists, transfers |
 | `subgeo` + the chemist's password (`0001` = SUBGEO1 … `0012` = SUBGEO12, `0000` = HQ) | Cashier / pharmacy | Own chemist: OTC bills and returns, service bills, whole-sale documents, reports |
-| `purchase` | Purchases (run by the admin) | The admin's rights over **every** chemist, with the purchases menu first: indents, LPOs, GRNs, Pur/GRN direct invoices (with PDF upload), medicine list, petty cash. The **Chemist** switcher in the header picks which pharmacy's stock and records you work on. **Set a password** for it (a red bar shows until you do). |
+| `purchase` | Purchases (run by the admin) | The admin's rights over **every** chemist, with the purchases menu first: indents, LPOs, GRNs, Pur/GRN direct invoices (with PDF upload), medicine list, petty cash. The **Chemist** switcher in the header picks which pharmacy's stock and records you work on. Signs in with `purchase` / `subgeo22`. |
 
 ## How the data moves (all automatic)
 
@@ -44,7 +44,7 @@ Then check with `npm run db:status`: every migration should be `applied`. If til
 
 ## Before go-live
 
-- [ ] Change the `admin` password, and give `purchase` a password (*Utilities → User Management*). Both have full rights over every pharmacy.
+- [ ] `admin` and `purchase` both sign in with `subgeo22` and both have full rights over every pharmacy: change those passwords before go-live (*Utilities → User Management*).
 - [ ] Run `npm run setup:subgeo` once, then key in each SUBGEO's name and location (*Utilities → Chemists → Edit Selected*).
 - [ ] Set company name, KRA PIN, receipt footer, M-Pesa till and licence dates (*Utilities → Default Values Management*).
 - [ ] Create each chemist's cashier / manager / purchase accounts ([PHARMACY-SETUP.md](PHARMACY-SETUP.md)).

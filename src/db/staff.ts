@@ -47,9 +47,7 @@ export async function saveStaff(input: StaffInput, actor?: User | null): Promise
       throw new Error(`Another "${username}" account already uses that password — give each chemist its own password`)
     if (!pw && !existing) throw new Error('Set a password for the new user')
   }
-  // PURCHASE-dashboard accounts may have no password at all.
-  const passwordless = !existing && !password && input.role === 'purchase'
-  if (!existing && !password && !passwordless) throw new Error('Set a password for the new user')
+  if (!existing && !password) throw new Error('Set a password for the new user')
   if (password && password.length < PASSWORD_MIN) throw new Error(`Password must be at least ${PASSWORD_MIN} characters`)
 
   let branchId: number | undefined
@@ -62,13 +60,13 @@ export async function saveStaff(input: StaffInput, actor?: User | null): Promise
   const owners = users.filter((u) => u.role === 'owner' && u.active && u.id !== input.id)
   if (owners.length === 0 && (input.role !== 'owner' || !input.active)) throw new Error('Keep at least one active admin')
 
-  const salt = password || passwordless ? newSalt() : existing!.salt
+  const salt = password ? newSalt() : existing!.salt
   const rec: User = {
     ...(existing ?? {}),
     name,
     username,
     salt,
-    passHash: password ? hashPassword(salt, password) : passwordless ? hashPassword(salt, '') : existing!.passHash,
+    passHash: password ? hashPassword(salt, password) : existing!.passHash,
     role: input.role,
     branchId,
     active: input.active,

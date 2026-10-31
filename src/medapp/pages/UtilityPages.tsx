@@ -1137,7 +1137,7 @@ function UserManagement() {
             <L bold>User Name</L>
             <Input value={name} onChange={(v) => setName(v.toLowerCase().replace(/\s/g, ''))} width={188} />
             <L bold>Password</L>
-              <Input value={pass} onChange={setPass} width={188} type="password" placeholder={editId !== undefined ? 'blank = keep current' : role === 'purchase' ? 'blank = no password' : 'min 4 characters'} />
+              <Input value={pass} onChange={setPass} width={188} type="password" placeholder={editId !== undefined ? 'blank = keep current' : 'min 4 characters'} />
             <L bold>Full Name</L>
             <Input value={full} onChange={setFull} width={188} />
             <L bold>Email</L>

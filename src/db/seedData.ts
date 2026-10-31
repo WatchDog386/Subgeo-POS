@@ -38,15 +38,13 @@ export const SEED_CASHIER: User & { id: number } = {
   branchId: 1,
 }
 
-/** purchase — the purchases dashboard (indents, POs, GRNs, medicine master).
- * Signs in with NO password: an empty-password hash is only accepted for this
- * role (see server/sync.ts auth/login and session.tsx). */
+/** purchase / subgeo22 — the purchases dashboard, run by the admin (admin rights). */
 export const SEED_PURCHASE: User & { id: number } = {
   id: 3,
   name: 'PURCHASE',
   username: 'purchase',
   salt: 'seed-purchase',
-  passHash: hashPassword('seed-purchase', ''),
+  passHash: hashPassword('seed-purchase', 'subgeo22'),
   role: 'purchase',
   active: true,
   branchId: 1,

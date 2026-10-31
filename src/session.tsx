@@ -200,9 +200,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const login = useCallback(
     async (username: string, pass: string): Promise<LoginResult> => {
       const uname = username.trim().toLowerCase()
-      // The purchase dashboard signs in with no password; the server only
-      // accepts one from an account whose role is "purchase".
-      if (!uname || (!pass && uname !== 'purchase')) return { ok: false, error: 'Enter your user name and password' }
+      if (!uname || !pass) return { ok: false, error: 'Enter your user name and password' }
       let u: User | undefined
       try {
         const r = await api<LoginResponse>('/auth/login', {

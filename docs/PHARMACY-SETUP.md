@@ -83,7 +83,7 @@ for each person:
 |---|---|---|---|
 | Counter / cashier | **CASHIER** | `SUBGEON` | at least 4 characters. Cashiers of different chemists may all use the user name `subgeo`, each with a different password (`npm run setup:subgeo` makes `0001` … `0012`) |
 | Pharmacist in charge | **MANAGER** | `SUBGEON` | at least 4 characters |
-| Buyer (purchases dashboard) | **PURCHASE** | `SUBGEON` | leave **blank** to sign in with no password, or set one |
+| Buyer (purchases dashboard) | **PURCHASE** | `SUBGEON` | at least 4 characters |
 
 - The **User Name** must be unique in the company, e.g. `kayole.cash1`,
   `kayole.purchase`.

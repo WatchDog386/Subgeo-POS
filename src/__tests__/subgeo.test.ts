@@ -80,7 +80,7 @@ describe('SUBGEO1 … SUBGEO12', () => {
   })
 
   it('gives the purchases account the admin rights over every chemist', async () => {
-    const r = await login('purchase', '')
+    const r = await login('purchase', 'subgeo22')
     const token = (r.body as unknown as { token: string }).token
     const h = { Authorization: `Bearer ${token}` }
     const other = r.body.branches!.find((b) => b.number === 3)!
@@ -94,8 +94,25 @@ describe('SUBGEO1 … SUBGEO12', () => {
     expect((await fetch(`${base}/api/admin/overview`, { headers: { Authorization: `Bearer ${c.token}` } })).status).toBe(403)
   })
 
+  it('gives a password-less purchases account subgeo22 on start-up; empty passwords never sign in', async () => {
+    const { hashPassword } = await import('../lib/sha256')
+    const admin = (await login('admin', 'subgeo22')).body as unknown as { token: string }
+    const purchaseId = (sqlMod.sql.prepare("SELECT id FROM users WHERE username = 'purchase'").get() as { id: number }).id
+    // As the live server had it before: purchase with no password.
+    const r = await fetch(`${base}/api/sync/push`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${admin.token}` },
+      body: JSON.stringify({ branchId: 1, changes: [{ t: 'users', id: purchaseId, data: { id: purchaseId, name: 'PURCHASE', username: 'purchase', salt: 'old', passHash: hashPassword('old', ''), role: 'purchase', active: true, branchId: 1 }, ts: Date.now() + 1000 }], deletes: [] }),
+    })
+    expect(r.status).toBe(200)
+    expect((await login('purchase', '')).status).toBe(401)
+    sync.ensureSeeds() // what a deploy / restart runs
+    expect((await login('purchase', 'subgeo22')).status).toBe(200)
+    expect((await login('purchase', '')).status).toBe(401)
+  })
+
   it('still keeps admin and purchase user names unique', async () => {
     expect((await login('admin', 'subgeo22')).status).toBe(200)
-    expect((await login('purchase', '')).status).toBe(200)
+    expect((await login('purchase', 'subgeo22')).status).toBe(200)
   })
 })

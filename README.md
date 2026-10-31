@@ -38,7 +38,7 @@ Open `http://localhost:8787` in **Chrome or Edge**. Starter accounts:
 |---|---|---|
 | `admin` | `subgeo22` | Admin — sees and manages every chemist |
 | `subgeo` | `0001` … `0012` | Cashier of **SUBGEO1** … **SUBGEO12**: the same user name, the password picks the chemist |
-| `purchase` | *(none)* | Purchases dashboard of **SUBGEO1** (indents, LPOs, GRNs, medicine master, petty cash) |
+| `purchase` | `subgeo22` | Purchases dashboard of **SUBGEO1** (indents, LPOs, GRNs, medicine master, petty cash) |
 
 Handing over? Start with **[docs/HANDOVER.md](docs/HANDOVER.md)**. Setting up each pharmacy (chemist, staff, medicines, till) is described step by step in **[docs/PHARMACY-SETUP.md](docs/PHARMACY-SETUP.md)**. The tables and their relations are in **[docs/DATABASE.md](docs/DATABASE.md)**.
 

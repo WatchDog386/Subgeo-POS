@@ -17,11 +17,8 @@ export default function MedLogin() {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
-  // The purchases dashboard signs in with no password.
-  const passwordless = name.trim().toLowerCase() === 'purchase'
-
   const submit = async () => {
-    if (busy || !name.trim() || (!pass && !passwordless)) return
+    if (busy || !name.trim() || !pass) return
     setBusy(true)
     setMsg(null)
     const r = await login(name, pass).catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) }))
@@ -89,9 +86,8 @@ export default function MedLogin() {
               onChange={(e) => setPass(e.target.value.slice(0, 64))}
               onKeyDown={(e) => e.key === 'Enter' && void submit()}
               autoComplete="current-password"
-              placeholder={passwordless ? '(none)' : undefined}
             />
-            <button type="button" className="ma-btn ma-login-btn" onClick={() => void submit()} disabled={busy || !name.trim() || (!pass && !passwordless)}>
+            <button type="button" className="ma-btn ma-login-btn" onClick={() => void submit()} disabled={busy || !name.trim() || !pass}>
               {busy ? 'Signing in…' : 'Log In'}
             </button>
           </div>
