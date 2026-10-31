@@ -40,7 +40,7 @@ Open `http://localhost:8787` in **Chrome or Edge**. Starter accounts:
 | `subgeo` | `0000` | Cashier of **CHEM1** |
 | `purchase` | *(none)* | Purchases dashboard of **CHEM1** (indents, LPOs, GRNs, medicine master, petty cash) |
 
-Setting up each pharmacy (chemist, staff, medicines, till) is described step by step in **[docs/PHARMACY-SETUP.md](docs/PHARMACY-SETUP.md)**. The tables and their relations are in **[docs/DATABASE.md](docs/DATABASE.md)**.
+Handing over? Start with **[docs/HANDOVER.md](docs/HANDOVER.md)**. Setting up each pharmacy (chemist, staff, medicines, till) is described step by step in **[docs/PHARMACY-SETUP.md](docs/PHARMACY-SETUP.md)**. The tables and their relations are in **[docs/DATABASE.md](docs/DATABASE.md)**.
 
 Change the passwords after the first sign-in (*Profile → Security*, or *Utilities → User Management*).
 

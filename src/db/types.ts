@@ -174,6 +174,9 @@ export interface Sale {
   patientName?: string
   patientAge?: string
   patientPhone?: string
+  /** Service Request/Bill: the bill is filed under its service number, e.g. SER-BILL-3-26. */
+  serviceBill?: boolean
+  docLabel?: string
 }
 
 export interface ParkedSale {

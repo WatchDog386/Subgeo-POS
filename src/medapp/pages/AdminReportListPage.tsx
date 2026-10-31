@@ -58,7 +58,7 @@ const ADMIN_REPORTS: Record<string, ReportDef> = {
         rows.push({
           date: dmy(s.createdAt),
           doc: billNo(s, d.billPrefix),
-          part: s.refundOf ? 'OTC MEDICINE RETURN' : party ? 'CREDIT SALE' : 'OTC MEDICINE ISSUE',
+          part: s.refundOf ? 'OTC MEDICINE RETURN' : s.serviceBill ? 'SERVICE REQUEST/BILL' : party ? 'CREDIT SALE' : 'OTC MEDICINE ISSUE',
           debit: debit ? amt(debit) : '',
           credit: credit ? amt(credit) : '',
           bal: amt(bal),
@@ -258,13 +258,13 @@ const ADMIN_REPORTS: Record<string, ReportDef> = {
       const d = await getMedDefaults()
       const customers = await db.customers.toArray()
       const cName = new Map(customers.map((c) => [c.id!, c.name.toUpperCase()]))
-      const sales = (await db.sales.orderBy('createdAt').toArray()).filter((s) => !s.refundOf && inRange(s.createdAt, from, to))
+      const sales = (await db.sales.orderBy('createdAt').toArray()).filter((s) => !s.refundOf && !s.serviceBill && inRange(s.createdAt, from, to))
       const rows = sales.flatMap((s) =>
         s.lines.map((l) => ({
           doc: billNo(s, d.billPrefix),
           date: dmy(s.createdAt),
-          patient: s.customerId !== undefined ? (cName.get(s.customerId) ?? d.patientCategory) : d.patientCategory,
-          age: '-',
+          patient: s.patientName || (s.customerId !== undefined ? (cName.get(s.customerId) ?? d.patientCategory) : d.patientCategory),
+          age: s.patientAge || '-',
           med: l.name,
           qty: String(l.qty),
           rate: amt(l.unitPrice),

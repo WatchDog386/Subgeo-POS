@@ -143,6 +143,7 @@ export function yy(ts: number): string {
   return String(new Date(ts).getFullYear()).slice(-2)
 }
 export function billNo(sale: Sale, prefix = DEFAULTS.billPrefix): string {
+  if (sale.docLabel) return sale.docLabel
   return `${prefix}-${seqOf(sale.receiptNo)}-${yy(sale.createdAt)}`
 }
 

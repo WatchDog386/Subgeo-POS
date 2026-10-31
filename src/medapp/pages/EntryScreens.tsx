@@ -567,6 +567,13 @@ export function WholesaleEntry({ slug, def, editId, onClose }: { slug: string; d
     if (!filled.length) return toast('ADD PRODUCT: type or look up at least one product', 'error')
     const bad = filled.find(({ c }) => c.qty <= 0)
     if (bad) return toast(`${bad.l.name}: enter the TOTAL QTY`, 'error')
+    if (rule.stock !== 0) {
+      const unknown = filled.find(({ l }) => l.productId === undefined)
+      if (unknown) {
+        setTab('product')
+        return toast(`${unknown.l.name} is not in the medicine list — pick it with the lookup so its stock moves`, 'error')
+      }
+    }
     const customer = (vals.customer ?? '').trim().toUpperCase()
     if (fields.some((f) => f.kind === 'party') && !customer) {
       setTab('customer')
@@ -1062,7 +1069,7 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: OtcMode; fromSale?
   /* ADJUST OTC Medicine Issue/Bill (returns) */
   const loadBills = async (): Promise<AdjRow[]> => {
     const service = new Set((await db.jobs.toArray()).map((j) => j.saleId))
-    const sales = (await db.sales.filter((s) => !s.refundOf && s.status !== 'voided' && s.status !== 'refunded' && !service.has(s.id)).toArray()).sort((a, b) => b.createdAt - a.createdAt).slice(0, 500)
+    const sales = (await db.sales.filter((s) => !s.refundOf && !s.serviceBill && s.status !== 'voided' && s.status !== 'refunded' && !service.has(s.id)).toArray()).sort((a, b) => b.createdAt - a.createdAt).slice(0, 500)
     const names = new Map(customers.map((c) => [c.id!, c.name.toUpperCase()]))
     const out: AdjRow[] = []
     for (const s of sales) {
@@ -1121,6 +1128,20 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: OtcMode; fromSale?
     if (noQty) throw new Error(`${noQty.l.name}: enter the Qty`)
     const noPrice = filled.find(({ c }) => c.price <= 0)
     if (noPrice) throw new Error(`${noPrice.l.name}: enter the ${isService ? 'Rate' : 'Selling Price'}`)
+    if (!isService) {
+      // Every medicine must come from the medicine list, so its stock goes down and reports add up.
+      const unknown = filled.find(({ l }) => l.productId === undefined)
+      if (unknown) {
+        setTab('detail')
+        throw new Error(`${unknown.l.name} is not in the medicine list — pick it with the lookup (or add it under Medicine / receive it on a GRN first)`)
+      }
+      const need = new Map<number, number>()
+      for (const { l, c } of filled) need.set(l.productId!, (need.get(l.productId!) ?? 0) + c.qty)
+      for (const [pid, q] of need) {
+        const p = await db.products.get(pid)
+        if (p?.trackStock && q > p.stock) throw new Error(`Only ${p.stock} of ${p.name} in stock — check the quantity, or receive the stock first`)
+      }
+    }
     if (!payableMethod) {
       setTab('patient')
       throw new Error('PATIENT INFORMATION: pick Payable By from the list')
@@ -1169,10 +1190,21 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: OtcMode; fromSale?
       batch: l.batch.trim() || undefined,
       expiry: l.expiry.trim() || undefined,
     }))
-    const sale = await completeSale({ lines: saleLines, discount: pharmaDisc, payments, customerId: customer?.id, userId: user!.id ?? 0, note: notes(), patient: patientInfo() })
-    if (isService) {
+    // A service bill is numbered and filed under its service number (SER-BILL-n-yy) everywhere.
+    const jobNo = isService ? await nextNumber('JOB') : undefined
+    const serviceNo = jobNo ? `${d.servicePrefix}-${Number(jobNo.split('-').pop())}-${String(new Date().getFullYear()).slice(-2)}` : undefined
+    const sale = await completeSale({
+      lines: saleLines,
+      discount: pharmaDisc,
+      payments,
+      customerId: customer?.id,
+      userId: user!.id ?? 0,
+      note: notes(),
+      patient: patientInfo(),
+      service: serviceNo ? { docLabel: serviceNo } : undefined,
+    })
+    if (jobNo) {
       // The Service Request/Bill register lists service jobs; this one is billed and done.
-      const jobNo = await nextNumber('JOB')
       await db.jobs.add({
         jobNo,
         customerId: customer?.id,
@@ -1187,7 +1219,7 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: OtcMode; fromSale?
         updatedAt: Date.now(),
         saleId: sale.id,
       })
-      toast(`Service bill ${d.servicePrefix}-${Number(jobNo.split('-').pop())}-${String(new Date().getFullYear()).slice(-2)} saved${sale.change ? ` — change ${amt(sale.change)}` : ''}`)
+      toast(`Service bill ${serviceNo} saved${sale.change ? ` — change ${amt(sale.change)}` : ''}`)
     } else toast(`Bill ${billNo(sale, d.billPrefix)} issued${sale.change ? ` — change ${amt(sale.change)}` : ''}`)
     return sale
   }

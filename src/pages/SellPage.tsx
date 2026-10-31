@@ -91,7 +91,10 @@ export default function SellPage() {
 
   const addProduct = (p: Product) => {
     const inCart = cart.lines.filter((l) => l.productId === p.id).reduce((s, l) => s + l.qty, 0)
-    if (p.trackStock && p.stock - inCart <= 0) toast(`${p.name}: no stock recorded — sale will go negative`, 'error')
+    if (p.trackStock && p.stock - inCart <= 0) {
+      toast(p.stock <= 0 ? `${p.name} is out of stock — receive it first` : `Only ${p.stock} of ${p.name} in stock`, 'error')
+      return
+    }
     setCart((c) => {
       // Serial-tracked items always get their own line so each serial can be captured.
       const idx = p.serialized ? -1 : c.lines.findIndex((l) => l.productId === p.id && !l.serial)
@@ -140,8 +143,15 @@ export default function SellPage() {
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  const setQty = (i: number, qty: number) =>
+  const setQty = (i: number, qty: number) => {
+    const line = cart.lines[i]
+    const p = line?.productId !== undefined ? products.find((x) => x.id === line.productId) : undefined
+    if (p?.trackStock && qty > (line?.qty ?? 0)) {
+      const elsewhere = cart.lines.filter((l, j) => j !== i && l.productId === p.id).reduce((s, l) => s + l.qty, 0)
+      if (qty + elsewhere > p.stock) return toast(`Only ${p.stock} of ${p.name} in stock`, 'error')
+    }
     setCart((c) => ({ ...c, lines: qty <= 0 ? c.lines.filter((_, j) => j !== i) : c.lines.map((l, j) => (j === i ? { ...l, qty } : l)) }))
+  }
 
   const clear = () => setCart({ lines: [], discount: 0 })
 
@@ -162,6 +172,12 @@ export default function SellPage() {
 
   const charge = () => {
     if (!cart.lines.length) return
+    // Stock may have changed since the items were added (another till, a transfer).
+    for (const l of cart.lines) {
+      const p = l.productId !== undefined ? products.find((x) => x.id === l.productId) : undefined
+      const want = cart.lines.filter((x) => x.productId === l.productId).reduce((s, x) => s + x.qty, 0)
+      if (p?.trackStock && want > p.stock) return toast(`Only ${p.stock} of ${p.name} in stock — lower the quantity`, 'error')
+    }
     if (cart.lines.some((l) => products.find((p) => p.id === l.productId)?.serialized && !l.serial)) {
       return toast('Enter serial numbers for serial-tracked items', 'error')
     }

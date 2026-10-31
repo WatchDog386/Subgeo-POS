@@ -398,7 +398,7 @@ syncRouter.get('/admin/overview', requireAuth, requireOwner, (req, res) => {
   const stock = sql
     .prepare(
       `SELECT scope,
-         COUNT(*) AS products,
+         SUM(CASE WHEN json_extract(data, '$.trackStock') THEN 1 ELSE 0 END) AS products,
          SUM(CASE WHEN json_extract(data, '$.trackStock') AND json_extract(data, '$.stock') > 0
                   THEN json_extract(data, '$.stock') * json_extract(data, '$.cost') ELSE 0 END) AS stockValue,
          SUM(CASE WHEN json_extract(data, '$.active') AND json_extract(data, '$.trackStock')

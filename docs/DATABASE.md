@@ -16,7 +16,7 @@ internet or the server is down.
                                 └───────────────────────────────────────────────┘
 ```
 
-- **Migrations:** `server/migrations/*.sql`. They run on server start and with
+- **Migrations:** `server/migrations/*.sql` (`007_service_bills.sql` marks service bills and their SER-BILL numbers on `sales`). They run on server start and with
   `npm run db:migrate`. `004_relational.sql` creates the relational tables;
   `005_document_lines.sql` adds document lines, cheque payments and the OTC
   line details; `006_party_patient.sql` adds the Party Master details and the
@@ -141,7 +141,7 @@ the server refuses a change, the till puts the server's copy back and shows
 | Delivery Note | goes **out** | — |
 | Whole Sale Invoice | goes out, except lines adjusted from a delivery note (already out) | **charged** the invoice total |
 | Credit Note / Credit Note - Direct Invoice | comes **back** | **credited** the total |
-| OTC Medicine Issue/Bill | goes out | the unpaid part, when Patient Category is a customer (not for PAY NOW or blacklisted parties) |
+| OTC Medicine Issue/Bill | goes out; only medicines in the list, never more than in stock | the unpaid part, when Patient Category is a customer (not for PAY NOW or blacklisted parties) |
 | Service Request/Bill | — (services carry no stock) | as the OTC bill; also files a service request in its register |
 | OTC Medicine Isse Return | comes back | the refund goes out in cash / M-Pesa / card / cheque |
 

@@ -24,6 +24,8 @@ export interface CheckoutInput {
   note?: string
   /** PATIENT INFORMATION typed on the OTC / service bill. */
   patient?: Pick<Sale, 'location' | 'patientName' | 'patientAge' | 'patientPhone'>
+  /** A Service Request/Bill and its service number. */
+  service?: { docLabel: string }
 }
 
 /**
@@ -40,6 +42,8 @@ export async function completeSale(input: CheckoutInput): Promise<Sale> {
   const onAccount = input.payments.filter((p) => p.method === 'account').reduce((s, p) => s + p.amount, 0)
   if (onAccount > 0 && !input.customerId) throw new SaleError('Select a customer to sell on account')
   const branch = await branchStamp()
+  // Bills and refunds count in the open shift's cash-up even when the screen didn't pass it.
+  const shiftId = input.shiftId ?? (await db.shifts.filter((x) => !x.closedAt).last())?.id
 
   return db.transaction('rw', [db.sales, db.products, db.movements, db.customers, db.kv], async () => {
     if (onAccount > 0) {
@@ -65,11 +69,12 @@ export async function completeSale(input: CheckoutInput): Promise<Sale> {
       change: changeDue(totals.total, input.payments),
       customerId: input.customerId,
       userId: input.userId,
-      shiftId: input.shiftId,
+      shiftId,
       status: 'completed',
       note: input.note,
       branch,
       ...input.patient,
+      ...(input.service ? { serviceBill: true, docLabel: input.service.docLabel } : {}),
     }
     sale.id = await db.sales.add(sale)
 
@@ -114,6 +119,8 @@ export interface RefundRequest {
 export async function refundSale(saleId: number, req: RefundRequest): Promise<Sale> {
   const settings = await getSettings()
   const branch = await branchStamp()
+  // Bills and refunds count in the open shift's cash-up even when the screen didn't pass it.
+  const shiftId = req.shiftId ?? (await db.shifts.filter((x) => !x.closedAt).last())?.id
   const refund = await db.transaction('rw', [db.sales, db.products, db.movements, db.customers, db.kv], async () => {
     const original = await db.sales.get(saleId)
     if (!original) throw new SaleError('Sale not found')
@@ -152,7 +159,7 @@ export async function refundSale(saleId: number, req: RefundRequest): Promise<Sa
       change: 0,
       customerId: original.customerId,
       userId: req.userId,
-      shiftId: req.shiftId,
+      shiftId,
       status: 'completed',
       note: req.reason,
       refundOf: original.id,

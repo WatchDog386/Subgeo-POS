@@ -55,7 +55,7 @@ const REPORTS: Record<string, ReportDef> = {
         rows.push({
           date: dmy(s.createdAt),
           doc: billNo(s, d.billPrefix),
-          part: s.refundOf ? 'OTC MEDICINE RETURN' : party ? 'CREDIT SALE' : 'OTC MEDICINE ISSUE',
+          part: s.refundOf ? 'OTC MEDICINE RETURN' : s.serviceBill ? 'SERVICE REQUEST/BILL' : party ? 'CREDIT SALE' : 'OTC MEDICINE ISSUE',
           debit: debit ? amt(debit) : '',
           credit: credit ? amt(credit) : '',
           bal: amt(bal),
@@ -193,7 +193,7 @@ const REPORTS: Record<string, ReportDef> = {
     initialCols: [C('exp', 'Expiary Date', 100), C('name', 'Product Name', 250), C('qty', 'Avl Qty', 100), C('rate', 'Rate', 550)],
     async run(from, to) {
       const d = await getMedDefaults()
-      const sales = (await db.sales.orderBy('createdAt').toArray()).filter((s) => !s.refundOf && inRange(s.createdAt, from, to))
+      const sales = (await db.sales.orderBy('createdAt').toArray()).filter((s) => !s.refundOf && !s.serviceBill && inRange(s.createdAt, from, to))
       const rows = sales.flatMap((s) =>
         s.lines.map((l) => ({
           date: dmy(s.createdAt),

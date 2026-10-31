@@ -42,7 +42,8 @@ import {
 import { Btn, Dialog, Grid, HScroll, IBtn, Input, PickList, Rows, Select, ToolBtn, type Col } from '../ui'
 
 /* ── Definitions ───────────────────────────────────────────────────────── */
-type Source = 'otc' | 'otc-return' | 'service' | 'party' | 'services' | 'docs'
+/** medicine: the real stock list (products), with the Medicine form's extra details. */
+type Source = 'otc' | 'otc-return' | 'service' | 'party' | 'services' | 'docs' | 'medicine'
 type FieldKind = 'docno' | 'date' | 'user' | 'location' | 'text' | 'party' | 'money'
 interface Field {
   key: string
@@ -455,7 +456,7 @@ const DEFS: Record<string, ModuleDef> = {
   },
   'medicine': {
     title: 'Medicine',
-    source: 'docs',
+    source: 'medicine',
     prefix: 'PRD00',
     hscroll: 0.75,
     tools: BASE_TOOLS,
@@ -469,6 +470,7 @@ const DEFS: Record<string, ModuleDef> = {
       C('cost', 'Cost Rate', 130, 'right'),
       C('packSize', 'Pack Size', 110, 'right'),
       C('type', 'Stock/Non-Stock', 80),
+      C('stock', 'Qty In Stock', 90, 'right'),
     ],
     fields: [
       { key: 'docNo', kind: 'docno' },
@@ -530,7 +532,7 @@ const TOOL_TITLES: Record<ToolKey, string> = {
   columns: 'Columns',
 }
 
-type RawRow = { id: string; ts: number; cells: Record<string, string>; detail?: Sale | ServiceJob; docLines?: DocLine[] }
+type RawRow = { id: string; ts: number; cells: Record<string, string>; detail?: Sale | ServiceJob; docLines?: DocLine[]; productId?: number; docId?: number }
 
 const PAGE = 50
 /** Approval workflow stamps (Modules list → approval dropdown + stamp). */
@@ -574,6 +576,15 @@ function useRows(slug: string, def: ModuleDef): RawRow[] {
     [def.source],
     [] as Product[],
   )
+  // Medicine register: every medicine in stock (typed here, received on a GRN / uploaded invoice, or keyed in Inventory).
+  const medicines = useLiveQuery(
+    async () => {
+      if (def.source !== 'medicine') return { products: [] as Product[], cats: new Map<number, string>(), docs: [] as { id: number; values: Record<string, string> }[] }
+      const [products, cats, docs] = await Promise.all([db.products.filter((p) => !/^SRV-/i.test(p.sku)).toArray(), db.categories.toArray(), db.docs.where('slug').equals('medicine').toArray()])
+      return { products, cats: new Map(cats.map((c) => [c.id!, c.name])), docs }
+    },
+    [def.source],
+  )
   const uname = (id?: number) => (id !== undefined ? users.get(id)?.name.toUpperCase() ?? '' : '')
   /** Contact number of a party by name: contact person's phone, else its own phone. */
   const contactOf = (name?: string) => {
@@ -588,7 +599,7 @@ function useRows(slug: string, def: ModuleDef): RawRow[] {
     switch (def.source) {
       case 'otc':
         return sales
-          .filter((s) => !s.refundOf && !serviceSaleIds.has(s.id!))
+          .filter((s) => !s.refundOf && !s.serviceBill && !serviceSaleIds.has(s.id!))
           .map((s) => ({
             id: `s${s.id}`,
             ts: s.createdAt,
@@ -686,6 +697,36 @@ function useRows(slug: string, def: ModuleDef): RawRow[] {
             ts: p.createdAt,
             cells: { name: p.name.toUpperCase(), charges: amt(p.price), outsource: p.brand === 'OUTSOURCED' ? 'YES' : 'NO' },
           }))
+      case 'medicine': {
+        if (!medicines) return []
+        const byKey = new Map<string, { id: number; values: Record<string, string> }>()
+        for (const doc of medicines.docs) {
+          if (doc.values.name) byKey.set(`n:${doc.values.name.trim().toUpperCase()}`, doc)
+          if (doc.values.docNo) byKey.set(`c:${doc.values.docNo.trim().toUpperCase()}`, doc)
+        }
+        return medicines.products.map((p) => {
+          const doc = byKey.get(`c:${p.sku.trim().toUpperCase()}`) ?? byKey.get(`n:${p.name.trim().toUpperCase()}`)
+          const v = doc?.values ?? {}
+          return {
+            id: `p${p.id}`,
+            ts: p.updatedAt || p.createdAt,
+            productId: p.id,
+            docId: doc?.id,
+            cells: {
+              docNo: p.sku,
+              name: p.name.toUpperCase(),
+              group: (p.categoryId !== undefined ? medicines.cats.get(p.categoryId) : undefined)?.toUpperCase() || v.group || '',
+              uom: v.uom || '',
+              retail: amt(p.price),
+              whole: v.whole || amt(p.price),
+              cost: amt(p.cost),
+              packSize: v.packSize || '1.00',
+              type: p.trackStock ? 'S' : 'N',
+              stock: String(p.stock),
+            },
+          }
+        })
+      }
       case 'docs':
         return docs.map((doc) => {
           const v = doc.values
@@ -693,7 +734,7 @@ function useRows(slug: string, def: ModuleDef): RawRow[] {
           return { id: `d${doc.id}`, ts: doc.createdAt, cells: { ...v, contact }, docLines: doc.lines }
         })
     }
-  }, [def.source, sales, jobs, jobSales, suppliers, customers, services, docs, d, users, serviceSaleIds]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [def.source, sales, jobs, jobSales, suppliers, customers, services, docs, d, users, serviceSaleIds, medicines]) // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /* ── Screen ────────────────────────────────────────────────────────────── */
@@ -1003,7 +1044,7 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
         />
       )}
       {view && <ViewDialog def={def} row={view} onClose={() => setView(null)} />}
-      {edit && def.source === 'docs' && <DocDialog slug={slug} def={def} row={edit === 'new' ? undefined : edit} onClose={() => setEdit(null)} />}
+      {edit && (def.source === 'docs' || def.source === 'medicine') && <DocDialog slug={slug} def={def} row={edit === 'new' ? undefined : edit} onClose={() => setEdit(null)} />}
       {edit && def.source === 'services' && <ServiceDialog row={edit === 'new' ? undefined : edit} onClose={() => setEdit(null)} />}
     </div>
   )
@@ -1082,6 +1123,9 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
   const parties = useLiveQuery(async () => [...(await db.customers.toArray()), ...(await db.suppliers.toArray())].map((p) => p.name.toUpperCase()), [], [] as string[])
   const fields = def.fields ?? []
   const register = useDocs(slug)
+  // A Medicine row is a product; its Medicine-form record (uom, pack size…) may or may not exist yet.
+  const productId = row?.productId
+  const docId = productId !== undefined ? row?.docId : row ? Number(String(row.id).slice(1)) : undefined
   const blank = (last: Record<string, string>) => {
     const v: Record<string, string> = {}
     for (const f of fields) {
@@ -1128,13 +1172,14 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
 
   // The Medicine master is where a chemist's inventory starts: a new product is
   // added to stock at its cost/retail prices; edits refresh the prices.
-  const upsertMedicine = async (values: Record<string, string>) => {
+  const upsertMedicine = async (values: Record<string, string>, id?: number) => {
     const name = values.name.trim()
     if (!name) return
     const cost = toCents(values.cost || '0')
     const price = toCents(values.retail || values.whole || '0')
-    const existingP = await db.products.filter((p) => p.name.toUpperCase() === name.toUpperCase()).first()
-    if (existingP) await db.products.update(existingP.id!, { cost, price, updatedAt: Date.now() })
+    const existingP = id !== undefined ? await db.products.get(id) : await db.products.filter((p) => p.name.toUpperCase() === name.toUpperCase()).first()
+    if (existingP)
+      await db.products.update(existingP.id!, { name: name.toUpperCase(), cost, price, trackStock: !/^N/i.test((values.type || 'S').trim()), updatedAt: Date.now() })
     else {
       await db.products.add({
         sku: values.docNo,
@@ -1157,7 +1202,9 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
   const save = async () => {
     if (required && !vals[required]?.trim()) return toast(`${label(required)} is required`, 'error')
     const values = { ...vals }
-    if (!row && fields.some((f) => f.kind === 'docno')) values.docNo = await nextDocNo(def.prefix ?? 'DOC')
+    // Stock is counted by the stock ledger, never typed into a form record.
+    if (slug === 'medicine') delete values.stock
+    if (!values.docNo?.trim() && fields.some((f) => f.kind === 'docno')) values.docNo = await nextDocNo(def.prefix ?? 'DOC')
     for (const f of fields) if (f.kind === 'money' && values[f.key]) values[f.key] = (parseFloat(values[f.key]) || 0).toFixed(2)
     if (file) {
       values.attachment = file.data
@@ -1166,8 +1213,8 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
       delete values.attachment
       delete values.attachmentName
     }
-    await saveDoc(slug, values, row ? Number(String(row.id).slice(1)) : undefined, user?.id)
-    if (slug === 'medicine') await upsertMedicine(values)
+    await saveDoc(slug, values, docId, user?.id)
+    if (slug === 'medicine') await upsertMedicine(values, productId)
     toast(row ? 'Record updated' : 'Record saved')
     onClose()
   }
@@ -1192,10 +1239,10 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
       footer={
         <>
           <Btn onClick={save}>Save</Btn>
-          {row && (
+          {docId !== undefined && productId === undefined && (
             <Btn
               onClick={async () => {
-                await deleteDocs(slug, [Number(String(row.id).slice(1))])
+                await deleteDocs(slug, [docId])
                 toast('Record deleted')
                 onClose()
               }}

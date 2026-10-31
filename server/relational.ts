@@ -12,7 +12,7 @@ import { chemCode } from '../src/db/seedData'
 type Rec = Record<string, unknown>
 
 /** Bump when the projection changes: the server rebuilds the tables on boot. */
-export const RELATIONAL_VERSION = 3
+export const RELATIONAL_VERSION = 4
 
 const int = (v: unknown, d: number | null = null): number | null => {
   const n = Number(v)
@@ -213,6 +213,8 @@ const PROJECTORS: Record<string, (id: number, d: Rec, scope: number) => void> = 
       patient_name: str(d.patientName),
       patient_age: str(d.patientAge),
       patient_phone: str(d.patientPhone),
+      service_bill: bool(d.serviceBill, false),
+      doc_label: str(d.docLabel),
     })
     replaceChildren(
       'sale_lines',

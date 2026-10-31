@@ -15,7 +15,8 @@ type SyncMod = typeof import('../db/sync')
 type SalesMod = typeof import('../db/sales')
 type DataMod = typeof import('../medapp/data')
 type TasksMod = typeof import('../medapp/tasks')
-type Device = { db: DbMod; sync: SyncMod; sales: SalesMod; data: DataMod; tasks: TasksMod; user: { id: number; name: string } }
+type ImpMod = typeof import('../medapp/pages/InvoiceImport')
+type Device = { db: DbMod; sync: SyncMod; sales: SalesMod; data: DataMod; tasks: TasksMod; imp: ImpMod; user: { id: number; name: string } }
 type SqlMod = typeof import('../../server/db')
 type RelMod = typeof import('../../server/relational')
 
@@ -35,13 +36,14 @@ async function device(username: string, password: string): Promise<Device> {
   // The screens' own helpers, bound to this device's database.
   const data = await import('../medapp/data')
   const tasks = await import('../medapp/tasks')
+  const imp = await import('../medapp/pages/InvoiceImport')
   const { seedIfEmpty } = await import('../db/seed')
   sync.setApiBase(base)
   await seedIfEmpty()
   const r = await sync.api<{ token: string; user: { id: number; name: string } }>('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) })
   sync.setSyncToken(r.token)
   await sync.syncNow()
-  return { db, sync, sales, data, tasks, user: r.user }
+  return { db, sync, sales, data, tasks, imp, user: r.user }
 }
 
 const q = <T = Record<string, unknown>>(s: string, ...args: unknown[]) => sqlMod.sql.prepare(s).all(...args) as T[]
@@ -226,6 +228,34 @@ describe('relational company database', () => {
     expect(one('SELECT patient_name, patient_age, patient_phone, location FROM sales WHERE id = ?', sale.id)).toEqual({ patient_name: 'JANE W', patient_age: '34', patient_phone: '0733000000', location: 'MAIN STORE' })
     expect(one('SELECT method, reference FROM sale_payments WHERE sale_id = ?', sale.id)).toEqual({ method: 'cheque', reference: 'CHQ 0042' })
     expect(one('SELECT instruction FROM sale_lines WHERE sale_id = ?', sale.id)).toEqual({ instruction: '1 x 3' })
+  })
+
+  it('stock received from a supplier invoice reaches the cashier, and the sale reaches the admin', async () => {
+    const r = await purchase.imp.receiveInvoice({
+      lines: [{ code: 'I09001', name: 'Amoxil Syrup (100ml)', qty: 12, costCents: 150_00, priceCents: 200_00, vat: false }],
+      vendor: 'VICTORIA HEALTHCARE LIMITED',
+      invoiceNo: 'PI-55',
+      totalCents: 1_800_00,
+      expense: 'PURCHASES MEDICINE',
+      receivedBy: 'PURCHASE',
+      userId: purchase.user.id,
+    })
+    await purchase.sync.syncNow()
+    await cashier.sync.syncNow()
+    const p = (await cashier.db.db.products.where('sku').equals('I09001').first())!
+    expect([p.stock, p.price]).toEqual([12, 200_00])
+    await cashier.sales.completeSale({ lines: [{ productId: p.id, name: p.name, sku: p.sku, qty: 3, unitPrice: 200_00, unitCost: 150_00, discount: 0, taxable: false }], discount: 0, payments: [{ method: 'cash', amount: 600_00 }], userId: cashier.user.id })
+    await cashier.sync.syncNow()
+    await admin.sync.syncNow()
+    await purchase.sync.syncNow()
+    expect((await admin.db.db.products.get(p.id!))?.stock).toBe(9)
+    expect((await purchase.db.db.products.get(p.id!))?.stock).toBe(9)
+    expect(one('SELECT stock FROM products WHERE id = ?', p.id)).toEqual({ stock: 9 })
+    expect(one<{ n: number }>("SELECT COUNT(*) AS n FROM stock_movements WHERE product_id = ? AND reason = 'receive'", p.id).n).toBe(1)
+    expect(one('SELECT doc_no, amount FROM documents WHERE id = ?', r.docId)).toEqual({ doc_no: r.docNo, amount: 1_800_00 })
+    const day = new Date().setHours(0, 0, 0, 0)
+    const ov = await admin.sync.api<{ branches: { number: number; todaySales: number }[] }>(`/admin/overview?dayStart=${day}&monthStart=0`)
+    expect(ov.branches.find((b) => b.number === 1)!.todaySales).toBeGreaterThanOrEqual(600_00)
   })
 
   it('sets references to NULL when a parent is deleted, never losing history', async () => {
