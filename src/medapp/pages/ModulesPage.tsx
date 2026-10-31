@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
@@ -56,6 +56,10 @@ interface ModuleDef {
   yellowChk?: boolean
   prefix?: string
   fields?: Field[]
+  /** Options of the approval dropdown above the grid. */
+  approvals?: string[]
+  /** 'grid': "+" opens an in-panel entry table with the list's headers instead of the pop-up form. */
+  entry?: 'grid'
 }
 
 const C = (key: string, label: string, width: number, align?: 'right'): Col => ({ key, label, width, align })
@@ -364,15 +368,18 @@ const DEFS: Record<string, ModuleDef> = {
     hscroll: 0.6,
     tools: BASE_TOOLS,
     cols: [
-      C('docNo', 'Mrn No', 115),
-      C('mrnDate', 'Mrn Date', 120),
-      C('invoice', 'Invoice/Receipt', 125),
-      C('vendorName', 'Vendor Name', 200),
-      C('total', 'TOTAL VALUE', 115, 'right'),
+      C('docNo', 'Mrn No', 100),
+      C('mrnDate', 'Mrn Date', 100),
+      C('invoice', 'Invoice/Receipt', 100),
+      C('vendorName', 'Vendor Name', 190),
+      C('total', 'TOTAL VALUE', 100, 'right'),
       C('expense', 'Expense A/c', 200),
-      C('receivedBy', 'Received By', 115),
-      C('status', 'Status', 120),
+      C('receivedBy', 'Received By', 100),
+      C('status', 'Status', 200),
+      C('phoneNo', 'Phone No', 120),
     ],
+    approvals: ['APPROVAL REQUEST', 'APPROVED', 'PENDING', 'REJECTED'],
+    entry: 'grid',
     fields: [
       { key: 'docNo', kind: 'docno' },
       { key: 'mrnDate', kind: 'date' },
@@ -382,6 +389,7 @@ const DEFS: Record<string, ModuleDef> = {
       { key: 'expense', kind: 'text' },
       { key: 'receivedBy', kind: 'text' },
       { key: 'status', kind: 'text' },
+      { key: 'phoneNo', kind: 'text' },
     ],
   },
   'medicine': {
@@ -628,7 +636,9 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
   const [op, setOp] = useState('WHERE')
   const [val, setVal] = useState('')
   const [applied, setApplied] = useState<{ col: string; op: string; val: string } | null>(null)
-  const [approval, setApproval] = useState('SPECIMEN COLLECTED')
+  const approvals = def.approvals ?? ['SPECIMEN COLLECTED', 'APPROVED', 'PENDING', 'REJECTED']
+  const [approval, setApproval] = useState(approvals[0])
+  const [entering, setEntering] = useState(false)
   const [asc, setAsc] = useState(false)
   const [page, setPage] = useState(0)
   const [checked, setChecked] = useState<Set<string | number>>(new Set())
@@ -683,6 +693,7 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
     if (def.source === 'otc') setOtcOpen(true)
     else if (def.source === 'otc-return') setRefund(undefined)
     else if (def.source === 'service') nav('/service')
+    else if (def.entry === 'grid') setEntering(true)
     else setEdit('new')
   }
   const editDoc = () => {
@@ -751,6 +762,8 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
     }
   }
 
+  if (entering) return <GridEntry slug={slug} def={def} onClose={() => setEntering(false)} />
+
   return (
     <div className="ma-panel-inner" style={{ paddingTop: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 10, height: 30 }}>
@@ -803,7 +816,7 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
           </>
         )}
         <span style={{ borderLeft: '1px solid #c3c3c3', height: 20 }} />
-        <Select value={approval} onChange={setApproval} width={170} options={['SPECIMEN COLLECTED', 'APPROVED', 'PENDING', 'REJECTED']} />
+        <Select value={approval} onChange={setApproval} width={170} options={approvals} />
         <IBtn
           title="Approve"
           onClick={() => {
@@ -1500,6 +1513,294 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
         />
       )}
     </Dialog>
+  )
+}
+
+/* ── In-panel entry table ("+" on Pur/GRN (Direct Invoice)) ───────────────
+   Same title bar and table headers as the list; each row of the table is one
+   new record, typed straight into the cells. */
+type EntryRow = { key: number; vals: Record<string, string>; file?: { name: string; data: string } }
+
+const ENTRY_DEFAULTS: Record<string, Record<string, string>> = {
+  'pur-grn-direct-invoice': { expense: 'PURCHASES MEDICINE', status: 'GOOD RECEIVED' },
+}
+
+function GridEntry({ slug, def, onClose }: { slug: string; def: ModuleDef; onClose: () => void }) {
+  const { user } = useSession()
+  const toast = useToast()
+  const d = useMedDefaults()
+  const suppliers = useLiveQuery(() => db.suppliers.toArray(), [], [] as Supplier[])
+  const fields = def.fields ?? []
+  const required = fields.find((f) => f.kind === 'party')?.key
+  const blank = (key: number): EntryRow => {
+    const v: Record<string, string> = {}
+    for (const f of fields) {
+      if (f.kind === 'date') v[f.key] = dmy(Date.now())
+      else if (f.kind === 'location') v[f.key] = d.location
+      else if (f.kind === 'user' || f.key === 'receivedBy') v[f.key] = user?.name.toUpperCase() ?? ''
+      else v[f.key] = ENTRY_DEFAULTS[slug]?.[f.key] ?? ''
+    }
+    return { key, vals: v }
+  }
+  const [rows, setRows] = useState<EntryRow[]>(() => [blank(1)])
+  const [sel, setSel] = useState(1)
+  const [saving, setSaving] = useState(false)
+  const fileInput = useRef<HTMLInputElement | null>(null)
+  const fileFor = useRef<number>(0)
+  const kindOf = (key: string) => fields.find((f) => f.key === key)?.kind
+  const pristine = blank(0).vals
+  const touched = (r: EntryRow) => !!r.file || Object.keys(r.vals).some((k) => kindOf(k) !== 'docno' && (r.vals[k] ?? '') !== (pristine[k] ?? ''))
+
+  const set = (rk: number, key: string, v: string) =>
+    setRows((list) =>
+      list.map((r) => {
+        if (r.key !== rk) return r
+        const vals = { ...r.vals, [key]: v }
+        // Picking a known vendor fills in its phone number.
+        if (key === 'vendorName' && 'phoneNo' in vals) {
+          const s = suppliers.find((x) => x.name.toUpperCase() === v.trim().toUpperCase())
+          if (s?.phone && !r.vals.phoneNo) vals.phoneNo = s.phone
+        }
+        return { ...r, vals }
+      }),
+    )
+  const addRow = () => {
+    const k = Math.max(0, ...rows.map((r) => r.key)) + 1
+    setRows((list) => [...list, blank(k)])
+    setSel(k)
+  }
+  const removeRow = () => {
+    if (rows.length === 1) return setRows([blank(rows[0].key + 1)])
+    setRows((list) => list.filter((r) => r.key !== sel))
+    setSel(rows.find((r) => r.key !== sel)?.key ?? 0)
+  }
+  const pickFile = async (f: File) => {
+    if (f.size > 5 * 1024 * 1024) return toast('Document is too big (max 5 MB)', 'error')
+    const data = await new Promise<string>((res, rej) => {
+      const r = new FileReader()
+      r.onload = () => res(r.result as string)
+      r.onerror = () => rej(r.error)
+      r.readAsDataURL(f)
+    })
+    setRows((list) => list.map((r) => (r.key === fileFor.current ? { ...r, file: { name: f.name, data } } : r)))
+  }
+
+  const save = async () => {
+    if (saving) return
+    const todo = rows.filter(touched)
+    if (!todo.length) return toast('Type the details into the table first', 'error')
+    for (const [i, r] of todo.entries()) {
+      if (required && !r.vals[required]?.trim()) return toast(`Row ${i + 1}: ${def.cols.find((c) => c.key === required)?.label ?? required} is required`, 'error')
+      for (const f of fields) {
+        if (f.kind === 'money' && r.vals[f.key]?.trim() && Number.isNaN(parseFloat(r.vals[f.key].replace(/,/g, ''))))
+          return toast(`Row ${i + 1}: ${def.cols.find((c) => c.key === f.key)?.label ?? f.key} must be a number`, 'error')
+      }
+    }
+    setSaving(true)
+    try {
+      for (const r of todo) {
+        const values: Record<string, string> = {}
+        for (const [k, v] of Object.entries(r.vals)) values[k] = kindOf(k) === 'party' ? v.trim().toUpperCase() : v.trim()
+        if (fields.some((f) => f.kind === 'docno')) values.docNo = await nextDocNo(def.prefix ?? 'DOC')
+        for (const f of fields) if (f.kind === 'money' && values[f.key]) values[f.key] = (parseFloat(values[f.key].replace(/,/g, '')) || 0).toFixed(2)
+        if (r.file) {
+          values.attachment = r.file.data
+          values.attachmentName = r.file.name
+        }
+        // A vendor typed for the first time goes into the Party Master.
+        const vendor = values.vendorName
+        if (vendor && !(await db.suppliers.filter((s) => s.name.toUpperCase() === vendor).first())) {
+          await db.suppliers.add({ name: vendor, phone: values.phoneNo || undefined, notes: 'Added from ' + def.title })
+        }
+        await saveDoc(slug, values)
+      }
+      toast(`${todo.length} record(s) saved`)
+      onClose()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'F2') {
+        e.preventDefault()
+        void save()
+      } else if (e.key === 'F3' || e.key === 'Escape') {
+        e.preventDefault()
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  })
+
+  const cols = def.cols.filter((c) => c.label)
+  const total = cols.reduce((s, c) => s + c.width, 0) + 20 + 34
+  const filler = Math.max(0, 11 - rows.length)
+  const sum = rows.reduce((s, r) => s + (parseFloat((r.vals.total ?? '').replace(/,/g, '')) || 0), 0)
+  const cellInput = (r: EntryRow, c: Col, last: boolean) => {
+    const kind = kindOf(c.key)
+    const v = r.vals[c.key] ?? ''
+    if (kind === 'docno') return <span style={{ color: '#888' }}>(auto)</span>
+    if (kind === 'location')
+      return (
+        <select className="ma-input is-plain" style={{ width: '100%', height: 20, fontSize: 11 }} value={v} onChange={(e) => set(r.key, c.key, e.target.value)}>
+          {d.locations.map((l) => (
+            <option key={l}>{l}</option>
+          ))}
+        </select>
+      )
+    return (
+      <input
+        className="ma-input is-plain"
+        style={{ width: '100%', height: 20, padding: '0 3px', fontSize: 11, textAlign: c.align === 'right' ? 'right' : undefined, textTransform: kind === 'party' ? 'uppercase' : undefined }}
+        value={v}
+        list={kind === 'party' ? 'ma-entry-vendors' : undefined}
+        inputMode={kind === 'money' ? 'decimal' : undefined}
+        placeholder={kind === 'date' ? 'dd-mm-yyyy' : undefined}
+        onFocus={() => setSel(r.key)}
+        onChange={(e) => set(r.key, c.key, e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && last && r.key === rows[rows.length - 1].key) {
+            e.preventDefault()
+            addRow()
+          }
+        }}
+        aria-label={c.label}
+      />
+    )
+  }
+
+  return (
+    <div className="ma-panel-inner" style={{ paddingTop: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 10, height: 30 }}>
+        <span className="ma-title" style={{ marginRight: 10 }}>
+          {def.title}
+        </span>
+        <IBtn lg title="Add Row" onClick={addRow}>
+          <PlusIcon />
+        </IBtn>
+        <span className="ma-label" style={{ marginLeft: 6, color: '#c00', fontWeight: 'bold' }}>
+          NEW ENTRY
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, whiteSpace: 'nowrap' }}>
+        <Btn onClick={onClose}>
+          Back <span style={{ fontSize: 10, color: '#777' }}>(F3)</span>
+        </Btn>
+        <Btn onClick={() => void save()} disabled={saving}>
+          Save <span style={{ fontSize: 10, color: '#777' }}>(F2)</span>
+        </Btn>
+        <span style={{ borderLeft: '1px solid #c3c3c3', height: 20 }} />
+        <Btn onClick={addRow}>Add Row</Btn>
+        <Btn onClick={removeRow}>Remove Row</Btn>
+        <Btn
+          onClick={() => {
+            fileFor.current = sel
+            fileInput.current?.click()
+          }}
+        >
+          Upload Document
+        </Btn>
+        <span className="ma-label" style={{ marginLeft: 6 }}>
+          Type each record into a row. Enter on the last cell adds a row.
+        </span>
+        <span style={{ marginLeft: 'auto', marginRight: 10 }}>
+          <Rows n={rows.filter(touched).length} />
+        </span>
+      </div>
+
+      <div style={{ marginTop: 4 }}>
+        <div className="ma-grid" style={{ height: 352 }}>
+          <table style={{ width: total, minWidth: total }}>
+            <colgroup>
+              <col style={{ width: 20 }} />
+              {cols.map((c) => (
+                <col key={c.key} style={{ width: c.width }} />
+              ))}
+              <col style={{ width: 34 }} />
+            </colgroup>
+            <thead>
+              <tr>
+                <th className="chk" />
+                {cols.map((c) => (
+                  <th key={c.key} className={c.align === 'right' ? 'r' : undefined} title={c.label}>
+                    {c.label}
+                    {c.key === required && <span className="ma-req">*</span>}
+                  </th>
+                ))}
+                <th title="Document">Doc</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.key} className={`is-data${sel === r.key ? ' is-selected' : ''}`} onClick={() => setSel(r.key)}>
+                  <td className="chk">
+                    <span className={`cbox${sel === r.key ? ' is-on' : ''}`} />
+                  </td>
+                  {cols.map((c, i) => (
+                    <td key={c.key} style={{ padding: '0 2px' }}>
+                      {cellInput(r, c, i === cols.length - 1)}
+                    </td>
+                  ))}
+                  <td style={{ textAlign: 'center' }}>
+                    <button
+                      type="button"
+                      className="ma-lookup"
+                      title={r.file ? `Attached: ${r.file.name} (click to replace)` : 'Attach supplier invoice / receipt'}
+                      onClick={() => {
+                        fileFor.current = r.key
+                        fileInput.current?.click()
+                      }}
+                      style={{ color: r.file ? '#2e7d32' : undefined, fontWeight: 'bold' }}
+                    >
+                      {r.file ? '✓' : '…'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {Array.from({ length: filler }, (_, i) => (
+                <tr key={`f${i}`} onClick={addRow} style={{ cursor: 'pointer' }}>
+                  <td className="chk" />
+                  {cols.map((c) => (
+                    <td key={c.key} />
+                  ))}
+                  <td />
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {def.hscroll && <HScroll thumb={def.hscroll} />}
+      </div>
+
+      {'total' in pristine && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8, marginRight: 10 }}>
+          <span className="ma-bold-label">TOTAL VALUE</span>
+          <b>{sum.toFixed(2)}</b>
+        </div>
+      )}
+
+      <datalist id="ma-entry-vendors">
+        {suppliers.map((s) => (
+          <option key={s.id} value={s.name.toUpperCase()} />
+        ))}
+      </datalist>
+      <input
+        ref={fileInput}
+        type="file"
+        accept="image/*,application/pdf"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const f = e.target.files?.[0]
+          if (f) void pickFile(f)
+          e.target.value = ''
+        }}
+      />
+    </div>
   )
 }
 
