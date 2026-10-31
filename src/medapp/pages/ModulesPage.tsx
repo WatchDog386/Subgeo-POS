@@ -3,7 +3,6 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
 import type { DocLine, Product, Sale, ServiceJob, Supplier } from '../../db/types'
-import { toCents } from '../../lib/money'
 import { useSession } from '../../session'
 import { useToast } from '../../components/ui'
 import { downloadCsv } from '../../lib/csv'
@@ -27,6 +26,8 @@ import { MODULE_GROUPS } from '../nav'
 import { OtcEntry, PartyEntry, WHOLESALE_RULES, WholesaleEntry } from './EntryScreens'
 import { useInvoiceUpload } from './InvoiceImport'
 import { ADJUST_MINUS, ADJUST_PLUS, GrnEntry, StockAdjustEntry } from './StockScreens'
+import { MedicineEntry } from './MedicineScreen'
+import { ProductLookup } from './ProductLookup'
 import {
   EyeIcon,
   FindIcon,
@@ -60,7 +61,7 @@ interface ModuleDef {
   prefix?: string
   fields?: Field[]
   /** "+" opens a full-page stock screen (StockScreens.tsx) instead of the pop-up form; saving moves stock. */
-  entry?: 'grn' | 'adjust'
+  entry?: 'grn' | 'adjust' | 'medicine'
   /** Offer "Upload Supplier Invoice (PDF)" (reads the lines and receives them into stock). */
   importInvoice?: boolean
 }
@@ -501,6 +502,7 @@ const DEFS: Record<string, ModuleDef> = {
   'medicine': {
     title: 'Medicine',
     source: 'medicine',
+    entry: 'medicine',
     prefix: 'PRD00',
     hscroll: 0.75,
     tools: BASE_TOOLS,
@@ -518,6 +520,11 @@ const DEFS: Record<string, ModuleDef> = {
       C('minPrice', 'Min Selling Price', 110, 'right'),
       C('reorder', 'Re-order Level', 100, 'right'),
       C('maxStock', 'Max Level', 90, 'right'),
+      C('molecular', 'Moleculor Name', 160),
+      C('productType', 'Product Type', 110),
+      C('supplier', 'Preffered Supplier', 200),
+      C('markup', 'Markup%', 80, 'right'),
+      C('vat', 'VAT ?', 60),
     ],
     fields: [
       { key: 'docNo', kind: 'docno' },
@@ -776,6 +783,11 @@ function useRows(slug: string, def: ModuleDef): RawRow[] {
               minPrice: p.minPrice ? amt(p.minPrice) : '',
               reorder: String(p.reorderLevel ?? 0),
               maxStock: p.maxStock !== undefined ? String(p.maxStock) : '',
+              molecular: v.molecular || 'NONE',
+              productType: v.productType || 'MEDICINE',
+              supplier: (p.supplierId !== undefined ? suppliers.find((x) => x.id === p.supplierId)?.name : undefined)?.toUpperCase() || v.supplier || '',
+              markup: v.markup || '0.00',
+              vat: p.taxable ? 'YES' : 'NO',
             },
           }
         })
@@ -802,6 +814,7 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
   const nav = useNavigate()
   const toast = useToast()
   const all = useRows(slug, def)
+  const medicineProducts = useLiveQuery(() => (def.entry === 'medicine' ? db.products.filter((p) => !/^SRV-/i.test(p.sku)).toArray() : []), [def.entry], [] as Product[])
   const upload = useInvoiceUpload()
   const [quick, setQuick] = useState('')
   const [col, setCol] = useState('SELECT')
@@ -812,6 +825,9 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
   const { user } = useSession()
   const [asc, setAsc] = useState(false)
   const [page, setPage] = useState(0)
+  // Eye with nothing selected: every record on one page, no filters.
+  const [showAll, setShowAll] = useState(false)
+  const [findMed, setFindMed] = useState(false)
   const [checked, setChecked] = useState<Set<string | number>>(new Set())
   const [selected, setSelected] = useState<string | number | undefined>()
   const [showFilter, setShowFilter] = useState(true)
@@ -820,7 +836,7 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
   const [edit, setEdit] = useState<RawRow | 'new' | null>(null)
   const [action, setAction] = useState('SELECT')
   // Full-page entry screens (EntryScreens.tsx) that replace the list while open.
-  const [screen, setScreen] = useState<{ kind: 'wholesale' | 'grn' | 'adjust'; editId?: number } | { kind: 'otc'; mode: 'bill' | 'return' | 'service'; sale?: Sale } | { kind: 'party'; row?: RawRow } | null>(null)
+  const [screen, setScreen] = useState<{ kind: 'wholesale' | 'grn' | 'adjust' | 'medicine'; editId?: number } | { kind: 'otc'; mode: 'bill' | 'return' | 'service'; sale?: Sale } | { kind: 'party'; row?: RawRow } | null>(null)
 
   const colKey = def.cols.find((c) => c.label === col)?.key
   const filtered = all
@@ -845,9 +861,10 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
       }
     })
     .sort((a, b) => (asc ? a.ts - b.ts : b.ts - a.ts))
-  const pages = Math.max(1, Math.ceil(filtered.length / PAGE))
+  const size = showAll ? Math.max(filtered.length, 1) : PAGE
+  const pages = Math.max(1, Math.ceil(filtered.length / size))
   const pg = Math.min(page, pages - 1)
-  const pageRows = filtered.slice(pg * PAGE, pg * PAGE + PAGE)
+  const pageRows = filtered.slice(pg * size, pg * size + size)
   const target = () => all.find((r) => r.id === selected) ?? all.find((r) => checked.has(r.id))
 
   const exportCsv = () =>
@@ -866,12 +883,15 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
     else if (def.source === 'service') setScreen({ kind: 'otc', mode: 'service' })
     else if (def.source === 'party') setScreen({ kind: 'party' })
     else if (WHOLESALE_RULES[slug]) setScreen({ kind: 'wholesale' })
-    else if (def.entry === 'grn' || def.entry === 'adjust') setScreen({ kind: def.entry })
+    else if (def.entry) setScreen({ kind: def.entry })
     else setEdit('new')
   }
   const editDoc = () => {
     const t = target()
+    // Medicine: with nothing selected, search for the one to edit.
+    if (!t && def.entry === 'medicine') return setFindMed(true)
     if (!t) return toast('Select a record first', 'error')
+    if (def.entry === 'medicine') return setScreen({ kind: 'medicine', editId: t.productId })
     if (def.source === 'otc') setScreen({ kind: 'otc', mode: 'return', sale: t.detail as Sale })
     else if (def.source === 'otc-return') setView(t)
     else if (def.source === 'service') nav('/service')
@@ -882,8 +902,16 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
   }
   const viewDoc = () => {
     const t = target()
-    if (!t) return toast('Select a record first', 'error')
-    setView(t)
+    if (t) return setView(t)
+    // Nothing selected: show everything (all records, no filters, one page).
+    setQuick('')
+    setApplied(null)
+    setVal('')
+    setCol('SELECT')
+    setOp('WHERE')
+    setPage(0)
+    setShowAll(true)
+    toast(`Showing all ${all.length} record(s) — select one and press the eye to see all its details`)
   }
   /** Stamp the approval status on the chosen documents (synced to every till). */
   const approve = async () => {
@@ -913,6 +941,7 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
       case 'add':
         return newDoc()
       case 'list':
+        setShowAll(false)
         setQuick('')
         setApplied(null)
         setVal('')
@@ -955,6 +984,7 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
     }
   }
 
+  if (screen?.kind === 'medicine') return <MedicineEntry productId={screen.editId} onClose={() => setScreen(null)} />
   if (screen?.kind === 'grn') return <GrnEntry editId={screen.editId} onClose={() => setScreen(null)} />
   if (screen?.kind === 'adjust') return <StockAdjustEntry slug={slug as typeof ADJUST_MINUS} editId={screen.editId} onClose={() => setScreen(null)} />
   if (screen?.kind === 'wholesale') return <WholesaleEntry slug={slug} def={def} editId={screen.editId} onClose={() => setScreen(null)} />
@@ -1037,7 +1067,7 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
         <IBtn bare title="Previous" onClick={() => setPage(Math.max(0, pg - 1))}>
           <OrangeArrow dir="left" />
         </IBtn>
-        <Input value={`${pg * PAGE}-${pg * PAGE + PAGE}`} readOnly width={40} />
+        <Input value={showAll ? `0-${filtered.length}` : `${pg * PAGE}-${pg * PAGE + PAGE}`} readOnly width={40} />
         <IBtn bare title="Next" onClick={() => setPage(Math.min(pages - 1, pg + 1))}>
           <OrangeArrow dir="right" />
         </IBtn>
@@ -1098,6 +1128,17 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
         />
       )}
       {view && <ViewDialog def={def} row={view} onClose={() => setView(null)} />}
+      {findMed && (
+        <ProductLookup
+          title="Search Medicine to edit"
+          products={medicineProducts}
+          onClose={() => setFindMed(false)}
+          onPick={(p) => {
+            setFindMed(false)
+            setScreen({ kind: 'medicine', editId: p.id })
+          }}
+        />
+      )}
       {edit && (def.source === 'docs' || def.source === 'medicine') && <DocDialog slug={slug} def={def} row={edit === 'new' ? undefined : edit} onClose={() => setEdit(null)} />}
       {edit && def.source === 'services' && <ServiceDialog row={edit === 'new' ? undefined : edit} onClose={() => setEdit(null)} />}
     </div>
@@ -1224,71 +1265,9 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
     setFile({ name: f.name, data })
   }
 
-  // The Medicine master is where a chemist's inventory starts: a new product is
-  // added to stock at its cost/retail prices; edits refresh the prices.
-  /** Price floor and stock limits typed on the Medicine form (validated before anything is saved). */
-  const medicineLimits = (values: Record<string, string>) => {
-    const price = toCents(values.retail || values.whole || '0')
-    const minPrice = values.minPrice?.trim() ? toCents(values.minPrice) : undefined
-    const whole = (k: string, label: string) => {
-      const t = (values[k] ?? '').trim()
-      if (!t) return undefined
-      if (!/^\d+$/.test(t)) throw new Error(`${label} must be a whole number`)
-      return Number(t)
-    }
-    const reorderLevel = whole('reorder', 'Re-order Level') ?? 0
-    const maxStock = whole('maxStock', 'Max Level')
-    if (minPrice !== undefined && minPrice < 0) throw new Error('Min Selling Price cannot be negative')
-    if (minPrice !== undefined && price > 0 && price < minPrice) throw new Error(`Retail Sale ${(price / 100).toFixed(2)} is below the Min Selling Price ${(minPrice / 100).toFixed(2)}`)
-    const wholePrice = values.whole?.trim() ? toCents(values.whole) : 0
-    if (minPrice !== undefined && wholePrice > 0 && wholePrice < minPrice) throw new Error(`Whole Sale ${(wholePrice / 100).toFixed(2)} is below the Min Selling Price ${(minPrice / 100).toFixed(2)}`)
-    if (maxStock !== undefined && maxStock < reorderLevel) throw new Error(`Max Level ${maxStock} is below the Re-order Level ${reorderLevel}`)
-    return { price, minPrice, reorderLevel, maxStock }
-  }
-
-  const upsertMedicine = async (values: Record<string, string>, id?: number) => {
-    const name = values.name.trim()
-    if (!name) return
-    const cost = toCents(values.cost || '0')
-    const { price, minPrice, reorderLevel, maxStock } = medicineLimits(values)
-    const existingP = id !== undefined ? await db.products.get(id) : await db.products.filter((p) => p.name.toUpperCase() === name.toUpperCase()).first()
-    if (existingP)
-      await db.products.update(existingP.id!, { name: name.toUpperCase(), cost, price, minPrice, reorderLevel, maxStock, trackStock: !/^N/i.test((values.type || 'S').trim()), updatedAt: Date.now() })
-    else {
-      await db.products.add({
-        sku: values.docNo,
-        name: name.toUpperCase(),
-        fitment: [],
-        cost,
-        price,
-        minPrice,
-        stock: 0,
-        reorderLevel,
-        maxStock,
-        taxable: true,
-        serialized: false,
-        trackStock: !/^N/i.test((values.type || 'S').trim()),
-        active: true,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      })
-    }
-  }
-
   const save = async () => {
     if (required && !vals[required]?.trim()) return toast(`${label(required)} is required`, 'error')
     const values = { ...vals }
-    // Stock is counted by the stock ledger, never typed into a form record.
-    if (slug === 'medicine') {
-      delete values.stock
-      if (!values.name?.trim()) return toast('Product Name is required', 'error')
-      if (toCents(values.retail || values.whole || '0') <= 0) return toast('Enter the Retail Sale price', 'error')
-      try {
-        medicineLimits(values)
-      } catch (e) {
-        return toast(e instanceof Error ? e.message : String(e), 'error')
-      }
-    }
     if (!values.docNo?.trim() && fields.some((f) => f.kind === 'docno')) values.docNo = await nextDocNo(def.prefix ?? 'DOC')
     for (const f of fields) if (f.kind === 'money' && values[f.key]) values[f.key] = (parseFloat(values[f.key]) || 0).toFixed(2)
     if (file) {
@@ -1299,7 +1278,6 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
       delete values.attachmentName
     }
     await saveDoc(slug, values, docId, user?.id)
-    if (slug === 'medicine') await upsertMedicine(values, productId)
     toast(row ? 'Record updated' : 'Record saved')
     onClose()
   }

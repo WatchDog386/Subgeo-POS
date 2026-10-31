@@ -101,11 +101,19 @@ Pick whichever method suits you:
 - **Copy another chemist's list:** on the Chemists page, use *Copy medicine
   list to a chemist*. Names, codes and prices are copied with stock 0. Then
   receive the stock (next point).
-- **Purchases dashboard:** sign in as the chemist's PURCHASE account, then
-  *Modules → Medicine*, press **+** and fill in the form, once per
-  medicine. Each box shows what it expects: product group, unit, retail
-  price, cost price, pack size, and `S`/`N` for stock or non-stock. Saving
-  adds the medicine to the chemist's stock list.
+- **Admin or purchases dashboard:** *Modules → Medicine* → **+**. On the
+  **PRODUCT** tab, fill in Product Name, Product Group, UOM, Pack Size,
+  Stock/Non-Stock (`S`/`N`), Moleculor Name, Product Type, Preffered
+  Supplier, Cost Rate, Markup% (fills the retail price from the cost), Retail
+  Sale Price, Whole sale price and VAT ?. On the **DETAIL** tab, fill in the
+  Barcode, Min Selling Price, Re-order Level and Max Level. Then press
+  **Save (F2)**.
+- **To change a medicine:** select it in the list and press *Edit* (the
+  pencil). With nothing selected, *Edit* opens **Search Medicine**: type part
+  of the name or code and pick it. Its details open with **Status** and ← →
+  to step to the previous or next medicine. Change them and press **Save**.
+- **To see everything:** the eye next to **+** shows all the medicines on one
+  page. Select one and press the eye to see all its details.
 - **Import a CSV:** *Utilities → Data Management* → import products.
 - **Opening stock:** *Modules → STOCK ADJUSTMENTS → Stock Adjust +(DBH)* →
   **+**, choose the type **Opening Stock**, or receive a supplier invoice
