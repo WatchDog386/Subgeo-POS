@@ -9,6 +9,7 @@ import { Grid, Rows, SearchBar, Select, type Col } from '../ui'
 import { setTaskStatus, tasksFor, useTasks } from '../tasks'
 import { useSession } from '../../session'
 import { useToast } from '../../components/ui'
+import PurchaseTodo from './PurchaseTodo'
 
 type Section = 'todo' | 'quick' | 'stats' | 'favs' | 'reports' | 'charts' | 'utilities'
 const TOP: { id: Section; label: string }[] = [
@@ -26,7 +27,11 @@ const ALL = [...TOP, ...BOTTOM]
 
 /** Home tab (screenshot 11.14.09): stacked accordion, Quick Access open. */
 export default function HomePage() {
-  const [open, setOpen] = useState<Section>('quick')
+  const { user } = useSession()
+  // The purchases dashboard opens on its To-Do List (To-Do List / Task To-Do /
+  // Pending-Completed); every other role opens on Quick Access.
+  const purchase = user?.role === 'purchase'
+  const [open, setOpen] = useState<Section>(purchase ? 'todo' : 'quick')
   const idx = ALL.findIndex((s) => s.id === open)
   const before = ALL.slice(0, idx + 1)
   const after = ALL.slice(idx + 1)
@@ -39,7 +44,7 @@ export default function HomePage() {
           </button>
         ))}
         <div style={{ flex: 1, minHeight: 0, overflow: 'auto', borderBottom: '1px solid #c3c3c3' }}>
-          <SectionBody id={open} />
+          {purchase && open === 'todo' ? <PurchaseTodo /> : <SectionBody id={open} />}
         </div>
         {after.map((s) => (
           <button key={s.id} type="button" className="ma-acc-head" onClick={() => setOpen(s.id)}>
