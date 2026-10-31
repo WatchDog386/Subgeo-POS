@@ -9,7 +9,7 @@
 | Sign in as | Dashboard | Sees |
 |---|---|---|
 | `admin` | Admin | Every chemist: sales, stock value, debtors, staff, reports, chemists, transfers |
-| `subgeo` + the chemist's password (`0001` = SUBGEO1 … `0012` = SUBGEO12) | Cashier / pharmacy | Own chemist: OTC bills and returns, service bills, whole-sale documents, reports |
+| `subgeo` + the chemist's password (`0001` = SUBGEO1 … `0012` = SUBGEO12, `0000` = HQ) | Cashier / pharmacy | Own chemist: OTC bills and returns, service bills, whole-sale documents, reports |
 | `purchase` (no password) | Purchases | Own chemist: indents, LPOs, GRNs, Pur/GRN direct invoices (with PDF upload), medicine list, petty cash |
 
 ## How the data moves (all automatic)
@@ -31,7 +31,7 @@
 ```bash
 cd ~/Subgeo-POS && npm run setup:subgeo
 ```
-This creates **SUBGEO1 … SUBGEO12**. The chemist that was number 1 becomes **SUBGEO12**, keeping all its medicines, sales and staff (including the `purchase` account). Each chemist gets a cashier who signs in as **`subgeo`** with password **`0001` … `0012`**; the password decides which chemist opens. Running it again changes nothing.
+This creates **SUBGEO1 … SUBGEO12** and the head-office pharmacy **HQ** (cashier `subgeo` / `0000`). The chemist that was number 1 becomes **SUBGEO12**, keeping all its medicines, sales and staff (including the `purchase` account). Each chemist gets a cashier who signs in as **`subgeo`** with password **`0001` … `0012`**; the password decides which chemist opens. Running it again changes nothing.
 
 Then, as admin, open *Utilities → Chemists (Branches)*, select each SUBGEO and press **Edit Selected** to type its real **name and location**. To give another chemist a purchases account, create it in *Utilities → User Management* with its own user name (e.g. `purchase2`). Only cashiers and managers can share a user name.
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { db } from '../../db/db'
 import { logActivity } from '../../db/logs'
-import { chemCode } from '../../db/seedData'
+import { HQ_NUMBER, chemCode } from '../../db/seedData'
 import { api, syncNow, useSyncState } from '../../db/sync'
 import type { Branch, Product } from '../../db/types'
 import { useSession } from '../../session'
@@ -254,7 +254,7 @@ export default function ChemistsPage() {
 /* ── Create / edit a chemist ─────────────────────────────────────────────── */
 function ChemistForm({ branches, selected, userName, userId }: { branches: Branch[]; selected?: Branch; userName?: string; userId?: number }) {
   const toast = useToast()
-  const nextNo = Math.max(0, ...branches.map((b) => b.number)) + 1
+  const nextNo = Math.max(0, ...branches.filter((b) => b.number !== HQ_NUMBER).map((b) => b.number)) + 1
   const [editId, setEditId] = useState<number>()
   const [no, setNo] = useState(String(nextNo))
   const [name, setName] = useState('')
@@ -264,7 +264,7 @@ function ChemistForm({ branches, selected, userName, userId }: { branches: Branc
 
   const reset = () => {
     setEditId(undefined)
-    setNo(String(Math.max(0, ...branches.map((b) => b.number)) + 1))
+    setNo(String(Math.max(0, ...branches.filter((b) => b.number !== HQ_NUMBER).map((b) => b.number)) + 1))
     setName('')
     setLocation('')
     setPhone('')

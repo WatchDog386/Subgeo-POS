@@ -5,7 +5,7 @@ import crypto from 'node:crypto'
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import { sql } from './db'
 import { hashPassword } from '../src/lib/sha256'
-import { SEED_BRANCH, SEED_PURCHASE, SEED_USERS, chemCode } from '../src/db/seedData'
+import { HQ_NUMBER, SEED_BRANCH, SEED_PURCHASE, SEED_USERS, chemCode } from '../src/db/seedData'
 import { COUNTER_FIELDS, GLOBAL_KV_KEYS, GLOBAL_TABLES, SYNCED_TABLES, isLocalKvKey, isSeqKvKey } from '../src/db/syncSchema'
 import type { Branch, Product, Role, StaffMessage, User } from '../src/db/types'
 import { LEGACY_DOCS_PREFIX, LEGACY_TASKS_KEY, convertLegacyDocs, convertLegacyTasks } from '../src/db/legacyDemo'
@@ -632,6 +632,25 @@ export function setupSubgeoChemists(count = 12): string[] {
       const salt = crypto.randomBytes(8).toString('hex')
       writeRow('users', 0, id, { id, name: chemCode(n), username: 'subgeo', salt, passHash: hashPassword(salt, password), role: 'cashier', active: true, branchId: b.id } as unknown as Rec, now, null)
       out.push(`Cashier subgeo / ${password} → ${chemCode(n)}`)
+    }
+
+    // HQ: the head-office pharmacy, cashier "subgeo" / 0000 (no SUBGEO cashier keeps 0000 after the loop above).
+    let hq = branches().find((b) => b.number === HQ_NUMBER)
+    if (!hq) {
+      const id = newServerId()
+      writeRow('branches', 0, id, { id, number: HQ_NUMBER, name: 'HQ', location: '', phone: '', active: true, createdAt: now } as unknown as Rec, now, null)
+      hq = branches().find((b) => b.number === HQ_NUMBER)!
+      out.push('Created HQ (head office)')
+    }
+    if (!users().some((u) => u.username === 'subgeo' && u.branchId === hq!.id)) {
+      const taken = users().some((u) => u.username === 'subgeo' && safeEqual(hashPassword(u.salt, '0000'), u.passHash))
+      if (taken) out.push('HQ cashier NOT created: another "subgeo" account still uses 0000 — change that one first')
+      else {
+        const id = newServerId()
+        const salt = crypto.randomBytes(8).toString('hex')
+        writeRow('users', 0, id, { id, name: 'HQ', username: 'subgeo', salt, passHash: hashPassword(salt, '0000'), role: 'cashier', active: true, branchId: hq.id } as unknown as Rec, now, null)
+        out.push('Cashier subgeo / 0000 → HQ')
+      }
     }
   })()
   return out

@@ -58,9 +58,9 @@ describe('SUBGEO1 … SUBGEO12', () => {
 
   it('creates the twelve chemists and their cashiers', () => {
     const codes = (sqlMod.sql.prepare('SELECT code FROM branches ORDER BY number').all() as { code: string }[]).map((r) => r.code)
-    expect(codes).toEqual(Array.from({ length: 12 }, (_, i) => `SUBGEO${i + 1}`))
+    expect(codes).toEqual([...Array.from({ length: 12 }, (_, i) => `SUBGEO${i + 1}`), 'HQ'])
     expect((sqlMod.sql.prepare("SELECT number FROM branches WHERE id = 1").get() as { number: number }).number).toBe(12)
-    expect((sqlMod.sql.prepare("SELECT COUNT(*) AS n FROM users WHERE username = 'subgeo' AND role = 'cashier'").get() as { n: number }).n).toBe(12)
+    expect((sqlMod.sql.prepare("SELECT COUNT(*) AS n FROM users WHERE username = 'subgeo' AND role = 'cashier'").get() as { n: number }).n).toBe(13)
     // Running it again changes nothing.
     expect(sync.setupSubgeoChemists(12)).toEqual([])
   })
@@ -72,8 +72,11 @@ describe('SUBGEO1 … SUBGEO12', () => {
       expect(r.body.branches!.find((b) => b.id === r.body.user!.branchId)!.number).toBe(n)
     }
     expect((await login('subgeo', '0013')).status).toBe(401)
-    // A fresh server's starter cashier used 0001; this server's old 0000 is gone.
-    expect((await login('subgeo', '0000')).status).toBe(401)
+    // 0000 opens the head-office pharmacy HQ.
+    const hq = await login('subgeo', '0000')
+    expect(hq.status).toBe(200)
+    expect(hq.body.branches!.find((b) => b.id === hq.body.user!.branchId)!.number).toBe(100)
+    expect(sqlMod.sql.prepare('SELECT code, name FROM branches WHERE number = 100').get()).toEqual({ code: 'HQ', name: 'HQ' })
   })
 
   it('still keeps admin and purchase user names unique', async () => {

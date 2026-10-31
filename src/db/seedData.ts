@@ -55,6 +55,10 @@ export const SEED_PURCHASE: User & { id: number } = {
 export const SEED_USERS = [SEED_ADMIN, SEED_CASHIER, SEED_PURCHASE]
 
 /** "SUBGEO1" for chemist number 1 (the chemists are SUBGEO1 … SUBGEO12). */
+/** The head-office pharmacy "HQ" is kept on this chemist number (shown as HQ, not SUBGEO100). */
+export const HQ_NUMBER = 100
+
 export function chemCode(number: number | undefined): string {
+  if (number === HQ_NUMBER) return 'HQ'
   return number ? `SUBGEO${number}` : ''
 }
