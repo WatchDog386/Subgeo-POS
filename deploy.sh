@@ -18,10 +18,6 @@ if [ ! -f .env ]; then
   cp .env.example .env
   echo "    created .env from .env.example"
 fi
-if ! grep -q '^PAY_ENDPOINT=' .env; then
-  echo 'PAY_ENDPOINT=https://optimus.pinnovatech.co.ke/optimus/pay' >> .env
-  echo "    added PAY_ENDPOINT to .env"
-fi
 
 echo "==> database migrations"
 npm run db:migrate

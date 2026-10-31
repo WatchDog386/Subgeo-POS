@@ -12,7 +12,7 @@ import { chemCode } from '../src/db/seedData'
 type Rec = Record<string, unknown>
 
 /** Bump when the projection changes: the server rebuilds the tables on boot. */
-export const RELATIONAL_VERSION = 1
+export const RELATIONAL_VERSION = 2
 
 const int = (v: unknown, d: number | null = null): number | null => {
   const n = Number(v)
@@ -214,6 +214,10 @@ const PROJECTORS: Record<string, (id: number, d: Rec, scope: number) => void> = 
         taxable: bool(l.taxable),
         serial: str(l.serial),
         refunded_qty: num(l.refundedQty),
+        form: str(l.form),
+        instruction: str(l.instruction),
+        batch: str(l.batch),
+        expiry: str(l.expiry),
       })),
     )
     replaceChildren(
@@ -221,7 +225,7 @@ const PROJECTORS: Record<string, (id: number, d: Rec, scope: number) => void> = 
       'sale_id',
       id,
       lines(d.payments)
-        .filter((p) => ['cash', 'mpesa', 'card', 'account'].includes(String(p.method)))
+        .filter((p) => ['cash', 'mpesa', 'card', 'cheque', 'account'].includes(String(p.method)))
         .map((p, i) => ({ sale_id: id, line_no: i + 1, method: p.method, amount: int(p.amount, 0), reference: str(p.reference) })),
     )
   },
@@ -328,6 +332,30 @@ const PROJECTORS: Record<string, (id: number, d: Rec, scope: number) => void> = 
       created_at: int(d.createdAt, 0),
       updated_at: int(d.updatedAt, int(d.createdAt, 0)),
     })
+    replaceChildren(
+      'document_lines',
+      'document_id',
+      id,
+      lines(d.lines).map((l, i) => ({
+        document_id: id,
+        line_no: i + 1,
+        product_id: ref('products', l.productId),
+        name: str(l.name) ?? '',
+        sku: str(l.sku),
+        qty: num(l.qty),
+        cost: int(l.cost, 0),
+        rate: int(l.rate, 0),
+        vat_pct: num(l.vatPct),
+        vat: int(l.vat, 0),
+        discount: int(l.discount, 0),
+        total: int(l.total, 0),
+        batch: str(l.batch),
+        expiry: str(l.expiry),
+        src_doc_type: str(l.srcSlug),
+        src_doc_no: str(l.srcDocNo),
+        src_line: int(l.srcLine),
+      })),
+    )
   },
   tasks: (id, d, scope) =>
     upsert('staff_tasks', {
@@ -405,6 +433,7 @@ export function project(tbl: string, scope: number, id: string, data: Rec | null
 const CLEAR_ORDER = [
   'app_values',
   'staff_tasks',
+  'document_lines',
   'documents',
   'activity_logs',
   'service_job_lines',

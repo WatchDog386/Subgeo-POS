@@ -17,7 +17,9 @@ internet or the server is down.
 ```
 
 - **Migrations:** `server/migrations/*.sql`. They run on server start and with
-  `npm run db:migrate`. `004_relational.sql` creates the relational tables.
+  `npm run db:migrate`. `004_relational.sql` creates the relational tables;
+  `005_document_lines.sql` adds document lines, cheque payments and the OTC
+  line details.
 - **Rebuild:** `npm run db:rebuild` empties the relational tables and rebuilds
   them from `sync_records`. It is safe to run at any time; the tills don't notice.
   The server also rebuilds by itself after an update that changes how records
@@ -51,12 +53,13 @@ internet or the server is down.
 | `shifts` | Day shifts: float, counted and expected cash | `user_id → users` |
 | `shift_cash_movements` | Cash in / out during a shift | `shift_id → shifts` |
 | `sales` | Bills and refunds (a refund has a negative total) | `customer_id`, `user_id`, `shift_id`, `refund_of → sales` |
-| `sale_lines` | Medicines on a bill | `sale_id → sales`, `product_id → products` |
-| `sale_payments` | How a bill was paid: cash, mpesa, card, account (with the M-Pesa code) | `sale_id → sales` |
+| `sale_lines` | Medicines on a bill, with type (dosage form), instruction, batch and expiry | `sale_id → sales`, `product_id → products` |
+| `sale_payments` | How a bill was paid: cash, mpesa, card, cheque, account (with the M-Pesa code / card or cheque no.) | `sale_id → sales` |
 | `parked_sales`, `parked_sale_lines` | Bills put on hold at the till | `customer_id`, `user_id`, `product_id` |
 | `purchase_orders`, `purchase_order_lines` | Purchase orders and what has been received | `supplier_id`, `product_id` |
 | `service_jobs`, `service_job_lines` | Service requests and the items used | `customer_id`, `sale_id → sales` (the bill), `product_id` |
 | `documents` | One row per document of a transaction screen: purchase indent, LPO, GRN, Pur/GRN direct invoice, petty cash voucher, supplier payment, quotation, delivery note, whole-sale invoice, credit note, medicine master… `doc_type` is the screen, `values_json` holds every field | `supplier_id → suppliers` / `customer_id → customers` (matched by the name on the document), `created_by → users`; `ref_doc_no` = the document it follows (LPO → indent no., GRN → LPO no.) |
+| `document_lines` | Product lines of quotations, delivery notes, whole-sale invoices and credit notes: qty, cost, sales rate, VAT, discount, total, batch, expiry, and the document line it was adjusted from (`src_doc_type`, `src_doc_no`, `src_line`) | `document_id → documents`, `product_id → products` |
 | `staff_tasks` | Tasks assigned on *Home → To-Do List → Task To-Do* | `assigner_id`, `assignee_id → users` (assignee NULL = everyone at the chemist) |
 | `activity_logs` | Audit log: sign-ins, sales, stock, settings, reviews… | `user_id → users` |
 | `app_values` | Settings, default values, running document numbers. `branch_id` NULL = company-wide | — |
@@ -128,6 +131,22 @@ the server refuses a change, the till puts the server's copy back and shows
 - **Anything else:** the later change wins.
 - **Documents, tasks and messages** are one record each, so two tills saving
   different documents at the same time never overwrite each other.
+
+## What the cashier's documents do
+
+| Document | Stock | Customer account (when *Accounts?* is ticked) |
+|---|---|---|
+| Sales Quotation | — | — |
+| Delivery Note | goes **out** | — |
+| Whole Sale Invoice | goes out, except lines adjusted from a delivery note (already out) | **charged** the invoice total |
+| Credit Note / Credit Note - Direct Invoice | comes **back** | **credited** the total |
+| OTC Medicine Issue/Bill | goes out | the unpaid part, when a patient is named |
+| OTC Medicine Isse Return | comes back | the refund goes out in cash / M-Pesa / card / cheque |
+
+Editing a document undoes its old stock and account effects before the new
+version is applied. Deleting it undoes them too. *ADJUST* only offers
+quantities that are still pending: what has not yet been carried into a later
+document, or not yet returned.
 
 ## Upgrading from an older version
 

@@ -41,8 +41,8 @@ greyed hint of what to type.
    suppliers you buy from, with their phone numbers. They are shared by every
    chemist. Any vendor you type on an LPO, GRN or direct invoice for the first
    time is added automatically.
-6. **M-Pesa STK** (optional): fill in `.env` on the server. See
-   [MPESA.md](MPESA.md).
+6. **M-Pesa:** set the **M-Pesa Till** in Default Values. Cashiers type the
+   customer's confirmation code on each bill (there is no phone prompt).
 
 ---
 

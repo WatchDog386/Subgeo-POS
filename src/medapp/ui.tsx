@@ -382,15 +382,19 @@ export function Check({
   onChange,
   children,
   dark,
+  disabled,
+  title,
 }: {
   checked: boolean
   onChange: (v: boolean) => void
   children?: ReactNode
   dark?: boolean
+  disabled?: boolean
+  title?: string
 }) {
   return (
-    <label className={`ma-check${dark ? ' is-dark' : ''}`}>
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+    <label className={`ma-check${dark ? ' is-dark' : ''}`} style={disabled ? { opacity: 0.55, cursor: 'default' } : undefined} title={title}>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
       <span className="box" />
       {children}
     </label>

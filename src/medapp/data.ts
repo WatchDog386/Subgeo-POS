@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { activeBranchId, db } from '../db/db'
 import { chemCode } from '../db/seedData'
-import type { Customer, DocRecord, Sale, User } from '../db/types'
+import type { Customer, DocLine, DocRecord, Sale, User } from '../db/types'
 
 // ── Legacy header constants ─────────────────────────────────────────────
 export const APP_VERSION = '9.5.21'
@@ -150,6 +150,7 @@ const ACCOUNTS: Record<string, string> = {
   cash: 'CASH COLLECTION ACCOUNT',
   mpesa: 'MPESA COLLECTION ACCOUNT',
   card: 'CREDIT CARD COLLECTION ACCOUNT',
+  cheque: 'CHEQUE COLLECTION ACCOUNT',
 }
 export function payableBy(sale: Sale, customers: Map<number, Customer>): string {
   const method = sale.payments[0]?.method ?? 'cash'
@@ -159,14 +160,14 @@ export function payableBy(sale: Sale, customers: Map<number, Customer>): string 
   }
   return ACCOUNTS[method] ?? 'CASH COLLECTION ACCOUNT'
 }
-export function paidBy(sale: Sale | undefined, method: 'cash' | 'mpesa' | 'card' | 'account'): number {
+export function paidBy(sale: Sale | undefined, method: 'cash' | 'mpesa' | 'card' | 'cheque' | 'account'): number {
   if (!sale) return 0
   return sale.payments.filter((p) => p.method === method).reduce((s, p) => s + p.amount, 0) - (method === 'cash' ? sale.change : 0)
 }
 
 // ── Documents of the transaction screens (quotes, DNs, indents, LPOs, GRNs…) ─
 // One synced record per document (db.docs), so two tills never overwrite each other.
-export type { DocRecord }
+export type { DocLine, DocRecord }
 
 export function useDocs(slug: string): DocRecord[] {
   return useLiveQuery(async () => (await db.docs.where('slug').equals(slug).toArray()).sort((a, b) => b.createdAt - a.createdAt || b.id - a.id), [slug], [] as DocRecord[])
@@ -175,14 +176,20 @@ export async function getDocs(slug: string): Promise<DocRecord[]> {
   return db.docs.where('slug').equals(slug).toArray()
 }
 /** Create (no id) or update a document. Returns its id. */
-export async function saveDoc(slug: string, values: Record<string, string>, id?: number, userId?: number): Promise<number> {
+export async function saveDoc(slug: string, values: Record<string, string>, id?: number, userId?: number, lines?: DocLine[]): Promise<number> {
   const now = Date.now()
+  const withLines = lines ? { lines } : {}
   if (id !== undefined) {
-    const n = await db.docs.update(id, { values, docNo: values.docNo || undefined, updatedAt: now })
+    const n = await db.docs.update(id, { values, docNo: values.docNo || undefined, updatedAt: now, ...withLines })
     if (!n) throw new Error('That record no longer exists (deleted on another till?)')
     return id
   }
-  return (await db.docs.add({ slug, values, docNo: values.docNo || undefined, createdAt: now, updatedAt: now, createdBy: userId } as DocRecord)) as number
+  return (await db.docs.add({ slug, values, docNo: values.docNo || undefined, createdAt: now, updatedAt: now, createdBy: userId, ...withLines } as DocRecord)) as number
+}
+/** The number nextDocNo(prefix) will hand out next, without using it up (shown on new forms). */
+export async function peekDocNo(prefix: string): Promise<string> {
+  const n = (await getKv<number>(`medapp:seq:${prefix}`, 0)) + 1
+  return `${prefix}-${n}-${yy(Date.now())}`
 }
 export async function deleteDocs(_slug: string, ids: number[]): Promise<void> {
   await db.docs.bulkDelete(ids)

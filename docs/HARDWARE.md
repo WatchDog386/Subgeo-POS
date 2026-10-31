@@ -336,8 +336,8 @@ TOTAL ESTIMATE REQUESTED: KSh ____________  (excluding the till terminal)
    with no driver install. Scan a catalogue barcode → the part is added to the sale.
 9. **Label printer:** install the vendor driver, load a 40×30 mm roll, print one test label
    and stick it on a part.
-10. **M-Pesa:** *Settings → Payments*. Set the mode to STK push once the server `.env` has
-    the gateway credentials (`docs/MPESA.md`), then send a KSh 1 test prompt to your own phone.
+10. **M-Pesa:** *Settings → Payments*: enter the till number. Pay KSh 1 to it from your own
+    phone and type the confirmation code on a test bill.
 11. **UPS:** power-cut test — pull the mains plug and confirm the till, the printer and the
     router stay alive and you can still complete a sale.
 12. **Backup:** *Settings → Backup → Export JSON* every day at close of business, and copy
@@ -358,7 +358,6 @@ TOTAL ESTIMATE REQUESTED: KSh ____________  (excluding the till terminal)
 | "WebUSB is not available in this browser" | Wrong browser, or the app is open over a LAN IP | Use Chrome/Edge and open `http://localhost:8787` (secure context) |
 | Printer not found by Chrome over USB | Printer bound to the vendor driver | Bind it to WinUSB with **Zadig**, or use LAN mode |
 | Receipt prints but the drawer stays shut | The sale was not paid in cash | "Open drawer on cash sales" only fires for cash tenders |
-| M-Pesa prompts not sending | Gateway credentials missing | See `docs/MPESA.md` — `.env` next to `package.json` |
 | `npm install` fails on better-sqlite3 | Node version too old, or no prebuilt binary | Use Node 22 LTS; if still failing install VS Build Tools 2022 (Desktop C++) |
 | Server will not start after `npm ci --omit=dev` | `tsx` is a devDependency | Run a full `npm install` |
 | Everything works on USB but the till reboots daily | Browser lost the USB grant | Use LAN mode instead — it survives reboots and tab crashes |

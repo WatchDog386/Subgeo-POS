@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { EscPos, drawerKickBytes } from '../lib/escpos'
 import { isValidMpesaCode, normalizePhone } from '../lib/mpesa'
 import { parseCsv, toCsv } from '../lib/csv'
-import { darajaTimestamp, stkPassword } from '../../server/daraja'
 
 describe('ESC/POS', () => {
   it('pads left/right pairs to the paper width', () => {
@@ -26,11 +25,6 @@ describe('M-Pesa helpers', () => {
   it('validates confirmation codes', () => {
     expect(isValidMpesaCode('sjk7ab12cd')).toBe(true)
     expect(isValidMpesaCode('SJK7AB')).toBe(false)
-  })
-
-  it('builds the Daraja password and EAT timestamp', () => {
-    expect(darajaTimestamp(new Date('2026-01-01T21:30:05Z'))).toBe('20260102003005')
-    expect(stkPassword('174379', 'key', '20260101000000')).toBe(Buffer.from('174379key20260101000000').toString('base64'))
   })
 })
 

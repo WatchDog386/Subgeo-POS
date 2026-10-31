@@ -154,19 +154,21 @@ const REPORTS: Record<string, ReportDef> = {
     async run(from, to) {
       const d = await getMedDefaults()
       const sales = (await db.sales.orderBy('createdAt').toArray()).filter((s) => inRange(s.createdAt, from, to))
-      const t = { cash: 0, mpesa: 0, card: 0, total: 0 }
+      const t = { cash: 0, mpesa: 0, card: 0, cheque: 0, total: 0 }
       const rows = sales.map((s) => {
         const cash = paidBy(s, 'cash')
         const mpesa = paidBy(s, 'mpesa')
         const card = paidBy(s, 'card')
-        const total = cash + mpesa + card
+        const cheque = paidBy(s, 'cheque')
+        const total = cash + mpesa + card + cheque
         t.cash += cash
         t.mpesa += mpesa
         t.card += card
+        t.cheque += cheque
         t.total += total
-        return { date: dmy(s.createdAt), rec: billNo(s, d.billPrefix), cash: amt(cash), mpesa: amt(mpesa), card: amt(card), cheque: '0.00', total: amt(total) }
+        return { date: dmy(s.createdAt), rec: billNo(s, d.billPrefix), cash: amt(cash), mpesa: amt(mpesa), card: amt(card), cheque: amt(cheque), total: amt(total) }
       })
-      if (rows.length) rows.push({ date: 'TOTAL', rec: '', cash: amt(t.cash), mpesa: amt(t.mpesa), card: amt(t.card), cheque: '0.00', total: amt(t.total) })
+      if (rows.length) rows.push({ date: 'TOTAL', rec: '', cash: amt(t.cash), mpesa: amt(t.mpesa), card: amt(t.card), cheque: amt(t.cheque), total: amt(t.total) })
       return {
         cols: [C('date', 'Date', 100), C('rec', 'Rec No', 150), C('cash', 'Cash', 100, 'right'), C('mpesa', 'Mpesa', 100, 'right'), C('card', 'Credit Card', 100, 'right'), C('cheque', 'Cheque', 100, 'right'), C('total', 'Total Rec Amt', 130, 'right')],
         rows,

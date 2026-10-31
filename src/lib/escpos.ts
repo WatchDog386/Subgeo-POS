@@ -80,7 +80,7 @@ export function columnsFor(paperWidth: 58 | 80): number {
 const amt = (cents: number) =>
   (cents / 100).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-const METHOD_LABEL: Record<string, string> = { cash: 'Cash', mpesa: 'M-Pesa', card: 'Card', account: 'On account' }
+const METHOD_LABEL: Record<string, string> = { cash: 'Cash', mpesa: 'M-Pesa', card: 'Card', cheque: 'Cheque', account: 'On account' }
 
 export function receiptBytes(
   sale: Sale,

@@ -93,7 +93,7 @@ export interface Customer {
   createdAt: number
 }
 
-export type PaymentMethod = 'cash' | 'mpesa' | 'card' | 'account'
+export type PaymentMethod = 'cash' | 'mpesa' | 'card' | 'cheque' | 'account'
 
 export interface Payment {
   method: PaymentMethod
@@ -115,6 +115,11 @@ export interface SaleLine {
   taxable: boolean
   serial?: string
   refundedQty?: number
+  /** Pharmacy details typed on the OTC bill: dosage form, how to take it, batch and expiry. */
+  form?: string
+  instruction?: string
+  batch?: string
+  expiry?: string
 }
 
 export type SaleStatus = 'completed' | 'refunded' | 'partially_refunded' | 'voided'
@@ -236,7 +241,6 @@ export interface Settings {
   receiptFooter: string
   currency: string
   mpesaTill: string
-  mpesaMode: 'manual' | 'stk'
   apiUrl: string
   dosageForms: string[]
   paperWidth: 58 | 80
@@ -274,9 +278,31 @@ export interface DocRecord {
   docNo?: string
   /** The screen's fields, keyed by field name, as typed (dates dd-mm-yyyy, money 0.00). */
   values: Record<string, string>
+  /** Product lines (quotations, delivery notes, invoices, credit notes). */
+  lines?: DocLine[]
   createdAt: number
   updatedAt?: number
   createdBy?: number
+}
+
+/** One product line of a whole-sale document. Money in cents. */
+export interface DocLine {
+  productId?: number
+  name: string
+  sku?: string
+  qty: number
+  cost: number
+  rate: number
+  vatPct: number
+  vat: number
+  discount: number
+  total: number
+  batch?: string
+  expiry?: string
+  /** The document this line was adjusted from (ADJUST …): its screen, number and line index. */
+  srcSlug?: string
+  srcDocNo?: string
+  srcLine?: number
 }
 
 /** A task the admin (or anyone) assigns to staff of a chemist (Home → To-Do List). */

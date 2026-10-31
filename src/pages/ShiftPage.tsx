@@ -146,6 +146,7 @@ function SummaryTable({ summary, float, currency }: { summary: ShiftSummary; flo
     ['Refunds', summary.refunds],
     ['M-Pesa', summary.byMethod.mpesa],
     ['Card', summary.byMethod.card],
+    ['Cheque', summary.byMethod.cheque],
     ['On account', summary.byMethod.account],
     ['VAT', summary.tax],
   ]
@@ -222,7 +223,7 @@ function CloseShiftModal({ shift, summary, onClose }: { shift: Shift; summary: S
     p.line(`Opened: ${new Date(shift.openedAt).toLocaleString('en-KE')}`)
     p.line(`Closed: ${new Date().toLocaleString('en-KE')}`).rule()
     p.pair('Sales', amt(summary.sales)).pair('Transactions', String(summary.transactions)).pair('Refunds', amt(summary.refunds))
-    p.pair('M-Pesa', amt(summary.byMethod.mpesa)).pair('Card', amt(summary.byMethod.card)).pair('On account', amt(summary.byMethod.account))
+    p.pair('M-Pesa', amt(summary.byMethod.mpesa)).pair('Card', amt(summary.byMethod.card)).pair('Cheque', amt(summary.byMethod.cheque)).pair('On account', amt(summary.byMethod.account))
     p.pair('VAT', amt(summary.tax)).rule()
     p.pair('Float', amt(shift.openingFloat)).pair('Cash sales', amt(summary.byMethod.cash))
     p.pair('Cash in', amt(summary.cashIn)).pair('Cash out', amt(summary.cashOut))

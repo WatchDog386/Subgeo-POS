@@ -313,7 +313,7 @@ const CURRENCIES = ['KES', 'UGX', 'TZS', 'RWF', 'BIF', 'USD', 'EUR', 'GBP', 'GHS
 
 const METHOD_META: { id: PaymentMethod; label: string; desc: string; icon: typeof Banknote }[] = [
   { id: 'cash', label: 'Cash', desc: 'Notes and coins at the counter', icon: Banknote },
-  { id: 'mpesa', label: 'M-Pesa', desc: 'Confirmation code or STK push', icon: Smartphone },
+  { id: 'mpesa', label: 'M-Pesa', desc: 'Cashier types the confirmation code from the SMS', icon: Smartphone },
   { id: 'card', label: 'Card', desc: 'Debit / credit card terminal', icon: CreditCard },
   { id: 'account', label: 'On account', desc: "Post to a customer's credit balance", icon: UserRound },
 ]
@@ -406,21 +406,15 @@ function PaymentsSettings() {
         </div>
       </Section>
 
-      <Section title="M-Pesa" desc="Till number printed on receipts, plus how cashiers capture payments.">
+      <Section title="M-Pesa" desc="Till number printed on receipts. The customer pays to it and the cashier types the confirmation code from the SMS.">
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Till / Paybill number">
             <input className="input" value={draft.mpesaTill} onChange={(e) => set('mpesaTill', e.target.value)} />
           </Field>
-          <Field label="Mode">
-            <select className="input" value={draft.mpesaMode} onChange={(e) => set('mpesaMode', e.target.value as Settings['mpesaMode'])}>
-              <option value="manual">Manual — cashier types the confirmation code</option>
-              <option value="stk">STK Push — prompt sent to the customer's phone</option>
-            </select>
-          </Field>
         </div>
       </Section>
 
-      <Section title="Local server" desc="Handles M-Pesa STK Push (Daraja) and network printers. Default /api works when the app is served by that server.">
+      <Section title="Local server" desc="Company database sync and network printers. Default /api works when the app is served by that server.">
         <div className="flex gap-2">
           <input className="input font-mono" value={draft.apiUrl} onChange={(e) => set('apiUrl', e.target.value)} />
           <button className="btn-ghost shrink-0" onClick={testApi} disabled={testing}>
@@ -433,9 +427,6 @@ function PaymentsSettings() {
             {status.msg}
           </p>
         )}
-        <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
-          STK Push needs Safaricom Daraja credentials in the server's <code>.env</code> file. See <code>docs/MPESA.md</code>. Manual mode works with no setup and no internet.
-        </p>
       </Section>
 
       <SaveBar onSave={saveAll} />
@@ -836,7 +827,7 @@ function AboutSettings() {
       </div>
 
       <p className="mt-4 text-sm text-slate-600">
-        Each chemist's data is stored in this browser (IndexedDB) so the till works offline, and syncs to the company database on the server (<code>npm run server</code>), which also runs STK Push and network printing. Setup docs live in <code>docs/</code> — <code>MPESA.md</code> for Daraja credentials.
+        Each chemist's data is stored in this browser (IndexedDB) so the till works offline, and syncs to the company database on the server (<code>npm run server</code>), which also relays network printing. Setup docs live in <code>docs/</code>.
       </p>
 
       <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4">

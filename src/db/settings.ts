@@ -13,7 +13,6 @@ export const DEFAULT_SETTINGS: Settings = {
   receiptFooter: 'Goods once sold are not returnable without a receipt. Thank you!',
   currency: 'KES',
   mpesaTill: '',
-  mpesaMode: 'stk',
   apiUrl: '/api',
   dosageForms: [],
   paperWidth: 80,

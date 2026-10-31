@@ -9,7 +9,7 @@ Point-of-sale and inventory system for a **motorbike / e-bike spare parts shop**
 | Area | Features |
 |---|---|
 | **Sell** | Tap-to-add product grid with colour-coded categories. Search by name, SKU, OEM part number or barcode. A **"Fits bike model" filter** shows only parts for the customer's bike. Barcode scanner support, park/resume sales, cart and line discounts, custom/labour items, serial capture for batteries, controllers and chargers. Keyboard shortcuts (F2 search, F4 customer, F8 park, F9 charge). |
-| **Payments** | Cash with quick-note buttons and change. **M-Pesa** by manual code entry (no setup needed) or **STK Push** through Safaricom Daraja. Card by approval code from a standalone PDQ. On account (credit) with credit limits. Split tender. |
+| **Payments** | Cash with quick-note buttons and change. **M-Pesa** by typing the confirmation code from the customer's SMS (no setup needed). Card by approval code from a standalone PDQ. On account (credit) with credit limits. Split tender. |
 | **Receipts** | 58/80 mm ESC/POS printing over USB, Serial/Bluetooth or LAN. Cash drawer kick. Browser-print fallback. Receipts can be sent by WhatsApp. KRA PIN and VAT breakdown. |
 | **Sales history** | Search by receipt, customer, M-Pesa code or serial number. Reprint. Full or partial refunds, with optional restock. |
 | **Inventory** | Parts with SKU, barcode, OEM number, brand, bin location, fitment, cost/price/margin and reorder level. Stock count, adjustment and write-off, all logged with a per-part stock history. CSV import/export. |
@@ -54,7 +54,7 @@ npm run typecheck
 ### Configuration
 
 - **Shop details, VAT, receipt footer, bike models, staff and hardware:** in the app, under *Settings*.
-- **M-Pesa STK Push:** copy `.env.example` to `.env` and fill in your Daraja credentials. See [docs/MPESA.md](docs/MPESA.md).
+- **M-Pesa:** set the till number in *Settings → Payments*. The customer pays to it and the cashier types the confirmation code from the SMS (no phone prompt, no setup).
 - **Hardware:** see [docs/HARDWARE.md](docs/HARDWARE.md) for the recommended bundle and setup.
 
 ## Several chemists (branches)
@@ -84,7 +84,7 @@ Browser (Chrome/Edge, installable PWA)        server/ (Node + Express)
  ├─ Dexie (IndexedDB), one DB per chemist  ⇄    ├─ /api/auth/*   sign-in (user name + password)
  │   └─ src/db/sync.ts  push/pull changes        ├─ /api/sync/*   push/pull of every chemist's records (SQLite)
  ├─ ESC/POS encoder  → WebUSB / Web Serial      ├─ /api/admin/*  all-chemists overview, copy list, transfers
- └─ HID barcode-scanner listener                ├─ /api/mpesa/*  Daraja STK Push + callback + query
+ └─ HID barcode-scanner listener                ├─ /api/sync/*   (see below)
                                                 └─ /api/print    relays ESC/POS bytes to LAN printers :9100
 ```
 

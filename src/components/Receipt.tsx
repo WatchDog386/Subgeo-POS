@@ -2,7 +2,7 @@ import { createPortal } from 'react-dom'
 import type { Customer, Sale, Settings } from '../db/types'
 import { money } from '../lib/money'
 
-const METHOD_LABEL = { cash: 'Cash', mpesa: 'M-Pesa', card: 'Card', account: 'On account' } as const
+const METHOD_LABEL = { cash: 'Cash', mpesa: 'M-Pesa', card: 'Card', cheque: 'Cheque', account: 'On account' } as const
 
 /**
  * On-screen / browser-print receipt. Mirrors the ESC/POS layout in lib/escpos.ts.

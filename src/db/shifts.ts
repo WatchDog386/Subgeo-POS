@@ -46,7 +46,7 @@ export interface ShiftSummary {
 }
 
 export function summarizeShift(shift: Shift, sales: Sale[]): ShiftSummary {
-  const byMethod: Record<PaymentMethod, number> = { cash: 0, mpesa: 0, card: 0, account: 0 }
+  const byMethod: Record<PaymentMethod, number> = { cash: 0, mpesa: 0, card: 0, cheque: 0, account: 0 }
   let total = 0
   let refunds = 0
   let tax = 0
