@@ -195,8 +195,11 @@ function denyReason(user: AuthedUser, tbl: string, scope: number, id: string | n
     if (!ROLES.includes(u.role)) return `Unknown role "${String(u.role)}"`
     if (u.role !== 'owner' && !branchParam(u.branchId)) return `${u.username} needs a chemist number`
     if (u.branchId && !parse(getRow('branches', 0, u.branchId))) return `Chemist ${u.branchId} does not exist`
-    const clash = users().find((x) => x.username === u.username && String(x.id) !== String(id))
-    if (clash) return `User name "${u.username}" is already taken`
+    // A user name may be shared only by cashiers / managers of different chemists (passwords differ).
+    const sharable = (r: Role) => r === 'cashier' || r === 'manager'
+    const same = users().filter((x) => x.username === u.username && String(x.id) !== String(id))
+    if (same.some((x) => !sharable(x.role)) || (same.length && !sharable(u.role))) return `User name "${u.username}" is already taken`
+    if (same.some((x) => x.branchId === u.branchId)) return `"${u.username}" already has an account at that chemist`
   }
   if (tbl === 'users') {
     // Never leave the company without an active admin.
@@ -247,16 +250,15 @@ syncRouter.post('/auth/login', (req, res) => {
     res.status(429).json({ error: 'Too many wrong passwords. Try again in a few minutes.' })
     return
   }
-  const user = users().find((u) => u.username === username)
-  // The purchases dashboard signs in with no password; only accounts whose
-  // role is "purchase" and whose hash is an empty-password hash accept it.
-  const passwordless =
-    password === '' && user?.role === 'purchase' && safeEqual(hashPassword(user.salt, ''), user.passHash)
-  if (
-    !user ||
-    !user.active ||
-    !(passwordless || safeEqual(hashPassword(user.salt, password), user.passHash))
-  ) {
+  // Cashiers of different chemists may share a user name ("subgeo"): the password picks the account.
+  const named = users().filter((u) => u.username === username)
+  const matches = (u: AuthedUser) =>
+    // The purchases dashboard signs in with no password; only accounts whose
+    // role is "purchase" and whose hash is an empty-password hash accept it.
+    password === '' ? u.role === 'purchase' && safeEqual(hashPassword(u.salt, ''), u.passHash) : safeEqual(hashPassword(u.salt, password), u.passHash)
+  const hit = named.filter(matches)
+  const user = hit.find((u) => u.active) ?? hit[0] ?? (named.length === 1 ? named[0] : undefined)
+  if (!user || !user.active || !hit.includes(user)) {
     const n = (f?.n ?? 0) + 1
     failures.set(key, { n, until: n >= 8 ? Date.now() + 5 * 60_000 : 0 })
     res.status(401).json({ error: user && !user.active ? 'This account is disabled' : 'Invalid user name or password' })
@@ -567,4 +569,58 @@ function branchCode(branchId: number): string {
 function addLog(scope: number, user: AuthedUser, action: string, detail: string) {
   const id = newServerId()
   writeRow('logs', scope, id, { id, at: Date.now(), kind: 'stock', action, detail, userId: user.id, userName: user.name }, Date.now(), user.id)
+}
+
+/* ── One-time company setup: chemists SUBGEO1 … SUBGEO12 ─────────────────── */
+/**
+ * Make sure chemists 1 … count exist (shown as SUBGEO1 … SUBGEOn) and each has
+ * a cashier signing in as "subgeo" with password 0001 … 00nn (the password
+ * picks the chemist). The chemist that is number 1 today becomes number
+ * `count` first, keeping all its data. Safe to run again: nothing that exists
+ * is recreated, and passwords that were changed are left alone.
+ * Run on the server: npm run setup:subgeo
+ */
+export function setupSubgeoChemists(count = 12): string[] {
+  const out: string[] = []
+  sql.transaction(() => {
+    const now = Date.now()
+    let list = branches()
+    if (!list.some((b) => b.number === count)) {
+      const first = list.find((b) => b.number === 1)
+      if (first) {
+        const name = /^(CHEMIST 1|SCL UMOJA 3)$/i.test(first.name) ? `SUBGEO ${count}` : first.name
+        writeRow('branches', 0, first.id, { ...first, number: count, name } as unknown as Rec, now, null)
+        out.push(`${chemCode(1)} (${first.name}) is now ${chemCode(count)} — all its medicines, sales and staff stay with it`)
+      }
+    }
+    list = branches()
+    for (let n = 1; n <= count; n++) {
+      if (list.some((b) => b.number === n)) continue
+      const id = newServerId()
+      writeRow('branches', 0, id, { id, number: n, name: `SUBGEO ${n}`, location: '', phone: '', active: true, createdAt: now } as unknown as Rec, now, null)
+      out.push(`Created ${chemCode(n)} (name and location: set them in Utilities → Chemists → Edit Selected)`)
+    }
+    list = branches()
+    for (let n = 1; n <= count; n++) {
+      const b = list.find((x) => x.number === n)!
+      const password = String(n).padStart(4, '0')
+      const mine = users().find((u) => u.username === 'subgeo' && u.branchId === b.id)
+      if (mine) {
+        // A starter password (0000, or 0001 on another chemist) moves to the chemist's own one;
+        // a password someone chose is kept.
+        const starter = ['0000', '0001'].filter((x) => x !== password).some((x) => safeEqual(hashPassword(mine.salt, x), mine.passHash))
+        if (starter) {
+          const salt = crypto.randomBytes(8).toString('hex')
+          writeRow('users', 0, mine.id, { ...mine, salt, passHash: hashPassword(salt, password), name: mine.name === 'SUBGEO' ? chemCode(n) : mine.name } as unknown as Rec, now, null)
+          out.push(`Cashier subgeo of ${chemCode(n)}: password is now ${password}`)
+        }
+        continue
+      }
+      const id = newServerId()
+      const salt = crypto.randomBytes(8).toString('hex')
+      writeRow('users', 0, id, { id, name: chemCode(n), username: 'subgeo', salt, passHash: hashPassword(salt, password), role: 'cashier', active: true, branchId: b.id } as unknown as Rec, now, null)
+      out.push(`Cashier subgeo / ${password} → ${chemCode(n)}`)
+    }
+  })()
+  return out
 }

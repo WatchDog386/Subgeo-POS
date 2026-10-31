@@ -7,8 +7,8 @@ import { EmrLiteLogo, LogoutIcon, NotepadIcon, UsersIcon } from './icons'
  * row, and the red SUBGEO CHEMIST LTD brand centred below the fields.
  *
  * Accounts are created by the admin in Utilities → User Management; each
- * cashier belongs to one chemist (CHEM number) and lands in that chemist.
- * Starter accounts: admin / subgeo22 (all chemists), subgeo / 0000 (CHEM1),
+ * cashier belongs to one chemist (SUBGEO number) and lands in that chemist.
+ * Starter accounts: admin / subgeo22 (all chemists), subgeo / 0001 (SUBGEO1),
  * purchase (no password — the Purchases dashboard). */
 export default function MedLogin() {
   const { login } = useSession()

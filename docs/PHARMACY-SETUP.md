@@ -1,8 +1,8 @@
 # Setting up a pharmacy (chemist)
 
 All pharmacies run from **one server** (`https://pos.subgeoholding.com`) and
-**one company database**. Every pharmacy is a *chemist*, numbered `CHEM1`,
-`CHEM2`, `CHEM3`… Each chemist has its own medicines, stock, bills, customers,
+**one company database**. Every pharmacy is a *chemist*, numbered `SUBGEO1`,
+`SUBGEO2`, `SUBGEO3`… Each chemist has its own medicines, stock, bills, customers,
 shifts, documents and tasks. Staff, suppliers, categories and the shop
 settings are shared by the whole company.
 
@@ -54,20 +54,20 @@ Do these steps as the **admin**. Replace `N` with the chemist's number.
 
 1. Go to *Utilities → Chemists (Branches)* → **New Chemist**.
 2. Fill in:
-   - **Chemist No.:** the next free number, e.g. `2`. This makes it `CHEM2`.
+   - **Chemist No.:** the next free number, e.g. `2`. This makes it `SUBGEO2`.
    - **Name:** e.g. `SCL KAYOLE`
    - **Location**, **Phone**
    - **Status:** active
 3. Save. The new chemist starts with no medicines, bills or documents.
 
-> The very first chemist already exists as **CHEMIST 1** (`CHEM1`). Select it
+> The very first chemist already exists as **CHEMIST 1** (`SUBGEO1`). Select it
 > → **Edit Selected** and give it its real name and location.
 
 ### 2. Open the chemist and set its own values
 
 1. On the Chemists page, select the chemist and press *Key in Medicines /
    Stock*. Or use the **Chemist** switcher in the admin header. The header now
-   reads `… -CHEMN`.
+   reads `… -SUBGEON`.
 2. Go to *Utilities → Default Values Management* and set the values that
    belong to **this chemist only**:
    - **Location (this chemist):** its main store, e.g. `SCL KAYOLE`
@@ -81,9 +81,9 @@ for each person:
 
 | Who | Role | Chemist No. | Password |
 |---|---|---|---|
-| Counter / cashier | **CASHIER** | `CHEMN` | at least 4 characters |
-| Pharmacist in charge | **MANAGER** | `CHEMN` | at least 4 characters |
-| Buyer (purchases dashboard) | **PURCHASE** | `CHEMN` | leave **blank** to sign in with no password, or set one |
+| Counter / cashier | **CASHIER** | `SUBGEON` | at least 4 characters. Cashiers of different chemists may all use the user name `subgeo`, each with a different password (`npm run setup:subgeo` makes `0001` … `0012`) |
+| Pharmacist in charge | **MANAGER** | `SUBGEON` | at least 4 characters |
+| Buyer (purchases dashboard) | **PURCHASE** | `SUBGEON` | leave **blank** to sign in with no password, or set one |
 
 - The **User Name** must be unique in the company, e.g. `kayole.cash1`,
   `kayole.purchase`.
@@ -135,7 +135,7 @@ Pick whichever method suits you:
    `sudo apt install sqlite3`):
    ```bash
    cd ~/Subgeo-POS && npm run db:status
-   sqlite3 data/subgeo.db "SELECT * FROM v_daily_sales WHERE chemist = 'CHEMN';"
+   sqlite3 data/subgeo.db "SELECT * FROM v_daily_sales WHERE chemist = 'SUBGEON';"
    ```
 5. Delete or refund the test bill if it should not count.
 

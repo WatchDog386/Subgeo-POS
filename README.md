@@ -19,7 +19,7 @@ Point-of-sale and inventory system for a **motorbike / e-bike spare parts shop**
 | **Shifts** | Open with a float, record cash in/out, blind cash-up with over/short, printed Z report. |
 | **Reports** | Net sales, gross profit and margin, VAT collected (for KRA), takings by payment method, daily trend, top sellers, sales by category, reorder list. CSV export. |
 | **Staff** | User name + password sign-in. Admin (all chemists), manager and cashier roles; each cashier belongs to one chemist. |
-| **Chemists** | Any number of chemists (CHEM1, CHEM2, …), each with its own stock and sales; live all-chemists monitoring, medicine-list copy and stock transfers. |
+| **Chemists** | Any number of chemists (SUBGEO1, SUBGEO2, …), each with its own stock and sales; live all-chemists monitoring, medicine-list copy and stock transfers. |
 | **Data** | Company database on the server, synced with a local copy on every till so it keeps selling through internet and power cuts. JSON backup and restore per chemist. |
 
 More screens: [payment](docs/screenshots/payment.png) · [receipt](docs/screenshots/receipt.png) · [inventory](docs/screenshots/inventory.png) · [reports](docs/screenshots/reports.png) · [shift](docs/screenshots/shift.png) · [service](docs/screenshots/service.png)
@@ -37,8 +37,8 @@ Open `http://localhost:8787` in **Chrome or Edge**. Starter accounts:
 | User name | Password | Role |
 |---|---|---|
 | `admin` | `subgeo22` | Admin — sees and manages every chemist |
-| `subgeo` | `0000` | Cashier of **CHEM1** |
-| `purchase` | *(none)* | Purchases dashboard of **CHEM1** (indents, LPOs, GRNs, medicine master, petty cash) |
+| `subgeo` | `0001` … `0012` | Cashier of **SUBGEO1** … **SUBGEO12**: the same user name, the password picks the chemist |
+| `purchase` | *(none)* | Purchases dashboard of **SUBGEO1** (indents, LPOs, GRNs, medicine master, petty cash) |
 
 Handing over? Start with **[docs/HANDOVER.md](docs/HANDOVER.md)**. Setting up each pharmacy (chemist, staff, medicines, till) is described step by step in **[docs/PHARMACY-SETUP.md](docs/PHARMACY-SETUP.md)**. The tables and their relations are in **[docs/DATABASE.md](docs/DATABASE.md)**.
 
@@ -61,13 +61,13 @@ npm run typecheck
 
 The admin runs any number of chemists from one company database. Each chemist has its **own medicines, stock, sales, customers, shifts and documents**; staff, chemists, categories, suppliers and shop settings are company-wide.
 
-1. **Create the chemist** — admin → *Utilities → Chemists (Branches)* → *Create a new chemist*. The number you give it becomes its code: chemist 2 is **CHEM2**.
-2. **Create its cashier** — *Utilities → User Management*: user name, password, role *CASHIER* and **Chemist No.** (e.g. CHEM2). A cashier only ever signs in to their own chemist and only sees its stock.
-3. **Key in its stock** — on the Chemists page select the chemist and press *Key in Medicines / Stock* (this opens that chemist; the header shows `SUBGEO CHEMIST LTD-CHEM2` and a *Chemist* switcher). Add medicines with opening stock, or receive purchase orders. To start quickly, *Copy medicine list* from another chemist (prices copied, stock 0) and then receive stock.
+1. **Create the chemist** — admin → *Utilities → Chemists (Branches)* → *Create a new chemist*. The number you give it becomes its code: chemist 2 is **SUBGEO2**.
+2. **Create its cashier** — *Utilities → User Management*: user name, password, role *CASHIER* and **Chemist No.** (e.g. SUBGEO2). A cashier only ever signs in to their own chemist and only sees its stock.
+3. **Key in its stock** — on the Chemists page select the chemist and press *Key in Medicines / Stock* (this opens that chemist; the header shows `SUBGEO CHEMIST LTD-SUBGEO2` and a *Chemist* switcher). Add medicines with opening stock, or receive purchase orders. To start quickly, *Copy medicine list* from another chemist (prices copied, stock 0) and then receive stock.
 4. **Monitor** — the Chemists page and *Home → Statistics* show every chemist live: today's and this month's sales, bills, stock value, low/out-of-stock counts, debtors, open shift and cashiers. *Home → To-Do List* (tick *Show Team Tasks*) lists work waiting in all chemists.
 5. **Move stock** — *Transfer stock between chemists* on the Chemists page moves quantities from one chemist to another; both stock ledgers record it.
 
-When a cashier signs in, the title reads `SUBGEO CHEMIST LTD-CHEM<number>` and every bill/receipt is stamped with the chemist.
+When a cashier signs in, the title reads `SUBGEO CHEMIST LTD-SUBGEO<number>` and every bill/receipt is stamped with the chemist.
 
 ### How data is kept
 

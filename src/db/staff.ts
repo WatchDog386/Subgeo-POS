@@ -34,8 +34,19 @@ export async function saveStaff(input: StaffInput, actor?: User | null): Promise
   const users = await db.users.toArray()
   const existing = input.id !== undefined ? users.find((u) => u.id === input.id) : undefined
   if (input.id !== undefined && !existing) throw new Error('That user no longer exists')
-  if (users.some((u) => u.username === username && u.id !== input.id)) throw new Error(`User name "${username}" is already taken`)
   const password = input.password ?? ''
+  // Cashiers and managers of different chemists may share a user name (e.g. "subgeo");
+  // their passwords tell them apart, so each must be different.
+  const sameName = users.filter((u) => u.username === username && u.id !== input.id)
+  if (sameName.length) {
+    const sharable = (r: Role) => r === 'cashier' || r === 'manager'
+    if (!sharable(input.role) || sameName.some((u) => !sharable(u.role))) throw new Error(`User name "${username}" is already taken`)
+    if (sameName.some((u) => u.branchId === input.branchId)) throw new Error(`"${username}" already has an account at this chemist — use another user name`)
+    const pw = password || undefined
+    if (pw && sameName.some((u) => hashPassword(u.salt, pw) === u.passHash))
+      throw new Error(`Another "${username}" account already uses that password — give each chemist its own password`)
+    if (!pw && !existing) throw new Error('Set a password for the new user')
+  }
   // PURCHASE-dashboard accounts may have no password at all.
   const passwordless = !existing && !password && input.role === 'purchase'
   if (!existing && !password && !passwordless) throw new Error('Set a password for the new user')
@@ -43,7 +54,7 @@ export async function saveStaff(input: StaffInput, actor?: User | null): Promise
 
   let branchId: number | undefined
   if (input.role !== 'owner') {
-    if (!input.branchId) throw new Error('Pick the chemist (CHEM number) this user works in')
+    if (!input.branchId) throw new Error('Pick the chemist (SUBGEO number) this user works in')
     const b = await db.branches.get(input.branchId)
     if (!b) throw new Error('That chemist does not exist')
     branchId = b.id

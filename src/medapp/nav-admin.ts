@@ -118,7 +118,7 @@ export const ADMIN_TRANSACTIONS: Transaction[] = [
   A('', 'Cash In / Out', '/shift'),
   A('', 'Day Shift Open/Close', '/shift'),
   A('ADMINISTRATION', 'Chemists (Branches)', '/utilities/chemists', 'Create chemists, monitor all chemists, copy medicine lists, transfer stock'),
-  A('', 'User Management', '/utilities/user-management', 'Create cashiers and assign each to a chemist (CHEM number)'),
+  A('', 'User Management', '/utilities/user-management', 'Create cashiers and assign each to a chemist (SUBGEO number)'),
   A('', 'Audit Logs', '/logs'),
   A('', 'Settings', '/settings'),
   A('', 'Notifications', '/notifications'),

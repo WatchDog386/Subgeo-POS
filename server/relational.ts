@@ -12,7 +12,7 @@ import { chemCode } from '../src/db/seedData'
 type Rec = Record<string, unknown>
 
 /** Bump when the projection changes: the server rebuilds the tables on boot. */
-export const RELATIONAL_VERSION = 4
+export const RELATIONAL_VERSION = 5
 
 const int = (v: unknown, d: number | null = null): number | null => {
   const n = Number(v)

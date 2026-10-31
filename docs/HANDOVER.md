@@ -9,7 +9,7 @@
 | Sign in as | Dashboard | Sees |
 |---|---|---|
 | `admin` | Admin | Every chemist: sales, stock value, debtors, staff, reports, chemists, transfers |
-| a cashier (e.g. `subgeo`) | Cashier / pharmacy | Own chemist: OTC bills and returns, service bills, whole-sale documents, reports |
+| `subgeo` + the chemist's password (`0001` = SUBGEO1 … `0012` = SUBGEO12) | Cashier / pharmacy | Own chemist: OTC bills and returns, service bills, whole-sale documents, reports |
 | `purchase` (no password) | Purchases | Own chemist: indents, LPOs, GRNs, Pur/GRN direct invoices (with PDF upload), medicine list, petty cash |
 
 ## How the data moves (all automatic)
@@ -26,6 +26,15 @@
    - the module registers.
 4. **Purchase** sees the stock after the sales in *Modules → Medicine* (column *Qty In Stock*), and *Home → To-Do List* shows what has run out.
 
+## The twelve chemists (run once)
+
+```bash
+cd ~/Subgeo-POS && npm run setup:subgeo
+```
+This creates **SUBGEO1 … SUBGEO12**. The chemist that was number 1 becomes **SUBGEO12**, keeping all its medicines, sales and staff (including the `purchase` account). Each chemist gets a cashier who signs in as **`subgeo`** with password **`0001` … `0012`**; the password decides which chemist opens. Running it again changes nothing.
+
+Then, as admin, open *Utilities → Chemists (Branches)*, select each SUBGEO and press **Edit Selected** to type its real **name and location**. To give another chemist a purchases account, create it in *Utilities → User Management* with its own user name (e.g. `purchase2`). Only cashiers and managers can share a user name.
+
 ## Deploying an update
 
 ```bash
@@ -36,7 +45,7 @@ Then check with `npm run db:status`: every migration should be `applied`. If til
 ## Before go-live
 
 - [ ] Change the `admin` password (*Utilities → User Management*).
-- [ ] Rename *CHEMIST 1* to the real chemist name (*Utilities → Chemists → Edit Selected*).
+- [ ] Run `npm run setup:subgeo` once, then key in each SUBGEO's name and location (*Utilities → Chemists → Edit Selected*).
 - [ ] Set company name, KRA PIN, receipt footer, M-Pesa till and licence dates (*Utilities → Default Values Management*).
 - [ ] Create each chemist's cashier / manager / purchase accounts ([PHARMACY-SETUP.md](PHARMACY-SETUP.md)).
 - [ ] Receive the opening stock (upload the supplier PDFs, or Medicine / Inventory).

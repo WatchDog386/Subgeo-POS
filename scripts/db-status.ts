@@ -33,7 +33,7 @@ if (tables.includes('sync_records')) {
   const names = new Map(
     (sql.prepare("SELECT id, data FROM sync_records WHERE tbl = 'branches' AND deleted = 0").all() as { id: string; data: string }[]).map((r) => {
       const b = JSON.parse(r.data) as { number: number; name: string }
-      return [Number(r.id), `CHEM${b.number} ${b.name}`]
+      return [Number(r.id), `SUBGEO${b.number} ${b.name}`]
     }),
   )
   for (const r of rows) console.log(`  ${(r.scope === 0 ? 'company' : names.get(r.scope) ?? `#${r.scope}`).padEnd(28)}${r.tbl.padEnd(16)}${r.n}`)

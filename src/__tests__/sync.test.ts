@@ -82,7 +82,7 @@ describe('multi-chemist sync', () => {
   it('rejects a wrong password and accepts the starter accounts', async () => {
     const r = await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'admin', password: 'nope' }) })
     expect(r.status).toBe(401)
-    cashier = await device('subgeo', '0000')
+    cashier = await device('subgeo', '0001')
     admin = await device('admin', 'subgeo22')
     expect(cashier.sync.getSyncState().status).toBe('idle')
   })
@@ -183,7 +183,7 @@ describe('multi-chemist sync', () => {
     expect(b1.stockValue).toBe(10 * 100_00)
     expect(r.branches.find((b) => b.number === 2)?.staff).toHaveLength(1)
     // Cashiers can't see it.
-    const login = await cashier.sync.api<{ token: string }>('/auth/login', { method: 'POST', body: JSON.stringify({ username: 'subgeo', password: '0000' }) })
+    const login = await cashier.sync.api<{ token: string }>('/auth/login', { method: 'POST', body: JSON.stringify({ username: 'subgeo', password: '0001' }) })
     const denied = await fetch(`${base}/api/admin/overview`, { headers: { Authorization: `Bearer ${login.token}` } })
     expect(denied.status).toBe(403)
   })

@@ -26,13 +26,13 @@ export const SEED_ADMIN: User & { id: number } = {
   active: true,
 }
 
-/** subgeo / 0000 — the cashier of CHEM1. */
+/** subgeo / 0001 — the cashier of SUBGEO1 (cashiers share the user name; the password picks the chemist). */
 export const SEED_CASHIER: User & { id: number } = {
   id: 2,
   name: 'SUBGEO',
   username: 'subgeo',
   salt: 'seed-cashier',
-  passHash: hashPassword('seed-cashier', '0000'),
+  passHash: hashPassword('seed-cashier', '0001'),
   role: 'cashier',
   active: true,
   branchId: 1,
@@ -54,7 +54,7 @@ export const SEED_PURCHASE: User & { id: number } = {
 
 export const SEED_USERS = [SEED_ADMIN, SEED_CASHIER, SEED_PURCHASE]
 
-/** "CHEM1" for chemist number 1. */
+/** "SUBGEO1" for chemist number 1 (the chemists are SUBGEO1 … SUBGEO12). */
 export function chemCode(number: number | undefined): string {
-  return number ? `CHEM${number}` : ''
+  return number ? `SUBGEO${number}` : ''
 }

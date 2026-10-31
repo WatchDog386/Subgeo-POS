@@ -323,7 +323,7 @@ TOTAL ESTIMATE REQUESTED: KSh ____________  (excluding the till terminal)
 1. **Plug the till into the switch, the switch into the router.** Confirm the till gets an IP.
 2. **Install Node 22 LTS, Chrome, then the app.** `npm install && npm run build`.
 3. **Start the server** and open `http://localhost:8787` — the login screen appears.
-   Default PINs: owner `1234`, cashier `0000`. Change them in *Settings → Users*.
+   Starter sign-ins: admin `admin` / `subgeo22`, cashiers `subgeo` / `0001` … `0012` (one per chemist). Change them in *Utilities → User Management*.
 4. **Install it as an app** (Chrome menu → *Install Subgeo POS*).
 5. **Printer:** plug the printer into the switch. Hold **FEED while powering on** → the
    self-test page prints the IP address. In the POS: *Settings → Hardware → Receipt printer →

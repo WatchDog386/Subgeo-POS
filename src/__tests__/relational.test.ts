@@ -114,7 +114,7 @@ describe('relational company database', () => {
 
   it('signs in all three dashboards (purchase with no password)', async () => {
     admin = await device('admin', 'subgeo22')
-    cashier = await device('subgeo', '0000')
+    cashier = await device('subgeo', '0001')
     purchase = await device('purchase', '')
     expect(purchase.sync.getSyncState().status).toBe('idle')
   })
@@ -138,7 +138,7 @@ describe('relational company database', () => {
     expect(q('SELECT line_no, product_id, qty, unit_price FROM sale_lines WHERE sale_id = ?', saleId)).toEqual([{ line_no: 1, product_id: productId, qty: 2, unit_price: 120_00 }])
     expect(q('SELECT method, amount, reference FROM sale_payments WHERE sale_id = ?', saleId)).toEqual([{ method: 'mpesa', amount: 240_00, reference: 'QAB12CD34' }])
     expect(one<{ n: number }>("SELECT COUNT(*) AS n FROM stock_movements WHERE product_id = ? AND reason = 'sale'", productId).n).toBe(1)
-    expect(one<{ total_cents: number }>("SELECT total_cents FROM v_daily_sales WHERE chemist = 'CHEM1'").total_cents).toBe(240_00)
+    expect(one<{ total_cents: number }>("SELECT total_cents FROM v_daily_sales WHERE chemist = 'SUBGEO1'").total_cents).toBe(240_00)
   })
 
   it('stores purchase documents one per record and links the purchase flow', async () => {

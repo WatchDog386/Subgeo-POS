@@ -220,8 +220,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // Wrong password, disabled account, closed chemist… — the server's answer is final.
         if (e instanceof HttpError && e.status !== 503 && e.status < 500) return { ok: false, error: e.message }
         // Server unreachable: sign in against the copy of the staff list on this till.
-        const local = await db.users.where('username').equals(uname).first()
-        if (!local || hashPassword(local.salt, pass) !== local.passHash) return { ok: false, error: 'Invalid user name or password' }
+        // Cashiers may share a user name ("subgeo"); the password picks the account.
+        const named = await db.users.where('username').equals(uname).toArray()
+        const hits = named.filter((x) => hashPassword(x.salt, pass) === x.passHash)
+        const local = hits.find((x) => x.active) ?? hits[0]
+        if (!local) return { ok: false, error: 'Invalid user name or password' }
         if (!local.active) return { ok: false, error: 'This account is disabled' }
         const allBranches = await db.branches.toArray()
         const target = homeBranch(local, allBranches)

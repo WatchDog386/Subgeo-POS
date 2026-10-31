@@ -37,7 +37,7 @@ internet or the server is down.
 
 | Table | What it holds | Key relations |
 |---|---|---|
-| `branches` | The chemists: number (1 → `CHEM1`), name, location, phone, active | — |
+| `branches` | The chemists: number (1 → `SUBGEO1`), name, location, phone, active | — |
 | `users` | Staff: user name, name, role (`owner` = admin, `manager`, `cashier`, `purchase`), chemist, active. Password hashes are **not** copied here. | `branch_id → branches` (NULL for the admin) |
 | `categories` | Medicine groups | — |
 | `suppliers` | Vendors / suppliers (Party Master): phone, email, address, P.O box, KRA PIN, contact person and number, group account, bill type, blacklisted | — |
@@ -92,8 +92,8 @@ Example queries. Run them on the server with `sqlite3 data/subgeo.db`; install t
 -- Today's takings per chemist
 SELECT * FROM v_daily_sales WHERE day = date('now', 'localtime');
 
--- Medicines to re-order at CHEM2
-SELECT name, stock, reorder_level, supplier FROM v_stock WHERE chemist = 'CHEM2' AND below_reorder = 1;
+-- Medicines to re-order at SUBGEO2
+SELECT name, stock, reorder_level, supplier FROM v_stock WHERE chemist = 'SUBGEO2' AND below_reorder = 1;
 
 -- Best sellers this month, all chemists
 SELECT l.name, SUM(l.qty) AS qty, SUM(l.qty * l.unit_price - l.discount) / 100.0 AS kes
