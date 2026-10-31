@@ -21,3 +21,7 @@ export const isLocalKvKey = (key: string) => key.startsWith('_local:')
 export const isSeqKvKey = (key: string) => key.startsWith('seq:') || key.startsWith('medapp:seq:')
 
 export const isMetaField = (k: string) => k.startsWith('_')
+
+/** Accounts with the admin's rights: every chemist, staff, chemists, transfers.
+ * The purchases dashboard is run by the admin, so "purchase" has them too. */
+export const hasAdminRights = (role: string | undefined) => role === 'owner' || role === 'purchase'

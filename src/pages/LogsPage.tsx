@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { hasAdminRights } from '../db/syncSchema'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Trash2 } from 'lucide-react'
 import { db } from '../db/db'
@@ -155,7 +156,7 @@ export default function LogsPage() {
             <span>
               {rows.length} event{rows.length === 1 ? '' : 's'}
             </span>
-            {me?.role === 'owner' && rows.length > 0 && (
+            {hasAdminRights(me?.role) && rows.length > 0 && (
               <button className="btn-ghost h-7 px-2 py-0 text-xs text-red-600" onClick={clearLog}>
                 <Trash2 size={13} /> Clear log
               </button>

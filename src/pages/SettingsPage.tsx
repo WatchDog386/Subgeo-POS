@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { hasAdminRights } from '../db/syncSchema'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, Banknote, Bell, Layers, CreditCard, Database, Download, Info, Loader2, PackageSearch, Percent, Printer, Save, ShieldCheck, Smartphone, Store, Trash2, UserRound } from 'lucide-react'
 import { useLiveQuery } from 'dexie-react-hooks'
@@ -698,7 +699,7 @@ function BackupSettings() {
     if (!confirm(`Restoring replaces ALL ${branchCode} data (sales, medicines, stock, customers…) with the backup, here and on the server. Other chemists are not touched. Continue?`)) return
     try {
       const { data } = JSON.parse(await file.text()) as { data: Record<string, unknown[]> }
-      await restoreBackup(data, { includeCompanyLists: user?.role === 'owner' })
+      await restoreBackup(data, { includeCompanyLists: hasAdminRights(user?.role) })
       toast(`Backup restored into ${branchCode}`)
     } catch (e) {
       toast(`Restore failed: ${errorText(e)}`, 'error')

@@ -189,19 +189,20 @@ describe('relational company database', () => {
   })
 
   it('delivers staff messages company-wide; only the sender may edit them', async () => {
-    const id = (await cashier.db.db.messages.add({ fromId: cashier.user.id, fromName: 'SUBGEO', toId: undefined, toName: 'EVERYONE', subject: 'Stock count', body: 'Friday 6pm', at: Date.now(), readBy: [] })) as number
+    // Sent by the purchases dashboard (admin rights) to everyone; the cashier is an ordinary reader.
+    const id = (await purchase.db.db.messages.add({ fromId: purchase.user.id, fromName: 'PURCHASE', toId: undefined, toName: 'EVERYONE', subject: 'Stock count', body: 'Friday 6pm', at: Date.now(), readBy: [] })) as number
+    await purchase.sync.syncNow()
     await cashier.sync.syncNow()
-    await purchase.sync.syncNow()
-    expect((await purchase.db.db.messages.get(id))?.subject).toBe('Stock count')
+    expect((await cashier.db.db.messages.get(id))?.subject).toBe('Stock count')
     // Marking it read is allowed …
-    await purchase.db.db.messages.update(id, { readBy: [purchase.user.id] })
-    await purchase.sync.syncNow()
-    expect(q('SELECT user_id FROM staff_message_reads WHERE message_id = ?', id)).toEqual([{ user_id: purchase.user.id }])
+    await cashier.db.db.messages.update(id, { readBy: [cashier.user.id] })
+    await cashier.sync.syncNow()
+    expect(q('SELECT user_id FROM staff_message_reads WHERE message_id = ?', id)).toEqual([{ user_id: cashier.user.id }])
     // … rewriting someone else's message is not.
-    await purchase.db.db.messages.update(id, { body: 'changed' })
-    await purchase.sync.syncNow()
-    expect(purchase.sync.getSyncState().error).toMatch(/Only the sender/)
-    expect((await purchase.db.db.messages.get(id))?.body).toBe('Friday 6pm')
+    await cashier.db.db.messages.update(id, { body: 'changed' })
+    await cashier.sync.syncNow()
+    expect(cashier.sync.getSyncState().error).toMatch(/Only the sender/)
+    expect((await cashier.db.db.messages.get(id))?.body).toBe('Friday 6pm')
   })
 
   it('stores Party Master details and the patient on a bill', async () => {

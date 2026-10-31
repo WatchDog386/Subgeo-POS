@@ -79,6 +79,21 @@ describe('SUBGEO1 … SUBGEO12', () => {
     expect(sqlMod.sql.prepare('SELECT code, name FROM branches WHERE number = 100').get()).toEqual({ code: 'HQ', name: 'HQ' })
   })
 
+  it('gives the purchases account the admin rights over every chemist', async () => {
+    const r = await login('purchase', '')
+    const token = (r.body as unknown as { token: string }).token
+    const h = { Authorization: `Bearer ${token}` }
+    const other = r.body.branches!.find((b) => b.number === 3)!
+    // Any chemist's data, the all-chemists overview and medicine lists.
+    expect((await fetch(`${base}/api/sync/pull?branch=${other.id}&since=0`, { headers: h })).status).toBe(200)
+    expect((await fetch(`${base}/api/admin/overview`, { headers: h })).status).toBe(200)
+    expect((await fetch(`${base}/api/admin/products?branch=${other.id}`, { headers: h })).status).toBe(200)
+    // A cashier still only reaches its own chemist.
+    const c = (await login('subgeo', '0001')).body as unknown as { token: string }
+    expect((await fetch(`${base}/api/sync/pull?branch=${other.id}&since=0`, { headers: { Authorization: `Bearer ${c.token}` } })).status).toBe(403)
+    expect((await fetch(`${base}/api/admin/overview`, { headers: { Authorization: `Bearer ${c.token}` } })).status).toBe(403)
+  })
+
   it('still keeps admin and purchase user names unique', async () => {
     expect((await login('admin', 'subgeo22')).status).toBe(200)
     expect((await login('purchase', '')).status).toBe(200)

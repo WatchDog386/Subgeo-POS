@@ -6,7 +6,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { sql } from './db'
 import { hashPassword } from '../src/lib/sha256'
 import { HQ_NUMBER, SEED_BRANCH, SEED_PURCHASE, SEED_USERS, chemCode } from '../src/db/seedData'
-import { COUNTER_FIELDS, GLOBAL_KV_KEYS, GLOBAL_TABLES, SYNCED_TABLES, isLocalKvKey, isSeqKvKey } from '../src/db/syncSchema'
+import { COUNTER_FIELDS, GLOBAL_KV_KEYS, GLOBAL_TABLES, SYNCED_TABLES, hasAdminRights, isLocalKvKey, isSeqKvKey } from '../src/db/syncSchema'
 import type { Branch, Product, Role, StaffMessage, User } from '../src/db/types'
 import { LEGACY_DOCS_PREFIX, LEGACY_TASKS_KEY, convertLegacyDocs, convertLegacyTasks } from '../src/db/legacyDemo'
 import { ensureRelational, project } from './relational'
@@ -168,7 +168,7 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
 }
 
 function requireOwner(req: Request, res: Response, next: NextFunction) {
-  if ((req as AuthedRequest).user.role !== 'owner') {
+  if (!hasAdminRights((req as AuthedRequest).user.role)) {
     res.status(403).json({ error: 'Admin only' })
     return
   }
@@ -177,7 +177,7 @@ function requireOwner(req: Request, res: Response, next: NextFunction) {
 
 /** Owners reach every chemist; everyone else only their own. */
 function canAccessBranch(user: AuthedUser, branchId: number): boolean {
-  return user.role === 'owner' || user.branchId === branchId
+  return hasAdminRights(user.role) || user.branchId === branchId
 }
 
 function branchParam(v: unknown): number | undefined {
@@ -213,7 +213,7 @@ function denyReason(user: AuthedUser, tbl: string, scope: number, id: string | n
     const clash = branches().find((x) => x.number === b.number && String(x.id) !== String(id))
     if (clash) return `${chemCode(b.number)} already exists`
   }
-  if (user.role === 'owner') return undefined
+  if (hasAdminRights(user.role)) return undefined
 
   if (scope !== 0) return scope === user.branchId ? undefined : 'Not your chemist'
   if (tbl === 'categories' || tbl === 'suppliers') return undefined
@@ -265,7 +265,7 @@ syncRouter.post('/auth/login', (req, res) => {
     return
   }
   failures.delete(key)
-  if (user.role !== 'owner') {
+  if (!hasAdminRights(user.role)) {
     const b = user.branchId ? (parse(getRow('branches', 0, user.branchId)) as Branch | undefined) : undefined
     if (!b || !b.active) {
       res.status(403).json({ error: 'Your chemist is closed or not set. Ask the admin.' })

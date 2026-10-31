@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { hasAdminRights } from '../../db/syncSchema'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { SYNCED_TABLES, db } from '../../db/db'
@@ -1225,7 +1226,7 @@ function DataManagement() {
     if (!confirm(`Restoring replaces ALL ${branchCode} data with the backup, here and on the server. Other chemists are not touched. Continue?`)) return
     try {
       const { data } = JSON.parse(await file.text()) as { data: Record<string, unknown[]> }
-      await restoreBackup(data, { includeCompanyLists: me?.role === 'owner' })
+      await restoreBackup(data, { includeCompanyLists: hasAdminRights(me?.role) })
       await logActivity('system', 'Backup restored', { detail: `Data Management · ${branchCode}`, userId: me?.id, userName: me?.name })
       toast(`Backup restored into ${branchCode}`)
     } catch (e) {

@@ -22,9 +22,10 @@ import {
   ADMIN_REPORT_ITEMS,
   ADMIN_REPORT_TREE,
   ADMIN_UTILITY_ITEMS,
-  adminModuleGroupOf,
 } from './nav-admin'
-import { UTILITY_EXPANDS } from './nav'
+import { PURCHASE_MODULE_GROUPS, UTILITY_EXPANDS, moduleGroupOf, type MenuGroup } from './nav'
+import HomePage from './pages/HomePage'
+import { hashPassword } from '../lib/sha256'
 import SyncBadge from './SyncBadge'
 import { syncNow } from '../db/sync'
 import { chemCode } from '../db/seedData'
@@ -138,9 +139,23 @@ export default function AdminApp() {
   }, [])
 
   if (!user) return null
+  // The purchases dashboard: admin rights, with its own purchases menu first and its own home.
+  const purchase = user.role === 'purchase'
+  const groups: MenuGroup[] = purchase ? [...PURCHASE_MODULE_GROUPS, ...ADMIN_MODULE_GROUPS.filter((g) => g.label !== 'PURCHASES')] : ADMIN_MODULE_GROUPS
+  const noPassword = purchase && user.passHash === hashPassword(user.salt, '')
 
   return (
     <div className="ma ma-admin">
+      {noPassword && (
+        <div
+          className="ma-noprint"
+          style={{ background: '#c62828', color: '#fff', fontSize: 12, fontWeight: 'bold', padding: '5px 12px', cursor: 'pointer' }}
+          onClick={() => nav('/utilities/user-management')}
+          title="Utilities → User Management → select purchase → Edit Profile → Password"
+        >
+          ⚠ This account has the admin's rights over every chemist but NO password — anyone who types "purchase" can sign in. Set a password now: Utilities → User Management → purchase.
+        </div>
+      )}
       <header className="ma-header">
         <img className="ma-logo" src="/logo.png" alt="SUBGEO" />
         <span className="ma-version">{APP_VERSION}</span>
@@ -202,7 +217,7 @@ export default function AdminApp() {
         {tab !== 'home' && tab !== 'charts' && (
           <>
             <aside className="ma-side" style={{ width: sideW }}>
-              <Sidebar tab={tab} path={path} />
+              <Sidebar tab={tab} path={path} groups={groups} />
             </aside>
             <div
               className="ma-split ma-noprint"
@@ -228,7 +243,7 @@ export default function AdminApp() {
           <main className="ma-panel">
             <Routes>
               <Route path="/" element={<Navigate to="/home" replace />} />
-              <Route path="/home" element={<AdminHomePage />} />
+              <Route path="/home" element={purchase ? <HomePage /> : <AdminHomePage />} />
               <Route path="/modules" element={<ModulesEmpty />} />
               <Route path="/modules/favourites" element={<FavouritesPage admin />} />
               <Route path="/modules/:slug" element={<ModuleListPage />} />
@@ -267,8 +282,8 @@ export default function AdminApp() {
 }
 
 /* ── Sidebars ──────────────────────────────────────────────────────────── */
-function Sidebar({ tab, path }: { tab: Tab; path: string }) {
-  if (tab === 'modules') return <ModulesSidebar path={path} />
+function Sidebar({ tab, path, groups }: { tab: Tab; path: string; groups: MenuGroup[] }) {
+  if (tab === 'modules') return <ModulesSidebar path={path} groups={groups} />
   if (tab === 'reports') return <ReportsSidebar path={path} />
   if (tab === 'charts')
     return (
@@ -282,17 +297,17 @@ function Sidebar({ tab, path }: { tab: Tab; path: string }) {
   return <HelpSidebar path={path} />
 }
 
-function ModulesSidebar({ path }: { path: string }) {
+function ModulesSidebar({ path, groups }: { path: string; groups: MenuGroup[] }) {
   const nav = useNavigate()
   const activeSlug = path.startsWith('/modules/') ? path.slice('/modules/'.length) : ''
-  const [open, setOpen] = useState<string | undefined>(adminModuleGroupOf(activeSlug)?.label)
+  const [open, setOpen] = useState<string | undefined>(moduleGroupOf(activeSlug, groups)?.label)
   useEffect(() => {
-    const g = adminModuleGroupOf(activeSlug)
+    const g = moduleGroupOf(activeSlug, groups)
     if (g) setOpen(g.label)
-  }, [activeSlug])
+  }, [activeSlug, groups])
   return (
     <div className="ma-side-scroll">
-      {ADMIN_MODULE_GROUPS.map((g) => (
+      {groups.map((g) => (
         <div key={g.label}>
           <button
             type="button"
