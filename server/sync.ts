@@ -584,14 +584,25 @@ export function setupSubgeoChemists(count = 12): string[] {
   const out: string[] = []
   sql.transaction(() => {
     const now = Date.now()
+    // Medicines + sales recorded for a chemist (its data lives under its id, not its number).
+    const stocked = (id: number) =>
+      (sql.prepare("SELECT COUNT(*) AS n FROM sync_records WHERE scope = ? AND deleted = 0 AND tbl IN ('products', 'sales')").get(id) as { n: number }).n
+    const starterName = (name: string, n: number) => new RegExp(`^(CHEMIST ${n}|SUBGEO ${n}|SCL UMOJA 3)$`, 'i').test(name.trim())
     let list = branches()
-    if (!list.some((b) => b.number === count)) {
-      const first = list.find((b) => b.number === 1)
-      if (first) {
-        const name = /^(CHEMIST 1|SCL UMOJA 3)$/i.test(first.name) ? `SUBGEO ${count}` : first.name
-        writeRow('branches', 0, first.id, { ...first, number: count, name } as unknown as Rec, now, null)
-        out.push(`${chemCode(1)} (${first.name}) is now ${chemCode(count)} — all its medicines, sales and staff stay with it`)
+    const first = list.find((b) => b.number === 1)
+    const last = list.find((b) => b.number === count)
+    // The stocked chemist that is number 1 today becomes number `count`. An empty
+    // chemist already holding that number swaps to 1 (data never moves, only numbers).
+    if (first && stocked(first.id) > 0 && (!last || stocked(last.id) === 0)) {
+      if (last) writeRow('branches', 0, last.id, { ...last, number: 9999 } as unknown as Rec, now, null)
+      writeRow('branches', 0, first.id, { ...first, number: count, name: starterName(first.name, 1) ? `SUBGEO ${count}` : first.name } as unknown as Rec, now, null)
+      out.push(`${chemCode(1)} (${first.name}, ${stocked(first.id)} medicines/sales) is now ${chemCode(count)} — all its data stays with it`)
+      if (last) {
+        writeRow('branches', 0, last.id, { ...last, number: 1, name: starterName(last.name, count) ? 'SUBGEO 1' : last.name } as unknown as Rec, now, null)
+        out.push(`The empty ${chemCode(count)} (${last.name}) is now ${chemCode(1)}`)
       }
+    } else if (first && last && stocked(first.id) > 0 && stocked(last.id) > 0) {
+      out.push(`NOT renumbered: both ${chemCode(1)} (${first.name}) and ${chemCode(count)} (${last.name}) already hold medicines or sales — tell support which one is which`)
     }
     list = branches()
     for (let n = 1; n <= count; n++) {
@@ -606,12 +617,13 @@ export function setupSubgeoChemists(count = 12): string[] {
       const password = String(n).padStart(4, '0')
       const mine = users().find((u) => u.username === 'subgeo' && u.branchId === b.id)
       if (mine) {
-        // A starter password (0000, or 0001 on another chemist) moves to the chemist's own one;
-        // a password someone chose is kept.
-        const starter = ['0000', '0001'].filter((x) => x !== password).some((x) => safeEqual(hashPassword(mine.salt, x), mine.passHash))
+        // A starter password (0000, or another chemist's 0001 … 00nn) moves to the chemist's own
+        // one, so no two "subgeo" accounts share a password; a password someone chose is kept.
+        const starters = Array.from({ length: count + 1 }, (_, i) => String(i).padStart(4, '0')).filter((x) => x !== password)
+        const starter = starters.some((x) => safeEqual(hashPassword(mine.salt, x), mine.passHash))
         if (starter) {
           const salt = crypto.randomBytes(8).toString('hex')
-          writeRow('users', 0, mine.id, { ...mine, salt, passHash: hashPassword(salt, password), name: mine.name === 'SUBGEO' ? chemCode(n) : mine.name } as unknown as Rec, now, null)
+          writeRow('users', 0, mine.id, { ...mine, salt, passHash: hashPassword(salt, password), name: /^SUBGEO\d*$/.test(mine.name) ? chemCode(n) : mine.name } as unknown as Rec, now, null)
           out.push(`Cashier subgeo of ${chemCode(n)}: password is now ${password}`)
         }
         continue

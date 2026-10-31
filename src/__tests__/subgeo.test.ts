@@ -37,9 +37,26 @@ const login = (username: string, password: string) =>
   fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) }).then(async (r) => ({ status: r.status, body: (await r.json()) as { user?: { branchId?: number; name: string }; branches?: { id: number; number: number }[] } }))
 
 describe('SUBGEO1 … SUBGEO12', () => {
-  it('creates the twelve chemists and their cashiers, keeping chemist 1 as SUBGEO12', () => {
+  it('moves the stocked chemist 1 to number 12, swapping with an empty chemist 12', async () => {
+    // Chemist 1 has its medicines; someone already made an empty chemist 12.
+    const { token } = (await (await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'admin', password: 'subgeo22' }) })).json()) as { token: string }
+    const now = Date.now()
+    const push = (branchId: number, changes: unknown[]) =>
+      fetch(`${base}/api/sync/push`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ branchId, changes, deletes: [] }) })
+    await push(1, [{ t: 'branches', id: 777, data: { id: 777, number: 12, name: 'CHEM 12 SPARE', active: true, createdAt: now }, ts: now }])
+    // As the earlier setup left it: the empty chemist 12 already had "subgeo" / 0012.
+    const { hashPassword } = await import('../lib/sha256')
+    await push(1, [{ t: 'users', id: 778, data: { id: 778, name: 'SUBGEO12', username: 'subgeo', salt: 's778', passHash: hashPassword('s778', '0012'), role: 'cashier', active: true, branchId: 777 }, ts: now }])
+    await push(1, [{ t: 'products', id: 5001, data: { id: 5001, sku: 'P1', name: 'PANADOL', cost: 100, price: 200, stock: 40, reorderLevel: 0, fitment: [], taxable: false, serialized: false, trackStock: true, active: true, createdAt: now, updatedAt: now }, ts: now, deltas: { stock: 0 } }])
     const out = sync.setupSubgeoChemists(12)
-    expect(out[0]).toMatch(/is now SUBGEO12/)
+    expect(out.join('\n')).toMatch(/is now SUBGEO12/)
+    expect(out.join('\n')).toMatch(/empty SUBGEO12 \(CHEM 12 SPARE\) is now SUBGEO1/)
+    expect(sqlMod.sql.prepare('SELECT number FROM branches WHERE id = 1').get()).toEqual({ number: 12 })
+    expect(sqlMod.sql.prepare('SELECT number FROM branches WHERE id = 777').get()).toEqual({ number: 1 })
+    expect(sqlMod.sql.prepare("SELECT b.code FROM products p JOIN branches b ON b.id = p.branch_id WHERE p.sku = 'P1'").get()).toEqual({ code: 'SUBGEO12' })
+  })
+
+  it('creates the twelve chemists and their cashiers', () => {
     const codes = (sqlMod.sql.prepare('SELECT code FROM branches ORDER BY number').all() as { code: string }[]).map((r) => r.code)
     expect(codes).toEqual(Array.from({ length: 12 }, (_, i) => `SUBGEO${i + 1}`))
     expect((sqlMod.sql.prepare("SELECT number FROM branches WHERE id = 1").get() as { number: number }).number).toBe(12)
