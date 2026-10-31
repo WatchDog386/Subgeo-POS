@@ -902,6 +902,8 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
   }
   const viewDoc = () => {
     const t = target()
+    // Medicine: its details page shows every field (no separate view box).
+    if (t && def.entry === 'medicine') return setScreen({ kind: 'medicine', editId: t.productId })
     if (t) return setView(t)
     // Nothing selected: show everything (all records, no filters, one page).
     setQuick('')
@@ -911,7 +913,7 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
     setOp('WHERE')
     setPage(0)
     setShowAll(true)
-    toast(`Showing all ${all.length} record(s) — select one and press the eye to see all its details`)
+    toast(`Showing all ${all.length} record(s) — double-click one to open it`)
   }
   /** Stamp the approval status on the chosen documents (synced to every till). */
   const approve = async () => {
@@ -1090,7 +1092,14 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
           }}
           selected={selected}
           onSelect={setSelected}
-          onOpen={(id) => setView(all.find((r) => r.id === id) ?? null)}
+          onOpen={(id) => {
+            const r = all.find((x) => x.id === id)
+            if (!r) return
+            // Double-click: the stock screens open straight on the edit page.
+            if (def.entry === 'medicine') setScreen({ kind: 'medicine', editId: r.productId })
+            else if (def.entry === 'grn' || def.entry === 'adjust') setScreen({ kind: def.entry, editId: Number(String(r.id).slice(1)) })
+            else setView(r)
+          }}
           fillWidth={false}
         />
         {def.hscroll && <HScroll thumb={def.hscroll} />}
