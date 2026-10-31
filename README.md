@@ -38,8 +38,11 @@ Open `http://localhost:8787` in **Chrome or Edge**. Starter accounts:
 |---|---|---|
 | `admin` | `subgeo22` | Admin — sees and manages every chemist |
 | `subgeo` | `0000` | Cashier of **CHEM1** |
+| `purchase` | *(none)* | Purchases dashboard of **CHEM1** (indents, LPOs, GRNs, medicine master, petty cash) |
 
-Change both passwords after the first sign-in (*Profile → Security*, or *Utilities → User Management*).
+Setting up each pharmacy (chemist, staff, medicines, till) is described step by step in **[docs/PHARMACY-SETUP.md](docs/PHARMACY-SETUP.md)**. The tables and their relations are in **[docs/DATABASE.md](docs/DATABASE.md)**.
+
+Change the passwords after the first sign-in (*Profile → Security*, or *Utilities → User Management*).
 
 To develop, run `npm run dev` (Vite on :5173) and `npm run server` (API on :8787, proxied).
 
@@ -68,10 +71,10 @@ When a cashier signs in, the title reads `SUBGEO CHEMIST LTD-CHEM<number>` and e
 
 ### How data is kept
 
-- The server keeps the **company database** (SQLite, `data/subgeo.db`, table `sync_records`).
+- The server keeps the **company database** (SQLite, `data/subgeo.db`). Tills sync through `sync_records`; every change is also written to proper relational tables (branches, users, products, sales, sale_lines, sale_payments, documents, staff_tasks, …) with foreign keys and report views. See [docs/DATABASE.md](docs/DATABASE.md). `npm run db:rebuild` rebuilds them at any time.
 - Every till keeps a local copy of its chemist (IndexedDB) so it **keeps selling with no internet**. Changes upload a second or two after they happen (or when the connection returns) and other tills pick them up within ~15 s. The header badge shows *Online / Offline* and how many changes are waiting; *Utilities → OffLine/OnLine Synchronization* has *Sync Now*.
 - Stock and customer balances merge by quantity, so a sale at the till and a delivery keyed in by the admin at the same moment both count.
-- `npm run db:status` prints record counts per chemist; `npm run db:backup` snapshots the database.
+- `npm run db:status` prints record counts per table and chemist; `npm run db:backup` snapshots the database.
 
 ## Architecture
 
