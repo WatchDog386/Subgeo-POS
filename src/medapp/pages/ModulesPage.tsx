@@ -27,6 +27,8 @@ import { OtcEntry, PartyEntry, WHOLESALE_RULES, WholesaleEntry } from './EntrySc
 import { useInvoiceUpload } from './InvoiceImport'
 import { ADJUST_MINUS, ADJUST_PLUS, GrnEntry, StockAdjustEntry } from './StockScreens'
 import { MedicineEntry } from './MedicineScreen'
+import PriceTable from './PriceTable'
+import { hasAdminRights } from '../../db/syncSchema'
 import { ProductLookup } from './ProductLookup'
 import {
   EyeIcon,
@@ -101,7 +103,7 @@ const FIELD_HINTS: Record<string, string> = {
   supplierName: 'Type or look up the supplier',
   total: 'Total value, e.g. 1746.00',
   type: 'S = stock item, N = non-stock',
-  minPrice: 'Lowest price it may be sold for',
+  minPrice: 'Best Price: lowest it may be sold for (KES)',
   reorder: 'Re-order when stock falls to, e.g. 10',
   maxStock: 'Most to hold (blank = no limit)',
   uom: 'Unit, e.g. ML, MG, TABS',
@@ -512,12 +514,12 @@ const DEFS: Record<string, ModuleDef> = {
       C('group', 'Product Group', 310),
       C('uom', 'UOM', 100),
       C('retail', 'Retail Sale', 130, 'right'),
+      C('minPrice', 'Best Price', 110, 'right'),
       C('whole', 'Whole sale', 140, 'right'),
       C('cost', 'Cost Rate', 130, 'right'),
       C('packSize', 'Pack Size', 110, 'right'),
       C('type', 'Stock/Non-Stock', 80),
       C('stock', 'Qty In Stock', 90, 'right'),
-      C('minPrice', 'Min Selling Price', 110, 'right'),
       C('reorder', 'Re-order Level', 100, 'right'),
       C('maxStock', 'Max Level', 90, 'right'),
       C('molecular', 'Moleculor Name', 160),
@@ -805,6 +807,9 @@ function useRows(slug: string, def: ModuleDef): RawRow[] {
 /* ── Screen ────────────────────────────────────────────────────────────── */
 export function ModuleListPage() {
   const { slug = '' } = useParams()
+  const { user } = useSession()
+  // Medicine Prices (Best Price): admin / purchase only.
+  if (slug === 'medicine-prices') return hasAdminRights(user?.role) ? <PriceTable /> : <ModulesEmpty />
   const def = DEFS[slug]
   if (!def) return <ModulesEmpty />
   return <ModuleList key={slug} slug={slug} def={def} />

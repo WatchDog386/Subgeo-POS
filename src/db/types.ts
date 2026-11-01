@@ -344,6 +344,8 @@ export interface DocLine {
   discPct?: number
   less?: number
   retail?: number
+  /** Best Price set on this line (cents): the lowest the medicine may be sold for. */
+  best?: number
   /** Stock adjustments: the type of adjustment, e.g. EXPIRY, OPENING STOCK. */
   reason?: string
 }

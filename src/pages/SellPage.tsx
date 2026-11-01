@@ -802,6 +802,8 @@ function LineEditor({
   const [price, setPrice] = useState(String(line.unitPrice / 100))
   const [discount, setDiscount] = useState(String(line.discount / 100))
   const [serial, setSerial] = useState(line.serial ?? '')
+  // Best Price: offer the selling price first; if the customer complains, come down to this.
+  const best = useLiveQuery(async () => (line.productId !== undefined ? (await db.products.get(line.productId))?.minPrice : undefined), [line.productId])
   return (
     <Modal
       title={line.name}
@@ -842,6 +844,25 @@ function LineEditor({
           <input className="input" inputMode="decimal" value={discount} disabled={!allowPrice} onChange={(e) => setDiscount(e.target.value)} />
         </div>
       </div>
+      {best ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <span>
+            Best Price <b>{money(best)}</b> — the lowest it may be sold for.
+          </span>
+          {allowPrice && (
+            <button
+              type="button"
+              className="btn-ghost ml-auto"
+              onClick={() => {
+                setPrice(String(best / 100))
+                setDiscount('0')
+              }}
+            >
+              Use Best Price
+            </button>
+          )}
+        </div>
+      ) : null}
       {serialized && (
         <div className="mt-3">
           <label className="label">Serial number *</label>

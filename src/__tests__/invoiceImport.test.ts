@@ -139,3 +139,24 @@ describe('receiving the invoice into stock', () => {
     expect((await m.db.db.products.get(calpol))!.stock).toBe(4)
   })
 })
+
+describe('Best Price from an uploaded invoice', () => {
+  let m: { db: typeof import('../db/db'); imp: typeof import('../medapp/pages/InvoiceImport') }
+  beforeEach(async () => {
+    vi.resetModules()
+    await Dexie.delete('subgeo-pos')
+    m = { db: await import('../db/db'), imp: await import('../medapp/pages/InvoiceImport') }
+  })
+  it('sets it on matched and new medicines', async () => {
+    const id = (await m.db.db.products.add({ sku: 'X1', name: 'X ONE', fitment: [], cost: 100, price: 500, stock: 0, reorderLevel: 0, taxable: false, serialized: false, trackStock: true, active: true, createdAt: 1, updatedAt: 1 })) as number
+    await m.imp.receiveInvoice({
+      lines: [
+        { name: 'X ONE', qty: 2, costCents: 120, productId: id, bestCents: 400, vat: false },
+        { code: 'N1', name: 'NEW ONE', qty: 1, costCents: 100, priceCents: 300, bestCents: 250, vat: false },
+      ],
+      vendor: 'V', invoiceNo: '1', totalCents: 340, expense: '', receivedBy: 'p',
+    })
+    expect((await m.db.db.products.get(id))!.minPrice).toBe(400)
+    expect((await m.db.db.products.where('sku').equals('N1').first())!.minPrice).toBe(250)
+  })
+})

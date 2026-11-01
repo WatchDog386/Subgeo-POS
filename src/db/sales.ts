@@ -33,7 +33,7 @@ export interface CheckoutInput {
  * post any on-account amount to the customer's balance.
  */
 /**
- * Every medicine must sell at or above its minimum selling price, after its
+ * Every medicine must sell at or above its Best Price (minPrice), after its
  * line discount and its share of the bill discount. Throws when one doesn't.
  */
 export async function checkPriceFloor(lines: SaleLine[], billDiscount: number): Promise<void> {
@@ -46,7 +46,7 @@ export async function checkPriceFloor(lines: SaleLine[], billDiscount: number): 
     const share = gross > 0 ? (billDiscount * net(l)) / gross : 0
     const each = (net(l) - share) / l.qty
     if (each + 0.5 < p.minPrice)
-      throw new SaleError(`${p.name} cannot be sold below KES ${(p.minPrice / 100).toFixed(2)} (this bill sells it at ${(each / 100).toFixed(2)} each)`)
+      throw new SaleError(`${p.name} cannot be sold below its Best Price KES ${(p.minPrice / 100).toFixed(2)} (this bill sells it at ${(each / 100).toFixed(2)} each)`)
   }
 }
 

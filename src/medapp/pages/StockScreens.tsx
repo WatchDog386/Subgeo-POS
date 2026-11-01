@@ -39,6 +39,7 @@ export async function applyGrn(doc: Pick<DocRecord, 'values' | 'lines'>, sign: 1
     if (sign > 0) {
       if (l.cost > 0) patch.cost = l.cost
       if (l.retail && l.retail > 0) patch.price = l.retail
+      if (l.best && l.best > 0) patch.minPrice = l.best
       if (p.supplierId === undefined && supplierId !== undefined) patch.supplierId = supplierId
     }
     await db.products.update(p.id!, patch)
@@ -88,6 +89,7 @@ export async function applyAdjust(slug: string, doc: Pick<DocRecord, 'values' | 
     if (dir > 0 && sign > 0) {
       if (l.cost > 0 && l.cost !== p.cost) patch.cost = l.cost
       if (l.rate > 0 && l.rate !== p.price) patch.price = l.rate
+      if (l.best && l.best > 0 && l.best !== p.minPrice) patch.minPrice = l.best
     }
     await db.products.update(p.id!, patch)
     const reason = ADJUST_TYPES[slug]?.find((t) => t.label === l.reason)?.reason ?? 'adjust'
@@ -112,7 +114,7 @@ export async function shortfall(lines: DocLine[], previous: DocLine[] | undefine
 }
 
 /* ══════════════════════ Pur/GRN (Direct Invoice) ══════════════════════════ */
-type GLine = { key: string; productId?: number; name: string; code: string; qty: string; rate: string; discPct: string; less: string; vatPct: string; expiry: string; batch: string; retail: string }
+type GLine = { key: string; productId?: number; name: string; code: string; qty: string; rate: string; discPct: string; less: string; vatPct: string; expiry: string; batch: string; retail: string; best: string }
 
 function gCalc(l: GLine) {
   const qty = n(l.qty)
@@ -124,7 +126,7 @@ function gCalc(l: GLine) {
   const net = Math.max(0, gross - discAmt - less)
   const vatPct = Math.max(0, n(l.vatPct))
   const vat = Math.round((net * vatPct) / 100)
-  return { qty, rate, gross, discPct, discAmt, less, net, vatPct, vat, total: net + vat, unitCost: qty > 0 ? Math.round(net / qty) : 0, retail: l.retail.trim() ? toCents(l.retail) : 0 }
+  return { qty, rate, gross, discPct, discAmt, less, net, vatPct, vat, total: net + vat, unitCost: qty > 0 ? Math.round(net / qty) : 0, retail: l.retail.trim() ? toCents(l.retail) : 0, best: l.best.trim() ? toCents(l.best) : undefined }
 }
 
 const GRN_STATUS = ['GOOD RECEIVED', 'PARTLY RECEIVED', 'ON HOLD']
@@ -139,7 +141,7 @@ export function GrnEntry({ editId, onClose }: { editId?: number; onClose: () => 
   const register = useLiveQuery(() => db.docs.where('slug').equals(GRN).toArray(), [], [] as DocRecord[])
   const upload = useInvoiceUpload(onClose)
   const [tab, setTab] = useState<'vendor' | 'product'>('vendor')
-  const blank = (): GLine => ({ key: `${Date.now()}-${Math.random()}`, name: '', code: '', qty: '0.0', rate: '', discPct: '0.0', less: '0.0', vatPct: '0.0', expiry: '', batch: '', retail: '' })
+  const blank = (): GLine => ({ key: `${Date.now()}-${Math.random()}`, name: '', code: '', qty: '0.0', rate: '', discPct: '0.0', less: '0.0', vatPct: '0.0', expiry: '', batch: '', retail: '', best: '' })
   const [v, setV] = useState({ location: '', docNo: '', date: dmy(Date.now(), '/'), status: 'GOOD RECEIVED', receivedBy: '', vendor: '', phone: '', address: '', email: '', invoice: '', expense: '' })
   const [lines, setLines] = useState<GLine[]>([blank()])
   const [orig, setOrig] = useState<DocRecord>()
@@ -173,7 +175,7 @@ export function GrnEntry({ editId, onClose }: { editId?: number; onClose: () => 
         const p = l.productId !== undefined ? await db.products.get(l.productId) : undefined
         // Lines from an uploaded invoice keep the unit cost in "cost" and no discount detail.
         const typed = l.discPct !== undefined || l.retail !== undefined
-        ls.push({ key: `e${i}`, productId: l.productId, name: l.name, code: l.sku ?? '', qty: String(l.qty), rate: c2(typed ? l.rate : l.cost), discPct: String(l.discPct ?? 0), less: c2(l.less ?? 0), vatPct: String(l.vatPct ?? 0), expiry: l.expiry ?? '', batch: l.batch ?? '', retail: c2(l.retail ?? p?.price ?? 0) })
+        ls.push({ key: `e${i}`, productId: l.productId, name: l.name, code: l.sku ?? '', qty: String(l.qty), rate: c2(typed ? l.rate : l.cost), discPct: String(l.discPct ?? 0), less: c2(l.less ?? 0), vatPct: String(l.vatPct ?? 0), expiry: l.expiry ?? '', batch: l.batch ?? '', retail: c2(l.retail ?? p?.price ?? 0), best: l.best ? c2(l.best) : p?.minPrice ? c2(p.minPrice) : '' })
       }
       setLines(ls.length ? ls : [blank()])
     })
@@ -189,7 +191,7 @@ export function GrnEntry({ editId, onClose }: { editId?: number; onClose: () => 
   const takeProduct = (key: string, p: Product) => {
     if (lines.some((l) => l.key !== key && l.productId === p.id)) return toast(`${p.name} is already on this GRN — change its Qty`, 'error')
     const cur = lines.find((l) => l.key === key)
-    setLine(key, { productId: p.id, name: p.name, code: p.sku, rate: cur?.rate || c2(p.cost), retail: c2(p.price), vatPct: cur && n(cur.vatPct) ? cur.vatPct : p.taxable ? '16' : '0.0', qty: cur && n(cur.qty) > 0 ? cur.qty : '1' })
+    setLine(key, { productId: p.id, name: p.name, code: p.sku, rate: cur?.rate || c2(p.cost), retail: c2(p.price), best: p.minPrice ? c2(p.minPrice) : '', vatPct: cur && n(cur.vatPct) ? cur.vatPct : p.taxable ? '16' : '0.0', qty: cur && n(cur.qty) > 0 ? cur.qty : '1' })
   }
   const typedName = (key: string, name: string) => {
     const t = name.trim().toUpperCase()
@@ -224,9 +226,13 @@ export function GrnEntry({ editId, onClose }: { editId?: number; onClose: () => 
       if (c.qty <= 0 || !Number.isInteger(c.qty)) return (setTab('product'), toast(`${l.name}: Qty must be a whole number above 0`, 'error'))
       if (c.rate <= 0) return (setTab('product'), toast(`${l.name}: enter the Rate (cost per unit on the invoice)`, 'error'))
       const p = l.productId !== undefined ? products.find((x) => x.id === l.productId) : undefined
-      if (!p && c.retail <= 0) return (setTab('product'), toast(`${l.name} is a new medicine: enter its Retail Price (selling price)`, 'error'))
-      const floor = p?.minPrice
-      if (c.retail > 0 && floor && c.retail < floor) return (setTab('product'), toast(`${l.name}: Retail Price is below its minimum selling price ${c2(floor)}`, 'error'))
+      if (!p && c.retail <= 0) return (setTab('product'), toast(`${l.name} is a new medicine: enter its Selling Price`, 'error'))
+      if (l.retail.trim() && !/^\d+(\.\d{0,2})?$/.test(l.retail.trim())) return (setTab('product'), toast(`${l.name}: Selling Price must be an amount, e.g. 150.00`, 'error'))
+      if (l.best.trim() && !/^\d+(\.\d{0,2})?$/.test(l.best.trim())) return (setTab('product'), toast(`${l.name}: Best Price must be an amount in KES, e.g. 120.00 (not a %)`, 'error'))
+      if (c.best !== undefined && c.best <= 0) return (setTab('product'), toast(`${l.name}: Best Price must be above 0 (leave it blank for none)`, 'error'))
+      const sell = c.retail || p?.price || 0
+      const floor = c.best ?? p?.minPrice
+      if (sell > 0 && floor && sell < floor) return (setTab('product'), toast(`${l.name}: Best Price ${c2(floor)} is above the Selling Price ${c2(sell)} — the best price is the lowest it may be sold for`, 'error'))
     }
     // Editing down: what was received may already be sold.
     if (orig) {
@@ -248,11 +254,17 @@ export function GrnEntry({ editId, onClose }: { editId?: number; onClose: () => 
     }
     if (over.length && !confirm(`This takes these medicines above their maximum level:\n\n${over.slice(0, 12).join('\n')}\n\nReceive anyway?`)) return
     // Selling below the new cost loses money on every unit: ask.
+    // The cashier may come down to the Best Price, so check that too.
     const loss = filled
-      .map(({ l, c }) => ({ l, c, sell: c.retail || (l.productId !== undefined ? (products.find((x) => x.id === l.productId)?.price ?? 0) : 0) }))
-      .filter(({ c, sell }) => sell > 0 && c.unitCost > sell)
-      .map(({ l, c, sell }) => `${l.name.toUpperCase()}: sells at ${c2(sell)}, costs ${c2(c.unitCost)}`)
-    if (loss.length && !confirm(`These would sell below their new cost:\n\n${loss.slice(0, 12).join('\n')}\n\nSave anyway? (Change the Retail Price to fix it.)`)) return
+      .map(({ l, c }) => {
+        const p = l.productId !== undefined ? products.find((x) => x.id === l.productId) : undefined
+        const sell = c.retail || p?.price || 0
+        const best = c.best ?? p?.minPrice
+        return { l, c, sell, low: best && best < sell ? best : sell, isBest: !!best && best < sell }
+      })
+      .filter(({ c, low }) => low > 0 && c.unitCost > low)
+      .map(({ l, c, low, isBest }) => `${l.name.toUpperCase()}: ${isBest ? 'Best Price' : 'sells at'} ${c2(low)}, costs ${c2(c.unitCost)}`)
+    if (loss.length && !confirm(`These would sell below their new cost:\n\n${loss.slice(0, 12).join('\n')}\n\nSave anyway? (Change the Selling Price / Best Price to fix it.)`)) return
     setSaving(true)
     try {
       let docNo = v.docNo
@@ -278,10 +290,10 @@ export function GrnEntry({ editId, onClose }: { editId?: number; onClose: () => 
             // A new medicine, created from this GRN.
             let sku = l.code.trim().toUpperCase()
             if (!sku || (await db.products.where('sku').equals(sku).first())) sku = await nextDocNo('PRD00')
-            pid = (await db.products.add({ sku, barcode: sku, name: l.name.trim().toUpperCase(), fitment: [], cost: c.unitCost, price: c.retail, stock: 0, reorderLevel: 0, supplierId: supplier?.id, taxable: c.vatPct > 0, serialized: false, trackStock: true, active: true, createdAt: Date.now(), updatedAt: Date.now() } as Product)) as number
+            pid = (await db.products.add({ sku, barcode: sku, name: l.name.trim().toUpperCase(), fitment: [], cost: c.unitCost, price: c.retail, minPrice: c.best, stock: 0, reorderLevel: 0, supplierId: supplier?.id, taxable: c.vatPct > 0, serialized: false, trackStock: true, active: true, createdAt: Date.now(), updatedAt: Date.now() } as Product)) as number
           }
           const p = (await db.products.get(pid))!
-          docLines.push({ productId: pid, name: p.name, sku: p.sku, qty: c.qty, cost: c.unitCost, rate: c.rate, vatPct: c.vatPct, vat: c.vat, discount: c.discAmt + c.less, total: c.total, batch: l.batch.trim().toUpperCase() || undefined, expiry: l.expiry.trim() || undefined, discPct: c.discPct, less: c.less, retail: c.retail || undefined })
+          docLines.push({ productId: pid, name: p.name, sku: p.sku, qty: c.qty, cost: c.unitCost, rate: c.rate, vatPct: c.vatPct, vat: c.vat, discount: c.discAmt + c.less, total: c.total, batch: l.batch.trim().toUpperCase() || undefined, expiry: l.expiry.trim() || undefined, discPct: c.discPct, less: c.less, retail: c.retail || undefined, best: c.best })
         }
         const values: Record<string, string> = {
           ...(orig?.values ?? {}),
@@ -341,7 +353,7 @@ export function GrnEntry({ editId, onClose }: { editId?: number; onClose: () => 
   }
   useEntryKeys({ save: () => void save(), back: onClose, newRow: addRow })
 
-  const W = { name: 150, qty: 55, rate: 70, pct: 55, amt: 65, vat: 50, total: 75, exp: 92, batch: 90, retail: 70 }
+  const W = { name: 138, qty: 46, rate: 62, pct: 46, amt: 58, vat: 44, total: 68, exp: 80, batch: 74, retail: 64 }
   return (
     <div className="ma-panel-inner" style={{ paddingTop: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 12px 18px', height: 32 }}>
@@ -442,10 +454,10 @@ export function GrnEntry({ editId, onClose }: { editId?: number; onClose: () => 
               Press the lookup to pick a medicine already in stock (it is topped up); type a new name to add a new medicine.
             </span>
           </div>
-          <table style={{ borderCollapse: 'separate', borderSpacing: '5px 4px' }}>
+          <table style={{ borderCollapse: 'separate', borderSpacing: '3px 4px' }}>
             <thead>
               <tr>
-                {[['S NO', 30], ['Medicine Name', W.name + 26], ['Qty', W.qty], ['Rate', W.rate], ['Disc%', W.pct], ['Disc Amt', W.amt], ['Less discount', W.amt], ['VAT %', W.vat], ['VAT Amt', W.amt], ['Total Amnt', W.total], ['Expiary Date', W.exp], ['Batch No', W.batch], ['Retail Price', W.retail], ['', 20]].map(([h, w]) => (
+                {[['S NO', 30], ['Medicine Name', W.name + 26], ['Qty', W.qty], ['Rate', W.rate], ['Disc%', W.pct], ['Disc Amt', W.amt], ['Less discount', W.amt], ['VAT %', W.vat], ['VAT Amt', W.amt], ['Total Amnt', W.total], ['Expiary Date', W.exp], ['Batch No', W.batch], ['Selling Price', W.retail], ['Best Price', W.retail], ['', 20]].map(([h, w]) => (
                   <th key={String(h) || 'x'} style={{ ...head, width: w as number }}>
                     {h}
                   </th>
@@ -482,7 +494,8 @@ export function GrnEntry({ editId, onClose }: { editId?: number; onClose: () => 
                     <td><Cell value={c2(c.total)} width={W.total} right readOnly label="Total Amnt" /></td>
                     <td><Cell value={l.expiry} onChange={(x) => setLine(l.key, { expiry: x })} width={W.exp} placeholder="dd-mm-yyyy" label="Expiary Date" /></td>
                     <td><Cell value={l.batch} onChange={(x) => setLine(l.key, { batch: x.toUpperCase() })} width={W.batch} placeholder="Batch no." label="Batch No" /></td>
-                    <td><Cell value={l.retail} onChange={(x) => setLine(l.key, { retail: x })} width={W.retail} right label="Retail Price" placeholder={p ? '' : 'required'} /></td>
+                    <td><Cell value={l.retail} onChange={(x) => setLine(l.key, { retail: x })} width={W.retail} right label="Selling Price" placeholder={p ? '' : 'required'} /></td>
+                    <td><Cell value={l.best} onChange={(x) => setLine(l.key, { best: x })} width={W.retail} right label="Best Price" placeholder="lowest" /></td>
                     <td>{lines.length > 1 && <DeleteX title="Remove this row" onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))} />}</td>
                   </tr>
                 )
@@ -543,9 +556,9 @@ export function GrnEntry({ editId, onClose }: { editId?: number; onClose: () => 
             setPick(null)
           }}
           onNew={(typed) => {
-            setLine(pick.key, { productId: undefined, name: typed.toUpperCase(), code: '', retail: '' })
+            setLine(pick.key, { productId: undefined, name: typed.toUpperCase(), code: '', retail: '', best: '' })
             setPick(null)
-            toast('New medicine: check its name, then type the Qty, Rate and Retail Price — it is added to the Medicine list when you save')
+            toast('New medicine: check its name, then type the Qty, Rate, Selling Price and Best Price — it is added to the Medicine list when you save')
           }}
         />
       )}
@@ -588,7 +601,7 @@ function PayableDialog({ register, vendor, onClose }: { register: DocRecord[]; v
 }
 
 /* ══════════════════════ Stock Adjust − / Stock Adjust +(DBH) ══════════════ */
-type ALine = { key: string; productId?: number; name: string; batch: string; expiry: string; qty: string; price: string; cost: string; reason: string }
+type ALine = { key: string; productId?: number; name: string; batch: string; expiry: string; qty: string; price: string; best: string; cost: string; reason: string }
 
 export function StockAdjustEntry({ slug, editId, onClose }: { slug: typeof ADJUST_MINUS | typeof ADJUST_PLUS; editId?: number; onClose: () => void }) {
   const toast = useToast()
@@ -602,7 +615,7 @@ export function StockAdjustEntry({ slug, editId, onClose }: { slug: typeof ADJUS
   const register = useLiveQuery(async () => (await db.docs.where('slug').equals(slug).toArray()).sort((a, b) => a.createdAt - b.createdAt), [slug], [] as DocRecord[])
   const [current, setCurrent] = useState<number | undefined>(editId)
   const [tab, setTab] = useState<'header' | 'detail'>('header')
-  const blank = (): ALine => ({ key: `${Date.now()}-${Math.random()}`, name: '', batch: '', expiry: '', qty: '0.0', price: '', cost: '', reason: types[0].label })
+  const blank = (): ALine => ({ key: `${Date.now()}-${Math.random()}`, name: '', batch: '', expiry: '', qty: '0.0', price: '', best: '', cost: '', reason: types[0].label })
   const [h, setH] = useState({ date: dmy(Date.now(), '/'), docNo: '', location: '' })
   const [lines, setLines] = useState<ALine[]>([blank()])
   const [orig, setOrig] = useState<DocRecord>()
@@ -625,7 +638,7 @@ export function StockAdjustEntry({ slug, editId, onClose }: { slug: typeof ADJUS
       if (!doc) return toast('That adjustment no longer exists', 'error')
       setOrig(doc)
       setH({ date: (doc.values.date ?? dmy(doc.createdAt)).replace(/-/g, '/'), docNo: doc.values.docNo ?? '', location: doc.values.location ?? '' })
-      setLines((doc.lines ?? []).map((l, i) => ({ key: `e${i}`, productId: l.productId, name: l.name, batch: l.batch ?? '', expiry: l.expiry ?? '', qty: String(l.qty), price: c2(l.rate), cost: c2(l.cost), reason: l.reason ?? types[0].label })))
+      setLines((doc.lines ?? []).map((l, i) => ({ key: `e${i}`, productId: l.productId, name: l.name, batch: l.batch ?? '', expiry: l.expiry ?? '', qty: String(l.qty), price: c2(l.rate), best: l.best ? c2(l.best) : '', cost: c2(l.cost), reason: l.reason ?? types[0].label })))
     })
   }, [current]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -640,7 +653,7 @@ export function StockAdjustEntry({ slug, editId, onClose }: { slug: typeof ADJUS
   const takeProduct = (key: string, p: Product) => {
     if (lines.some((l) => l.key !== key && l.productId === p.id)) return toast(`${p.name} is already on this adjustment`, 'error')
     const cur = lines.find((l) => l.key === key)
-    setLine(key, { productId: p.id, name: p.name, price: c2(p.price), cost: c2(p.cost), qty: cur && n(cur.qty) > 0 ? cur.qty : '1' })
+    setLine(key, { productId: p.id, name: p.name, price: c2(p.price), best: p.minPrice ? c2(p.minPrice) : '', cost: c2(p.cost), qty: cur && n(cur.qty) > 0 ? cur.qty : '1' })
   }
   const typedName = (key: string, name: string) => {
     const p = products.find((x) => x.name.toUpperCase() === name.trim().toUpperCase())
@@ -676,8 +689,13 @@ export function StockAdjustEntry({ slug, editId, onClose }: { slug: typeof ADJUS
       const p = products.find((x) => x.id === l.productId)!
       const price = l.price.trim() ? toCents(l.price) : p.price
       const cost = l.cost.trim() ? toCents(l.cost) : p.cost
-      if (!minus && p.minPrice && price < p.minPrice) return toast(`${p.name}: Selling Price is below its minimum ${c2(p.minPrice)}`, 'error')
-      docLines.push({ productId: p.id, name: p.name, sku: p.sku, qty, cost, rate: price, vatPct: 0, vat: 0, discount: 0, total: Math.round(qty * cost), batch: l.batch.trim().toUpperCase() || undefined, expiry: l.expiry.trim() || undefined, reason: l.reason })
+      // Stock Adjust + may set the Best Price (an amount, the lowest it may be sold for).
+      if (!minus && l.best.trim() && !/^\d+(\.\d{0,2})?$/.test(l.best.trim())) return (setTab('detail'), toast(`${p.name}: Best Price must be an amount in KES, e.g. 120.00`, 'error'))
+      const best = !minus && l.best.trim() ? toCents(l.best) : undefined
+      if (best !== undefined && best <= 0) return (setTab('detail'), toast(`${p.name}: Best Price must be above 0 (leave it blank for none)`, 'error'))
+      const floor = best ?? p.minPrice
+      if (!minus && floor && price < floor) return (setTab('detail'), toast(`${p.name}: Best Price ${c2(floor)} is above the Selling Price ${c2(price)}`, 'error'))
+      docLines.push({ productId: p.id, name: p.name, sku: p.sku, qty, cost, rate: price, vatPct: 0, vat: 0, discount: 0, total: Math.round(qty * cost), batch: l.batch.trim().toUpperCase() || undefined, expiry: l.expiry.trim() || undefined, reason: l.reason, best })
     }
     const short = await shortfall(docLines, orig?.lines, minus ? -1 : 1)
     if (short) return toast(`${short} — can't take off more than is on the shelf`, 'error')
@@ -817,7 +835,7 @@ export function StockAdjustEntry({ slug, editId, onClose }: { slug: typeof ADJUS
           <table style={{ borderCollapse: 'separate', borderSpacing: '6px 4px' }}>
             <thead>
               <tr>
-                {[['S NO', 30], ['Product Name', W.name + 26], ['Batch No', W.batch], ['Exp dt', W.exp], ['Qty', W.qty], ['Selling Price', W.price], ['Cost Rate', W.cost], ['Type Of Adjustment', W.type], ['In Stock', 60], ['', 20]].map(([hd, w]) => (
+                {[['S NO', 30], ['Product Name', W.name + 26], ['Batch No', W.batch], ['Exp dt', W.exp], ['Qty', W.qty], ['Selling Price', W.price], ['Best Price', W.price], ['Cost Rate', W.cost], ['Type Of Adjustment', W.type], ['In Stock', 60], ['', 20]].map(([hd, w]) => (
                   <th key={String(hd) || 'x'} style={{ ...head, width: w as number }}>
                     {hd}
                   </th>
@@ -838,6 +856,7 @@ export function StockAdjustEntry({ slug, editId, onClose }: { slug: typeof ADJUS
                     <td><Cell value={l.expiry} onChange={(x) => setLine(l.key, { expiry: x })} width={W.exp} placeholder="dd-mm-yyyy" label="Exp dt" /></td>
                     <td><Cell value={l.qty} onChange={(x) => setLine(l.key, { qty: x })} width={W.qty} right label="Qty" /></td>
                     <td><Cell value={l.price} onChange={(x) => setLine(l.key, { price: x })} width={W.price} right readOnly={minus} label="Selling Price" /></td>
+                    <td><Cell value={l.best} onChange={(x) => setLine(l.key, { best: x })} width={W.price} right readOnly={minus} label="Best Price" placeholder={minus ? '' : 'lowest'} /></td>
                     <td><Cell value={l.cost} onChange={(x) => setLine(l.key, { cost: x })} width={W.cost} right readOnly={minus} label="Cost Rate" /></td>
                     <td>
                       <Select value={l.reason} onChange={(x) => setLine(l.key, { reason: x })} options={types.map((t) => t.label)} width={W.type} />

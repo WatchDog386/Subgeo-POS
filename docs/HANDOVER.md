@@ -53,13 +53,17 @@ Open `https://pos.subgeoholding.com` on the phone's browser (Chrome or Safari) a
 - **Fullscreen:** the phone never switches to fullscreen on the first tap (the tills still do). The *Full screen* icon still works.
 - To put an icon on the home screen: in Chrome use *⋮ → Add to Home screen*; in Safari use *Share → Add to Home Screen*.
 
-## Stock limits and the minimum selling price
+## Stock limits and the Best Price
+
+**Where to type it:** the **Best Price** column sits right after **Selling Price** on *Pur/GRN (Direct Invoice)* → PRODUCT DETAILS, on *Stock Adjust +(DBH)*, on the supplier PDF upload review, and on the *Medicine* form (under Retail Sale Price).
+
+**Medicines already recorded:** the admin (or purchase) opens *Modules → STOCK ADJUSTMENTS → Medicine Prices (Best Price)* (also on *Home → Quick Access*). It is one table of every medicine of the chemist open in the header (for example SUBGEO12), with Selling Price, Best Price and Whole Sale Price typed in place. *Only without Best Price* lists the ones still to do. **Save Changes (F2)** saves them all. A row that can't be saved (Best Price above the Selling Price, a % instead of an amount, a Whole Sale Price below the Best Price) is marked in red.
 
 Set these for each medicine in *Modules → Medicine* (select it → edit), or on the *Inventory* screen:
 
 | Field | What it does |
 |---|---|
-| **Min Selling Price** | The lowest price the medicine may be sold for. Nothing can be sold below it: not by changing the price, a line discount, the Pharma % or a bill discount, on OTC bills, the Sell screen or whole-sale invoices. The retail and whole-sale prices, a GRN's Retail Price and a Stock Adjust +'s Selling Price can't be set below it either. |
+| **Best Price** | The lowest price the medicine may be sold for, typed as an amount in KES (not a %). The seller offers the **Selling Price** first; if the customer complains, they may come down to the Best Price, never below it. The tills refuse anything below it: a lower price, a line discount, the Pharma %, a bill discount or a whole-sale invoice. On the OTC bill and whole-sale screens the Best Price shows next to the selling price; clicking it puts that line on the Best Price. On the Sell screen, tapping a line shows it with a **Use Best Price** button. |
 | **Re-order Level** | When stock falls to this, the medicine shows on the To-Do lists and the re-order report. |
 | **Max Level** | The most to hold. Re-order suggestions top up to this level, and receiving more than it (GRN or PDF upload) asks first. Leave it blank for no limit. |
 

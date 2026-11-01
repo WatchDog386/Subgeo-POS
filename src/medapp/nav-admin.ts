@@ -48,6 +48,7 @@ export const ADMIN_MODULE_GROUPS: MenuGroup[] = [
       { slug: 'sales-quotation', label: 'Quotation Live' },
       { slug: 'delivery-note', label: 'Quotation Issue Live' },
       { slug: 'medicine', label: 'Medicine' },
+      { slug: 'medicine-prices', label: 'Medicine Prices (Best Price)' },
     ],
   },
 ]
@@ -97,7 +98,8 @@ export const ADMIN_TRANSACTIONS: Transaction[] = [
   A('STOCK ADJUSTMENTS', 'Pur/GRN (Direct Invoice)', '/modules/pur-grn-direct-invoice', 'Receive a supplier invoice into stock (type it or upload the PDF)'),
   A('STOCK ADJUSTMENTS', 'Quotation Live', '/modules/sales-quotation'),
   A('STOCK ADJUSTMENTS', 'Quotation Issue Live', '/modules/delivery-note'),
-  A('STOCK ADJUSTMENTS', 'Medicine', '/modules/medicine', 'Medicine list: prices, minimum selling price, re-order and max levels'),
+  A('STOCK ADJUSTMENTS', 'Medicine', '/modules/medicine', 'Medicine list: prices, Best Price, re-order and max levels'),
+  A('STOCK ADJUSTMENTS', 'Medicine Prices (Best Price)', '/modules/medicine-prices', 'Edit the Selling Price and Best Price (lowest it may be sold for) of every medicine'),
   A('', 'Purchase Indent', '/purchasing'),
   A('', 'Local Purchase Order', '/purchasing'),
   A('', 'Pur Inv/GRN', '/purchasing'),

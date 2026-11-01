@@ -27,6 +27,8 @@ export type ImportLine = {
   productId?: number
   /** Selling price for a new medicine (KES); blank = from the markup. */
   price: string
+  /** Best Price (KES): the lowest it may be sold for; blank = keep / none. */
+  best: string
   vat: boolean
 }
 
@@ -51,7 +53,7 @@ export const priceFromMarkup = (costKes: number, markupPct: number) => Math.ceil
  * either everything is received or nothing is.
  */
 export async function receiveInvoice(input: {
-  lines: { code?: string; name: string; qty: number; costCents: number; priceCents?: number; productId?: number; vat: boolean }[]
+  lines: { code?: string; name: string; qty: number; costCents: number; priceCents?: number; bestCents?: number; productId?: number; vat: boolean }[]
   vendor: string
   invoiceNo: string
   invoiceDate?: string
@@ -79,7 +81,7 @@ export async function receiveInvoice(input: {
       if (l.qty <= 0) throw new Error(`${l.name}: quantity must be above 0`)
       let p = l.productId !== undefined ? await db.products.get(l.productId) : undefined
       if (p) {
-        await db.products.update(p.id!, { stock: p.stock + l.qty, cost: l.costCents, supplierId: p.supplierId ?? supplier?.id, updatedAt: now })
+        await db.products.update(p.id!, { stock: p.stock + l.qty, cost: l.costCents, supplierId: p.supplierId ?? supplier?.id, ...(l.bestCents && l.bestCents > 0 ? { minPrice: l.bestCents } : {}), updatedAt: now })
         updated++
       } else {
         if (!l.priceCents || l.priceCents <= 0) throw new Error(`${l.name}: set a selling price (or a markup %) for this new medicine`)
@@ -92,6 +94,7 @@ export async function receiveInvoice(input: {
           fitment: [],
           cost: l.costCents,
           price: l.priceCents,
+          minPrice: l.bestCents && l.bestCents > 0 ? l.bestCents : undefined,
           stock: l.qty,
           reorderLevel: 0,
           supplierId: supplier?.id,
@@ -107,7 +110,7 @@ export async function receiveInvoice(input: {
       }
       await db.movements.add({ productId: p!.id!, change: l.qty, reason: 'receive', reference: docNo, note: `${vendor} invoice ${input.invoiceNo}`.trim(), userId: input.userId, at: now })
       const total = Math.round(l.qty * l.costCents)
-      docLines.push({ productId: p!.id, name: p!.name, sku: p!.sku, qty: l.qty, cost: l.costCents, rate: p!.price, vatPct: 0, vat: 0, discount: 0, total })
+      docLines.push({ productId: p!.id, name: p!.name, sku: p!.sku, qty: l.qty, cost: l.costCents, rate: p!.price, vatPct: 0, vat: 0, discount: 0, total, best: l.bestCents && l.bestCents > 0 ? l.bestCents : undefined })
     }
     const values: Record<string, string> = {
       docNo,
@@ -210,7 +213,7 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
     setLines(
       inv.lines.map((l, i) => {
         const p = matchProduct(products, l.code, l.name)
-        return { key: i, include: true, code: l.code ?? '', name: l.name.toUpperCase(), qty: String(l.qty), cost: l.unitPrice.toFixed(2), productId: p?.id, price: '', vat: p?.taxable ?? false }
+        return { key: i, include: true, code: l.code ?? '', name: l.name.toUpperCase(), qty: String(l.qty), cost: l.unitPrice.toFixed(2), productId: p?.id, price: '', best: p?.minPrice ? (p.minPrice / 100).toFixed(2) : '', vat: p?.taxable ?? false }
       }),
     )
   }
@@ -230,6 +233,15 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
     if (!chosen.length) return toast('Tick at least one line to receive', 'error')
     const noPrice = chosen.find((l) => l.productId === undefined && priceOf(l) <= 0)
     if (noPrice) return toast(`${noPrice.name} is new: type its selling price, or a Markup % for all new medicines`, 'error')
+    // Best Price: an amount (not %), above 0, and not above the selling price.
+    for (const l of chosen) {
+      const t = l.best.trim()
+      if (!t) continue
+      if (!/^\d+(\.\d{0,2})?$/.test(t) || toCents(t) <= 0) return toast(`${l.name}: Best Price must be an amount in KES above 0, e.g. 120.00`, 'error')
+      const p = l.productId !== undefined ? products.find((x) => x.id === l.productId) : undefined
+      const sell = p ? p.price : Math.round(priceOf(l) * 100)
+      if (sell > 0 && toCents(t) > sell) return toast(`${l.name}: Best Price ${t} is above the selling price ${(sell / 100).toFixed(2)} — the best price is the lowest it may be sold for`, 'error')
+    }
     const dup = (await db.docs.where('slug').equals('pur-grn-direct-invoice').toArray()).find(
       (d) => invoiceNo.trim() && d.values.invoice === invoiceNo.trim() && (d.values.vendorName ?? '').toUpperCase() === vendor.trim().toUpperCase(),
     )
@@ -243,7 +255,7 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
     try {
       if (markupV.trim()) await setKv(MARKUP_KEY, markupV.trim())
       const r = await receiveInvoice({
-        lines: chosen.map((l) => ({ code: l.code || undefined, name: l.name, qty: Number(l.qty) || 0, costCents: toCents(l.cost || '0'), priceCents: l.productId === undefined ? toCents(String(priceOf(l))) : undefined, productId: l.productId, vat: l.vat })),
+        lines: chosen.map((l) => ({ code: l.code || undefined, name: l.name, qty: Number(l.qty) || 0, costCents: toCents(l.cost || '0'), priceCents: l.productId === undefined ? toCents(String(priceOf(l))) : undefined, bestCents: l.best.trim() ? toCents(l.best) : undefined, productId: l.productId, vat: l.vat })),
         vendor,
         invoiceNo,
         invoiceDate: invoiceDate(inv.date),
@@ -324,6 +336,7 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
               <th style={th}>Medicine in stock</th>
               <th style={th}>In stock</th>
               <th style={th}>Selling Price</th>
+              <th style={th} title="Lowest price it may be sold for (KES)">Best Price</th>
               <th style={th}>VAT</th>
             </tr>
           </thead>
@@ -356,7 +369,7 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
                       onChange={(e) => {
                         const v = e.target.value.trim().toUpperCase()
                         const m = products.find((x) => x.name.toUpperCase() === v)
-                        if (m) set(l.key, { productId: m.id, vat: m.taxable })
+                        if (m) set(l.key, { productId: m.id, vat: m.taxable, best: m.minPrice ? (m.minPrice / 100).toFixed(2) : '' })
                         else if (!v || v === 'NEW MEDICINE') set(l.key, { productId: undefined })
                       }}
                       aria-label={`Medicine in stock for ${l.name}`}
@@ -376,6 +389,9 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
                     ) : (
                       <input className="ma-input" style={small(62)} value={l.price} placeholder={sell ? sell.toFixed(2) : 'price'} onChange={(e) => set(l.key, { price: e.target.value })} aria-label={`Selling price ${l.name}`} />
                     )}
+                  </td>
+                  <td style={td}>
+                    <input className="ma-input" style={small(62)} value={l.best} placeholder="lowest" onChange={(e) => set(l.key, { best: e.target.value })} aria-label={`Best Price ${l.name}`} title="Lowest price it may be sold for (KES, not %)" />
                   </td>
                   <td style={td}>
                     <input type="checkbox" checked={l.vat} disabled={!!p} onChange={(e) => set(l.key, { vat: e.target.checked })} title={p ? 'As set on the medicine' : 'Tick if VAT is charged when this medicine is sold'} aria-label={`VAT ${l.name}`} />

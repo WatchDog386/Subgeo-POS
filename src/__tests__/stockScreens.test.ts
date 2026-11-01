@@ -84,7 +84,7 @@ describe('minimum selling price', () => {
   const sl = (unitPrice: number, qty = 1, discount = 0) => ({ productId: amox, name: 'AMOXIL 500MG', qty, unitPrice, unitCost: 1000, discount, taxable: false })
   it('refuses a line, a line discount or a bill discount that takes it below the floor', async () => {
     await expect(m.sales.checkPriceFloor([sl(1500)], 0)).resolves.toBeUndefined()
-    await expect(m.sales.checkPriceFloor([sl(1499)], 0)).rejects.toThrow(/cannot be sold below KES 15.00/)
+    await expect(m.sales.checkPriceFloor([sl(1499)], 0)).rejects.toThrow(/cannot be sold below its Best Price KES 15.00/)
     await expect(m.sales.checkPriceFloor([sl(2000, 2, 1002)], 0)).rejects.toThrow(/below/)
     await expect(m.sales.checkPriceFloor([sl(2000, 2, 1000)], 0)).resolves.toBeUndefined()
     await expect(m.sales.checkPriceFloor([sl(2000)], 600)).rejects.toThrow(/below/)
@@ -101,8 +101,8 @@ describe('Medicine form', () => {
     expect(() => medicineValues({ ...form, name: ' ' })).toThrow(/Product Name/)
     expect(() => medicineValues({ ...form, retail: '0' })).toThrow(/Retail Sale Price/)
     expect(() => medicineValues({ ...form, retail: 'abc' })).toThrow(/amount/)
-    expect(() => medicineValues({ ...form, minPrice: '60' })).toThrow(/below the Min Selling Price/)
-    expect(() => medicineValues({ ...form, minPrice: '40', whole: '35' })).toThrow(/Whole sale price/)
+    expect(() => medicineValues({ ...form, minPrice: '60' })).toThrow(/Best Price 60.00 is above the Retail Sale Price 50.00/)
+    expect(() => medicineValues({ ...form, minPrice: '40', whole: '35' })).toThrow(/Whole sale price 35.00 is below the Best Price 40.00/)
     expect(() => medicineValues({ ...form, maxStock: '5' })).toThrow(/Max Level 5 is below the Re-order Level 10/)
     expect(() => medicineValues({ ...form, reorder: '2.5' })).toThrow(/whole number/)
     expect(medicineValues({ ...form, minPrice: '45', maxStock: '100' })).toMatchObject({ minPrice: 4500, maxStock: 100 })
@@ -110,5 +110,28 @@ describe('Medicine form', () => {
     const docs = [{ id: 1, slug: 'medicine', values: { docNo: 'OTHER', name: 'AMOXIL 500MG' }, createdAt: 1, updatedAt: 1 }, { id: 2, slug: 'medicine', values: { docNo: 'amx' }, createdAt: 1, updatedAt: 1 }] as DocRecord[]
     expect(medicineDocFor(p, docs)?.id).toBe(2)
     expect(medicineDocFor(p, docs.slice(0, 1))?.id).toBe(1)
+  })
+})
+
+describe('Best Price', () => {
+  it('a GRN line and a Stock Adjust + line set the Best Price; a blank one keeps it', async () => {
+    await m.ss.applyGrn({ values: { docNo: 'MRN-9-26' }, lines: [line(calpol, 1, { cost: 20000, retail: 36000, best: 30000 })] }, 1)
+    expect((await m.db.db.products.get(calpol))!.minPrice).toBe(30000)
+    await m.ss.applyGrn({ values: { docNo: 'MRN-10-26' }, lines: [line(calpol, 1, { cost: 20000 })] }, 1)
+    expect((await m.db.db.products.get(calpol))!.minPrice).toBe(30000)
+    await m.ss.applyAdjust(m.ss.ADJUST_PLUS, { values: { docNo: 'SAP-9-26' }, lines: [line(amox, 1, { reason: 'Opening Stock', rate: 2500, best: 1800 })] }, 1)
+    expect((await m.db.db.products.get(amox))!.minPrice).toBe(1800)
+  })
+
+  it('the price table checks amounts, Best ≤ Selling and Whole Sale ≥ Best', async () => {
+    const { checkPrices } = await import('../medapp/pages/PriceTable')
+    expect(checkPrices('150', '120', '', 10000)).toEqual({ cents: { price: 15000, best: 12000, whole: 15000 }, warn: undefined })
+    expect(checkPrices('150', '', '140', 10000).cents).toEqual({ price: 15000, best: undefined, whole: 14000 })
+    expect(checkPrices('150', '160', '', 0).error).toMatch(/Best Price is above the Selling Price 150.00/)
+    expect(checkPrices('150', '10%', '', 0).error).toMatch(/not %/)
+    expect(checkPrices('150', '0', '', 0).error).toMatch(/above 0/)
+    expect(checkPrices('0', '', '', 0).error).toMatch(/Selling Price/)
+    expect(checkPrices('150', '120', '100', 0).error).toMatch(/Whole Sale Price is below the Best Price 120.00/)
+    expect(checkPrices('150', '90', '', 10000).warn).toMatch(/Best Price is below the cost 100.00/)
   })
 })

@@ -63,7 +63,7 @@ export function medicineValues(f: Pick<Form, 'name' | 'cost' | 'retail' | 'whole
   const cost = money(f.cost, 'Cost Rate')
   const price = money(f.retail, 'Retail Sale Price')
   const whole = money(f.whole, 'Whole sale price')
-  const minPrice = f.minPrice.trim() ? money(f.minPrice, 'Min Selling Price') : undefined
+  const minPrice = f.minPrice.trim() ? money(f.minPrice, 'Best Price') : undefined
   if (price <= 0) throw new Error('PRODUCT: enter the Retail Sale Price')
   const count = (v: string, label: string) => {
     const t = v.trim()
@@ -75,8 +75,8 @@ export function medicineValues(f: Pick<Form, 'name' | 'cost' | 'retail' | 'whole
   const maxStock = count(f.maxStock, 'Max Level')
   if (f.markup.trim() && !(n(f.markup) >= 0)) throw new Error('Markup% must be 0 or more')
   if (f.packSize.trim() && !(n(f.packSize) > 0)) throw new Error('Pack Size must be above 0')
-  if (minPrice !== undefined && price < minPrice) throw new Error(`Retail Sale Price ${c2(price)} is below the Min Selling Price ${c2(minPrice)}`)
-  if (minPrice !== undefined && whole > 0 && whole < minPrice) throw new Error(`Whole sale price ${c2(whole)} is below the Min Selling Price ${c2(minPrice)}`)
+  if (minPrice !== undefined && price < minPrice) throw new Error(`Best Price ${c2(minPrice)} is above the Retail Sale Price ${c2(price)} — the best price is the lowest it may be sold for`)
+  if (minPrice !== undefined && whole > 0 && whole < minPrice) throw new Error(`Whole sale price ${c2(whole)} is below the Best Price ${c2(minPrice)}`)
   if (maxStock !== undefined && maxStock < reorderLevel) throw new Error(`DETAIL: Max Level ${maxStock} is below the Re-order Level ${reorderLevel}`)
   return { cost, price, whole: whole || price, minPrice, reorderLevel, maxStock }
 }
@@ -401,6 +401,17 @@ export function MedicineEntry({ productId, onClose }: { productId?: number; onCl
             <Field label="Retail Sale Price">
               <input className="ma-input" style={{ width: 75, textAlign: 'right' }} value={f.retail} aria-label="Retail Sale Price" onChange={(e) => set({ retail: e.target.value, whole: f.whole === f.retail || n(f.whole) === 0 ? e.target.value : f.whole })} />
             </Field>
+            <Field label="Best Price">
+              <input
+                className="ma-input"
+                style={{ width: 75, textAlign: 'right' }}
+                value={f.minPrice}
+                aria-label="Best Price"
+                placeholder="lowest"
+                title="The lowest price it may be sold for (an amount, not %). Offer the Retail Sale Price first; if the customer complains, sell down to this — never below."
+                onChange={(e) => set({ minPrice: e.target.value })}
+              />
+            </Field>
             <Field label="Whole sale price">
               <input className="ma-input" style={{ width: 75, textAlign: 'right' }} value={f.whole} aria-label="Whole sale price" onChange={(e) => set({ whole: e.target.value })} />
             </Field>
@@ -425,9 +436,6 @@ export function MedicineEntry({ productId, onClose }: { productId?: number; onCl
             <Field label="Barcode">
               <Input value={f.barcode} onChange={(x) => set({ barcode: x.trim() })} width={150} placeholder="Scan or type (blank = code)" />
             </Field>
-            <Field label="Min Selling Price">
-              <input className="ma-input" style={{ width: 90, textAlign: 'right' }} value={f.minPrice} aria-label="Min Selling Price" placeholder="no floor" onChange={(e) => set({ minPrice: e.target.value })} />
-            </Field>
             <Field label="Re-order Level">
               <input className="ma-input" style={{ width: 90, textAlign: 'right' }} value={f.reorder} aria-label="Re-order Level" placeholder="e.g. 10" onChange={(e) => set({ reorder: e.target.value })} />
             </Field>
@@ -444,7 +452,7 @@ export function MedicineEntry({ productId, onClose }: { productId?: number; onCl
             </Field>
           </div>
           <div className="ma-label" style={{ marginTop: 18, marginLeft: 10, fontSize: 10, maxWidth: 620 }}>
-            Min Selling Price: nothing can be sold below it — not by a lower price or any discount. Re-order Level: it shows on the To-Do list when stock falls to this. Max Level: the most to hold; re-orders top up to it.
+            Best Price (PRODUCT tab): the lowest it may be sold for — nothing is sold below it, not by a lower price or any discount. Re-order Level: it shows on the To-Do list when stock falls to this. Max Level: the most to hold; re-orders top up to it.
             Stock is changed by GRNs, sales and Stock Adjust −/+, never typed here.
           </div>
         </div>

@@ -48,7 +48,7 @@ internet or the server is down.
 
 | Table | What it holds | Key relations |
 |---|---|---|
-| `products` | Medicines and services: SKU, barcode, prices, stock, re-order level, maximum level (`max_stock`) and minimum selling price (`min_price`, cents) | `category_id → categories`, `supplier_id → suppliers` |
+| `products` | Medicines and services: SKU, barcode, prices, stock, re-order level, maximum level (`max_stock`) and Best Price — the lowest it may be sold for (`min_price`, cents) | `category_id → categories`, `supplier_id → suppliers` |
 | `stock_movements` | Every stock change: sale, refund, receive, adjust, damage, count, transfer | `product_id → products`, `user_id → users` |
 | `customers` | Customers / debtors and what they owe, with the same Party Master details as suppliers | — |
 | `shifts` | Day shifts: float, counted and expected cash | `user_id → users` |

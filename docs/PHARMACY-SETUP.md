@@ -105,8 +105,8 @@ Pick whichever method suits you:
   **PRODUCT** tab, fill in Product Name, Product Group, UOM, Pack Size,
   Stock/Non-Stock (`S`/`N`), Moleculor Name, Product Type, Preffered
   Supplier, Cost Rate, Markup% (fills the retail price from the cost), Retail
-  Sale Price, Whole sale price and VAT ?. On the **DETAIL** tab, fill in the
-  Barcode, Min Selling Price, Re-order Level and Max Level. Then press
+  Sale Price, **Best Price**, Whole sale price and VAT ?. On the **DETAIL** tab, fill in the
+  Barcode, Re-order Level and Max Level. Then press
   **Save (F2)**.
 - **To change a medicine:** select it in the list and press *Edit* (the
   pencil). With nothing selected, *Edit* opens **Search Medicine**: type part
@@ -118,9 +118,11 @@ Pick whichever method suits you:
 - **Opening stock:** *Modules → STOCK ADJUSTMENTS → Stock Adjust +(DBH)* →
   **+**, choose the type **Opening Stock**, or receive a supplier invoice
   (*Pur/GRN (Direct Invoice)*).
-- **Limits:** for each medicine, set the **Min Selling Price** (nothing is
+- **Limits:** for each medicine, set the **Best Price** (nothing is
   sold below it), the **Re-order Level** and the **Max Level** in
-  *Modules → Medicine* (see [HANDOVER.md](HANDOVER.md)).
+  *Modules → Medicine* (see [HANDOVER.md](HANDOVER.md)). To set the selling
+  and best prices of all medicines at once, use *Modules → STOCK ADJUSTMENTS →
+  Medicine Prices (Best Price)*.
 
 ### 5. Set up the till computer
 

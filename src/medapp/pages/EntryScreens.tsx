@@ -60,6 +60,27 @@ export function DeleteX({ onClick, title }: { onClick: () => void; title: string
 }
 
 /** Plain legacy text box sized for the line grids. */
+/**
+ * Read-only Best Price of a line's medicine (the lowest it may be sold for).
+ * The seller offers the selling price first; if the customer complains, a click
+ * here puts the line on the Best Price.
+ */
+export function BestCell({ product, width, onUse }: { product?: Product; width: number; onUse?: (cents: number) => void }) {
+  const best = product?.minPrice
+  return (
+    <input
+      className="ma-input"
+      readOnly
+      style={{ width, textAlign: 'right', background: best ? '#fff8d6' : '#f4f4f4', cursor: best && onUse ? 'pointer' : undefined }}
+      value={best ? c2(best) : ''}
+      placeholder="—"
+      aria-label="Best Price"
+      title={best ? `Best Price: the lowest ${product?.name ?? 'it'} may be sold for.${onUse ? ' Click to sell at this price.' : ''}` : 'No Best Price set for this medicine'}
+      onClick={() => best && onUse?.(best)}
+    />
+  )
+}
+
 export function Cell({ value, onChange, width, right, readOnly, placeholder, inputRef, onEnter, label }: { value: string; onChange?: (v: string) => void; width: number; right?: boolean; readOnly?: boolean; placeholder?: string; inputRef?: React.Ref<HTMLInputElement>; onEnter?: () => void; label?: string }) {
   return (
     <input
@@ -574,7 +595,7 @@ export function WholesaleEntry({ slug, def, editId, onClose }: { slug: string; d
         return toast(`${unknown.l.name} is not in the medicine list — pick it with the lookup so its stock moves`, 'error')
       }
     }
-    // Nothing is sold (or quoted) below a medicine's minimum selling price. Credit notes give money back: no floor.
+    // Nothing is sold (or quoted) below a medicine's Best Price. Credit notes give money back: no floor.
     if (rule.post >= 0) {
       for (const { l, c } of filled) {
         if (l.productId === undefined) continue
@@ -582,7 +603,7 @@ export function WholesaleEntry({ slug, def, editId, onClose }: { slug: string; d
         const each = (c.qty * c.rate - c.discount) / c.qty
         if (p?.minPrice && each + 0.5 < p.minPrice) {
           setTab('product')
-          return toast(`${p.name} cannot be sold below KES ${(p.minPrice / 100).toFixed(2)} (here ${(each / 100).toFixed(2)} each)`, 'error')
+          return toast(`${p.name} cannot be sold below its Best Price KES ${(p.minPrice / 100).toFixed(2)} (here ${(each / 100).toFixed(2)} each)`, 'error')
         }
       }
     }
@@ -710,7 +731,7 @@ export function WholesaleEntry({ slug, def, editId, onClose }: { slug: string; d
           <table style={{ borderCollapse: 'separate', borderSpacing: '6px 4px' }}>
             <thead>
               <tr>
-                {[['S NO', W.sno], ['Product Name', W.name + 26], ['TOTAL QTY', W.qty], ['Cost Rate', W.cost], ['Sales Rate', W.rate], ['V.A.%', W.vat], ['V.A.T Total', W.vatT], ['Discount', W.disc], ['Total', W.total], ['BATCH', W.batch], ['Expiary Date', W.exp], ['ID', W.id], ['Total Cost', W.tcost], ['', 20]].map(([h, w]) => (
+                {[['S NO', W.sno], ['Product Name', W.name + 26], ['TOTAL QTY', W.qty], ['Cost Rate', W.cost], ['Sales Rate', W.rate], ['Best Price', W.rate], ['V.A.%', W.vat], ['V.A.T Total', W.vatT], ['Discount', W.disc], ['Total', W.total], ['BATCH', W.batch], ['Expiary Date', W.exp], ['ID', W.id], ['Total Cost', W.tcost], ['', 20]].map(([h, w]) => (
                   <th key={String(h) || 'x'} style={{ ...head, width: w as number }}>
                     {h}
                   </th>
@@ -739,6 +760,9 @@ export function WholesaleEntry({ slug, def, editId, onClose }: { slug: string; d
                     <td><Cell value={l.qty} onChange={(v) => setLine(l.key, { qty: v })} width={W.qty} right label="TOTAL QTY" /></td>
                     <td><Cell value={l.cost} onChange={(v) => setLine(l.key, { cost: v })} width={W.cost} right label="Cost Rate" /></td>
                     <td><Cell value={l.rate} onChange={(v) => setLine(l.key, { rate: v })} width={W.rate} right label="Sales Rate" /></td>
+                    <td>
+                      <BestCell product={l.productId !== undefined ? products.find((x) => x.id === l.productId) : undefined} width={W.rate} onUse={rule.post >= 0 ? (b) => setLine(l.key, { rate: c2(b), disc: '0.00' }) : undefined} />
+                    </td>
                     <td><Cell value={l.vat} onChange={(v) => setLine(l.key, { vat: v })} width={W.vat} right label="V.A.%" /></td>
                     <td><Cell value={c2(c.vat)} width={W.vatT} right readOnly label="V.A.T Total" /></td>
                     <td><Cell value={l.disc} onChange={(v) => setLine(l.key, { disc: v })} width={W.disc} right label="Discount" /></td>
@@ -1380,7 +1404,7 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: OtcMode; fromSale?
             <table style={{ borderCollapse: 'separate', borderSpacing: '6px 4px' }}>
               <thead>
                 <tr>
-                  {[['S NO', 30], ['Medicine Name', W.name + 26], ['Type', W.form], ['Instruction', W.instr], ['Qty', W.qty], ['Cost Rate', W.cost], ['Total Cost', W.tcost], ['Selling Price', W.price], ['Disc', W.disc], ['Amount', W.amt], ['Batch No', W.batch], ['Exp Dt', W.exp], ['', 20]].map(([h, w]) => (
+                  {[['S NO', 30], ['Medicine Name', W.name + 26], ['Type', W.form], ['Instruction', W.instr], ['Qty', W.qty], ['Cost Rate', W.cost], ['Total Cost', W.tcost], ['Selling Price', W.price], ['Best Price', W.price], ['Disc', W.disc], ['Amount', W.amt], ['Batch No', W.batch], ['Exp Dt', W.exp], ['', 20]].map(([h, w]) => (
                     <th key={String(h) || 'x'} style={{ ...head, width: w as number }}>
                       {h}
                     </th>
@@ -1414,6 +1438,9 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: OtcMode; fromSale?
                       <td><Cell value={l.cost} onChange={(v) => setLine(l.key, { cost: v })} width={W.cost} right readOnly={readOnlyPrice} label="Cost Rate" /></td>
                       <td><Cell value={c2(c.totalCost)} width={W.tcost} right readOnly label="Total Cost" /></td>
                       <td><Cell value={l.price} onChange={(v) => setLine(l.key, { price: v })} width={W.price} right readOnly={readOnlyPrice} label="Selling Price" /></td>
+                      <td>
+                        <BestCell product={l.productId !== undefined ? products.find((x) => x.id === l.productId) : undefined} width={W.price} onUse={readOnlyPrice ? undefined : (b) => setLine(l.key, { price: c2(b), disc: '0.00' })} />
+                      </td>
                       <td><Cell value={l.disc} onChange={(v) => setLine(l.key, { disc: v })} width={W.disc} right readOnly={readOnlyPrice} label="Disc" /></td>
                       <td><Cell value={c2(c.amount)} width={W.amt} right readOnly label="Amount" /></td>
                       <td><Cell value={l.batch} onChange={(v) => setLine(l.key, { batch: v.toUpperCase() })} width={W.batch} placeholder="Batch no." label="Batch No" /></td>

@@ -441,8 +441,8 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
       if (!p.sku?.trim()) p.sku = await nextMedicineCode()
       if (p.active && toCents(price) <= 0) throw new Error('Set a selling price above zero before activating this medicine')
       const floor = minPrice.trim() ? toCents(minPrice) : undefined
-      if (floor !== undefined && floor < 0) throw new Error('Minimum selling price cannot be negative')
-      if (floor !== undefined && toCents(price) < floor) throw new Error(`Selling price is below the minimum selling price ${(floor / 100).toFixed(2)}`)
+      if (floor !== undefined && floor < 0) throw new Error('Best Price cannot be negative')
+      if (floor !== undefined && toCents(price) < floor) throw new Error(`Best Price ${(floor / 100).toFixed(2)} is above the selling price — the best price is the lowest it may be sold for`)
       if (p.maxStock !== undefined && p.maxStock < (p.reorderLevel ?? 0)) throw new Error('Maximum stock is below the re-order level')
       const clash = await db.products.where('sku').equals(p.sku.trim()).first()
       if (clash && clash.id !== p.id) throw new Error(`SKU ${p.sku} is already used by ${clash.name}`)
@@ -630,8 +630,8 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
             <input className="input" type="number" min={0} placeholder="blank = no limit" value={p.maxStock ?? ''} onChange={(e) => set('maxStock', e.target.value === '' ? (undefined as never) : Number(e.target.value))} />
           </div>
           <div>
-            <label className="label">Minimum selling price</label>
-            <input className="input" inputMode="decimal" placeholder="blank = no floor" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} />
+            <label className="label">Best Price (lowest it may be sold for, KES)</label>
+            <input className="input" inputMode="decimal" placeholder="blank = none" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} />
           </div>
         </div>
       </Section>
