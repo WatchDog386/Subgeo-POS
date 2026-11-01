@@ -261,7 +261,8 @@ export function MedicineEntry({ productId, onClose }: { productId?: number; onCl
         }
         const after = (await db.products.get(pid!))!
         const doc = medicineDocFor(after, await db.docs.where('slug').equals(SLUG).toArray())
-        await saveDoc(SLUG, values, doc?.id, user.id)
+        // Keep what other screens recorded (e.g. Sell By from a supplier invoice).
+        await saveDoc(SLUG, { ...(doc?.values ?? {}), ...values }, doc?.id, user.id)
       })
       toast(`${name} ${current !== undefined ? 'updated' : `saved as ${code}`}`)
       if (jasper)

@@ -1981,3 +1981,32 @@
     border-radius: 1px;
   }
 }
+
+/* "◀ Back" at the start of the tab bar (every page). */
+.ma-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  align-self: flex-end;
+  height: 32px;
+  margin: 0 4px 3px 0;
+  padding: 0 11px;
+  border: 1px solid #a8a8a8;
+  border-radius: 3px;
+  background: linear-gradient(to bottom, #ffffff 0%, #e6e6e6 100%);
+  color: #1b4f8a;
+  font-size: 12px;
+  font-weight: bold;
+  white-space: nowrap;
+}
+.ma-back-btn:hover {
+  background: linear-gradient(to bottom, #ffffff 0%, #d9e9f7 100%);
+}
+@media (max-width: 900px) {
+  .ma-back-btn {
+    height: 34px;
+    margin-bottom: 2px;
+    padding: 0 10px;
+  }
+}

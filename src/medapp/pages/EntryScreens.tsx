@@ -18,6 +18,7 @@ import { toCents } from '../../lib/money'
 import { printReceipt } from '../../lib/printReceipt'
 import { useSession } from '../../session'
 import { useToast } from '../../components/ui'
+import { BACK_EVENT } from '../BackButton'
 import { amt, billNo, dmy, nextDocNo, parseDmy, peekDocNo, useMedDefaults } from '../data'
 import { EyeIcon, MagnifierIcon } from '../icons'
 import { Btn, Check, DateField, Dialog, Grid, IBtn, Input, PickList, Rows, SearchBar, Select, type Col } from '../ui'
@@ -160,8 +161,17 @@ export function useEntryKeys(keys: { save: () => void; back: () => void; newRow?
         ref.current.newRow()
       }
     }
+    // The "◀ Back" button of the tab bar: leave this screen, not the page.
+    const b = (e: Event) => {
+      e.preventDefault()
+      ref.current.back()
+    }
     window.addEventListener('keydown', k)
-    return () => window.removeEventListener('keydown', k)
+    window.addEventListener(BACK_EVENT, b)
+    return () => {
+      window.removeEventListener('keydown', k)
+      window.removeEventListener(BACK_EVENT, b)
+    }
   }, [])
 }
 

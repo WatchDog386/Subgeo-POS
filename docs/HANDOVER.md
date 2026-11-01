@@ -30,6 +30,10 @@
    Both are also on *Home → Quick Access*. Each one is filed with its number, and the stock ledger records why.
 5. **Purchase** sees the stock after the sales in *Modules → Medicine* (column *Qty In Stock*), and *Home → To-Do List* shows what has run out.
 
+## Back button
+
+Every page has **◀ Back** at the start of the tab bar. It closes an open pop-up first (a pop-up also has its own ◀ Back), leaves an entry screen to its list (like *Back (F3)*), and otherwise goes to the previous page, or to Home.
+
 ## Screen sizes
 
 The POS fits any desktop monitor, including 1024×768, 1280×1024, 1366×768, 1920×1080 and larger, and Windows display scaling of 125% or 150%. Nothing is cut off; long tables scroll inside their own box.

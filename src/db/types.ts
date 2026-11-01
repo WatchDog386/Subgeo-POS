@@ -346,6 +346,10 @@ export interface DocLine {
   retail?: number
   /** Best Price set on this line (cents): the lowest the medicine may be sold for. */
   best?: number
+  /** Supplier invoice in packs: packs received, pieces per pack, pieces sold at a time (qty = packs × perPack ÷ sellBy). */
+  packs?: number
+  perPack?: number
+  sellBy?: number
   /** Stock adjustments: the type of adjustment, e.g. EXPIRY, OPENING STOCK. */
   reason?: string
 }

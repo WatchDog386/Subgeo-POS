@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import './medapp.css'
 import { MenuBackdrop, MenuButton, MenuHead, useSideMenu } from './mobile'
+import { BackButton } from './BackButton'
 import { useSession } from '../session'
 import { APP_VERSION, useMedDefaults } from './data'
 import {
@@ -239,6 +240,7 @@ export default function AdminApp() {
         <div className="ma-main">
           <nav className="ma-tabs ma-noprint">
             {tab !== 'home' && tab !== 'charts' && <MenuButton open={menuOpen} onToggle={() => setMenuOpen(!menuOpen)} label="Menu" />}
+            <BackButton />
             {TABS.map((t) => (
               <Link key={t.tab} to={`/${t.tab}`} className={`ma-tab${tab === t.tab ? ' is-active' : ''}`}>
                 {t.icon}

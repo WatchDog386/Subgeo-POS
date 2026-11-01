@@ -241,15 +241,35 @@ Instead of typing a delivery line by line, as the PURCHASE account:
    then by name. Matches show in green; anything else shows as **NEW
    MEDICINE**. To match a line to an existing medicine with a different
    name, type that medicine's name in *Medicine in stock*.
-4. New medicines need a selling price. Type one per line, or set
-   **Markup % for new** (e.g. `33`) to price them all at cost + 33%, rounded up
-   to the shilling. Tick **VAT** for new medicines that carry VAT.
-5. Untick anything that did not arrive, fix a quantity if the delivery was
-   short, then press **Receive … line(s) into stock**.
+4. **Packs and pieces.** Qty and Pack Cost are as on the invoice (packs or boxes).
+   On each line, check:
+   - **Pcs/Pack:** read from the description where it says e.g. `100S`, `30'S`,
+     `10X10`, `PACK OF 3` (shaded when read; volumes like `60ML` are ignored).
+     Type it if it is wrong.
+   - **Sell By:** *Each (1)*, *Pair (2)*, … or *Whole pack*.
+   - **Units** = Qty × Pcs/Pack ÷ Sell By: this is what goes into stock.
+   - **Cost of 1** = Pack Cost ÷ units in a pack: the cost of one unit, so you
+     know what to charge.
+
+   Example: 2 packs of 100 tablets at 315.00, sold each, gives 200 units at
+   3.15. Face masks, 50 per pack at 135.00, sold in pairs, give 25 units at
+   5.40 a pair. The medicine remembers its pack size and Sell By for its
+   next invoice.
+5. **Selling Price and Best Price** are per unit. A blank Selling Price keeps
+   the medicine's current price; for a new medicine it is Cost of 1 +
+   **Markup % for new**. **Best Price** is the lowest a unit may be sold for
+   (KES, not %). It can't be above the Selling Price, and the lines warn if
+   either is below the Cost of 1. Tick **VAT** for new medicines that carry VAT.
+6. **Medicines counted per pack before.** The first time such a medicine comes in by
+   the piece, *In stock* shows e.g. `2 → 200` with **convert old stock**
+   ticked. Its old packs become units and its old prices are divided down to
+   one unit. Untick it if the old stock was already counted in pieces.
+7. Untick anything that did not arrive, fix a quantity if the delivery was
+   short, then press **Receive … line(s) into stock**. **◀ Back** leaves
+   without receiving.
 
 One Pur/GRN (Direct Invoice) is filed with the PDF attached. Stock goes up by
-each quantity, and the cost price becomes the invoice's unit cost; existing
-selling prices are kept, with a ⚠ where one is now below cost. The supplier
+each line's Units, and the cost price becomes its Cost of 1. The supplier
 is added to the Party Master if it is new. Uploading the same supplier and
 invoice number twice asks before adding the stock again.
 

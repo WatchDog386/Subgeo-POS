@@ -4,6 +4,7 @@
 // place. The seller offers the Selling Price first; if the customer complains
 // they may come down to the Best Price, never below (enforced on every sale).
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
 import type { DocRecord, Product } from '../../db/types'
@@ -37,6 +38,7 @@ export function checkPrices(price: string, best: string, whole: string, cost: nu
 
 export default function PriceTable() {
   const toast = useToast()
+  const nav = useNavigate()
   const { user, branch } = useSession()
   const products = useLiveQuery(async () => (await db.products.filter((p) => !/^SRV-/i.test(p.sku)).toArray()).sort((a, b) => a.name.localeCompare(b.name)), [], undefined)
   const docs = useLiveQuery(() => db.docs.where('slug').equals('medicine').toArray(), [], [] as DocRecord[])
@@ -111,7 +113,14 @@ export default function PriceTable() {
     setEdits(new Map())
     setOnlyChanged(false)
   }
-  useEntryKeys({ save: () => void save(), back: discard })
+  // Back (F3 or ◀ Back): leave the page, asking first when prices are unsaved.
+  const leave = () => {
+    if (changed.length && !confirm(`Leave without saving ${changed.length} price change(s)?`)) return
+    const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0
+    if (idx > 0) nav(-1)
+    else nav('/modules/medicine')
+  }
+  useEntryKeys({ save: () => void save(), back: leave })
 
   const W = { sno: 34, code: 110, name: 270, cost: 75, stock: 60, price: 90 }
   const cell = (r: Row, k: 'price' | 'best' | 'whole', label: string) => (

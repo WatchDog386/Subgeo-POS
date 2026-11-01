@@ -160,3 +160,62 @@ describe('Best Price from an uploaded invoice', () => {
     expect((await m.db.db.products.where('sku').equals('N1').first())!.minPrice).toBe(250)
   })
 })
+
+describe('packs on supplier invoices', () => {
+  it('reads pieces per pack from the description, not volumes or strengths', async () => {
+    const { packSizeFrom } = await import('../medapp/pages/InvoiceImport')
+    expect(packSizeFrom('SURGICAL FACE MASK (50S) - AKSHAR BLUE')).toBe(50)
+    expect(packSizeFrom("BECOACTIN TABLETS (30'S)")).toBe(30)
+    expect(packSizeFrom('AGYCIN 500MG TABLETS (3S) AZITHROMYCIN')).toBe(3)
+    expect(packSizeFrom('PANADOL 10X10')).toBe(100)
+    expect(packSizeFrom('GLOVES PACK OF 100')).toBe(100)
+    expect(packSizeFrom('AMOXIL 500MG 100 CAPS')).toBe(100)
+    expect(packSizeFrom('CALPOL SUSPENSION (60ML)')).toBe(1)
+    expect(packSizeFrom('HEMOFORCE FAMILY SYRUP 200ML')).toBe(1)
+    expect(packSizeFrom('ABZ TABLETS (1S)')).toBe(1)
+  })
+  it('units = packs × pcs ÷ sell-by; cost of 1 = pack cost ÷ units in a pack', async () => {
+    const { lineUnits, sellByChoices } = await import('../medapp/pages/InvoiceImport')
+    expect(lineUnits(2, 100, 1, 31500)).toEqual({ units: 200, unitCost: 315 })
+    expect(lineUnits(3, 10, 2, 1000)).toEqual({ units: 15, unitCost: 200 })
+    expect(lineUnits(4, 30, 30, 12000)).toEqual({ units: 4, unitCost: 12000 })
+    expect(lineUnits(5, 1, 1, 24900)).toEqual({ units: 5, unitCost: 24900 })
+    expect(lineUnits(1, 15, 2, 100).error).toMatch(/Sell By must divide/)
+    expect(lineUnits(0, 10, 1, 100).error).toMatch(/Qty/)
+    expect(lineUnits(1, 0, 1, 100).error).toMatch(/Pcs\/Pack/)
+    expect(sellByChoices(10).map((c) => c.value)).toEqual([1, 2, 5, 10])
+    expect(sellByChoices(3).map((c) => c.value)).toEqual([1, 3])
+    expect(sellByChoices(1).map((c) => c.value)).toEqual([1])
+  })
+  it('receives pieces at the cost of one and remembers the pack size', async () => {
+    vi.resetModules()
+    await Dexie.delete('subgeo-pos')
+    const m = { db: await import('../db/db'), imp: await import('../medapp/pages/InvoiceImport') }
+    const id = (await m.db.db.products.add({ sku: 'I00046', name: 'ACTION TABLETS (100S)', fitment: [], cost: 31500, price: 40000, stock: 0, reorderLevel: 0, taxable: false, serialized: false, trackStock: true, active: true, createdAt: 1, updatedAt: 1 })) as number
+    const r = await m.imp.receiveInvoice({
+      lines: [{ name: 'ACTION TABLETS (100S)', qty: 200, costCents: 315, priceCents: 500, bestCents: 400, productId: id, vat: false, packs: 2, perPack: 100, sellBy: 1, packCostCents: 31500 }],
+      vendor: 'VICTORIA', invoiceNo: '9', totalCents: 63000, expense: '', receivedBy: 'p',
+    })
+    const p = (await m.db.db.products.get(id))!
+    expect([p.stock, p.cost, p.price, p.minPrice]).toEqual([200, 315, 500, 400])
+    const doc = (await m.db.db.docs.get(r.docId))!
+    expect(doc.lines?.[0]).toMatchObject({ qty: 200, cost: 315, total: 63000, packs: 2, perPack: 100, sellBy: 1 })
+    const med = (await m.db.db.docs.where('slug').equals('medicine').toArray())[0]
+    expect(med.values).toMatchObject({ docNo: 'I00046', packSize: '100', sellBy: '1' })
+  })
+})
+
+describe('old per-pack stock', () => {
+  it('is converted to units, with its prices per unit, before the delivery is added', async () => {
+    vi.resetModules()
+    await Dexie.delete('subgeo-pos')
+    const m = { db: await import('../db/db'), imp: await import('../medapp/pages/InvoiceImport') }
+    const id = (await m.db.db.products.add({ sku: 'I00046', name: 'ACTION TABLETS (100S)', fitment: [], cost: 31500, price: 41900, minPrice: 40000, stock: 2, reorderLevel: 0, taxable: false, serialized: false, trackStock: true, active: true, createdAt: 1, updatedAt: 1 })) as number
+    await m.imp.receiveInvoice({
+      lines: [{ name: 'ACTION TABLETS (100S)', qty: 100, costCents: 315, productId: id, vat: false, packs: 1, perPack: 100, sellBy: 1, packCostCents: 31500, convertFactor: 100 }],
+      vendor: 'V', invoiceNo: '10', totalCents: 31500, expense: '', receivedBy: 'p',
+    })
+    const p = (await m.db.db.products.get(id))!
+    expect([p.stock, p.price, p.minPrice, p.cost]).toEqual([300, 419, 400, 315])
+  })
+})
