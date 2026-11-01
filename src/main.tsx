@@ -7,8 +7,10 @@ import { seedIfEmpty } from './db/seed'
 import { SessionProvider } from './session'
 import { ToastProvider } from './components/ui'
 import { initAutoFullscreen } from './lib/fullscreen'
+import { preventIosInputZoom } from './medapp/mobile'
 
 initAutoFullscreen()
+preventIosInputZoom()
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {

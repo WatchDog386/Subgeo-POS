@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import './medapp.css'
+import { MenuBackdrop, MenuButton, MenuHead, useSideMenu } from './mobile'
 import { useSession } from '../session'
 import { APP_VERSION, useMedDefaults } from './data'
 import type { MenuGroup } from './nav'
@@ -79,6 +80,8 @@ export default function MedApp() {
   const nav = useNavigate()
   const path = useLocation().pathname
   const tab = tabOf(path)
+  // Phones: the sidebar is a slide-in menu (opens by itself on the bare Modules page).
+  const [menuOpen, setMenuOpen] = useSideMenu(path, ['/modules'])
   const [sideW, setSideW] = useState(254)
   const drag = useRef<{ x: number; w: number } | null>(null)
   // The purchases dashboard has its own modules menu; every other role sees the
@@ -139,7 +142,9 @@ export default function MedApp() {
       <div className="ma-body" style={tab === 'home' ? { paddingLeft: 10 } : undefined}>
         {tab !== 'home' && (
           <>
-            <aside className="ma-side" style={{ width: sideW }}>
+            <MenuBackdrop open={menuOpen} onClose={() => setMenuOpen(false)} />
+            <aside className={`ma-side${menuOpen ? ' is-open' : ''}`} style={{ width: sideW }}>
+              <MenuHead label={TABS.find((t) => t.tab === tab)?.label ?? 'Menu'} onClose={() => setMenuOpen(false)} />
               <Sidebar tab={tab} path={path} moduleGroups={moduleGroups} />
             </aside>
             <div
@@ -157,6 +162,7 @@ export default function MedApp() {
 
         <div className="ma-main">
           <nav className="ma-tabs ma-noprint">
+            {tab !== 'home' && <MenuButton open={menuOpen} onToggle={() => setMenuOpen(!menuOpen)} label="Menu" />}
             {TABS.map((t) => (
               <Link
                 key={t.tab}

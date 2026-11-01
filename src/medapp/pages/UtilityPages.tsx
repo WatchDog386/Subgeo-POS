@@ -1280,7 +1280,7 @@ function DataManagement() {
           <Btn style={{ width: 86 }} onClick={() => setTab('import')}>Import</Btn>
         </div>
         {tab === 'backup' && (
-          <div className="ma-form" style={{ gridTemplateColumns: '120px 240px 80px' }}>
+          <div className="ma-form ma-form-keep" style={{ gridTemplateColumns: '120px 240px 80px' }}>
             <L bold>Company Name</L>
             <span>
               <LookupField value={company} onChange={setCompany} options={[shopName.toUpperCase()]} width={220} title="Company" />

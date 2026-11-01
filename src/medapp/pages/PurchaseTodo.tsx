@@ -205,7 +205,7 @@ function TodoList({ onPick }: { onPick: (id: string) => void }) {
   const rows = all.filter((r) => (!kind || r.kind === kind) && matches(q, r.kind, r.doc, r.task, r.assigner, r.assignee, r.status))
   return (
     <div style={{ display: 'flex', padding: '28px 0 12px 18px', gap: 22 }}>
-      <div style={{ width: 773, flex: '0 0 auto' }}>
+      <div className="ma-fluid" style={{ width: 773, flex: '0 0 auto' }}>
         <Select
           value={kind}
           onChange={setKind}

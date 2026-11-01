@@ -30,6 +30,17 @@
    Both are also on *Home → Quick Access*. Each one is filed with its number, and the stock ledger records why.
 5. **Purchase** sees the stock after the sales in *Modules → Medicine* (column *Qty In Stock*), and *Home → To-Do List* shows what has run out.
 
+## Using it on a phone
+
+Open `https://pos.subgeoholding.com` on the phone's browser (Chrome or Safari) and sign in as usual. On screens up to 900px wide (phones, and tablets held upright), the layout changes for touch. Desktop computers and tills keep the same layout as before.
+
+- **☰ Menu** (first button on the tab bar) opens the side menu (module groups, reports, utilities). Tap a page or the dark area to close it. Opening *Modules* shows the menu straight away.
+- **Admin header:** the **Chemist** switch has its own row, and the tool icons scroll sideways.
+- **Tables** scroll sideways inside their box. **Double-tap** a row to open it, like a double click.
+- **Forms** show one label and one field per line. Pop-up windows fill the width of the screen.
+- **Fullscreen:** the phone never switches to fullscreen on the first tap (the tills still do). The *Full screen* icon still works.
+- To put an icon on the home screen: in Chrome use *⋮ → Add to Home screen*; in Safari use *Share → Add to Home Screen*.
+
 ## Stock limits and the minimum selling price
 
 Set these for each medicine in *Modules → Medicine* (select it → edit), or on the *Inventory* screen:

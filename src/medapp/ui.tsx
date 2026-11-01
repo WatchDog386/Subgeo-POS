@@ -446,6 +446,24 @@ export function Grid({
   const rowH = compact ? 23 : 28
   const fill = Math.max(0, (minRows ?? (height ? Math.ceil((height - 34) / rowH) : 0)) - rows.length)
   const total = cols.reduce((s, c) => s + c.width, 0) + (checkbox ? 20 : 0)
+  // Phones: a double tap opens the row, like a double click with the mouse.
+  const lastTap = useRef<{ id: string | number; t: number } | null>(null)
+  const moved = useRef(false)
+  const tapped = (e: React.TouchEvent, id: string | number) => {
+    if (!onOpen || e.changedTouches.length !== 1) return
+    if (moved.current) {
+      lastTap.current = null // a swipe to scroll, not a tap
+      return
+    }
+    const now = Date.now()
+    const prev = lastTap.current
+    if (prev && prev.id === id && now - prev.t < 400) {
+      lastTap.current = null
+      e.preventDefault() // no synthetic click / dblclick after this
+      onSelect?.(id)
+      onOpen(id)
+    } else lastTap.current = { id, t: now }
+  }
   return (
     <div className={`ma-grid${compact ? ' is-compact' : ''}`} style={{ height, width, ...style }}>
       <table style={{ width: fillWidth ? '100%' : total, minWidth: total }}>
@@ -472,6 +490,9 @@ export function Grid({
               className={`is-data${selected === r.id ? ' is-selected' : ''}`}
               onClick={() => onSelect?.(r.id)}
               onDoubleClick={() => onOpen?.(r.id)}
+              onTouchStart={() => (moved.current = false)}
+              onTouchMove={() => (moved.current = true)}
+              onTouchEnd={(e) => tapped(e, r.id)}
             >
               {checkbox && (
                 <td className="chk">

@@ -28,6 +28,9 @@ export function enterFullscreen() {
  */
 export function initAutoFullscreen() {
   if (fullscreenPref() === 'off' || document.fullscreenElement) return
+  // Phones (e.g. the admin checking in from a mobile): never take over the
+  // screen on the first tap. The header button still works.
+  if (window.matchMedia?.('(max-width: 900px)').matches) return
   const once = () => {
     if (fullscreenPref() === 'off' || document.fullscreenElement) return
     enterFullscreen()

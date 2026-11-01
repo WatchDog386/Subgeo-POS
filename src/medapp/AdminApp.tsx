@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import './medapp.css'
+import { MenuBackdrop, MenuButton, MenuHead, useSideMenu } from './mobile'
 import { useSession } from '../session'
 import { APP_VERSION, useMedDefaults } from './data'
 import {
@@ -121,6 +122,8 @@ export default function AdminApp() {
   const nav = useNavigate()
   const path = useLocation().pathname
   const tab = tabOf(path)
+  // Phones: the sidebar is a slide-in menu (opens by itself on the bare Modules page).
+  const [menuOpen, setMenuOpen] = useSideMenu(path, ['/modules'])
   const [sideW, setSideW] = useState(254)
   const drag = useRef<{ x: number; w: number } | null>(null)
 
@@ -216,7 +219,9 @@ export default function AdminApp() {
       <div className="ma-body" style={tab === 'home' || tab === 'charts' ? { paddingLeft: 10 } : undefined}>
         {tab !== 'home' && tab !== 'charts' && (
           <>
-            <aside className="ma-side" style={{ width: sideW }}>
+            <MenuBackdrop open={menuOpen} onClose={() => setMenuOpen(false)} />
+            <aside className={`ma-side${menuOpen ? ' is-open' : ''}`} style={{ width: sideW }}>
+              <MenuHead label={TABS.find((t) => t.tab === tab)?.label ?? 'Menu'} onClose={() => setMenuOpen(false)} />
               <Sidebar tab={tab} path={path} groups={groups} />
             </aside>
             <div
@@ -233,6 +238,7 @@ export default function AdminApp() {
         )}
         <div className="ma-main">
           <nav className="ma-tabs ma-noprint">
+            {tab !== 'home' && tab !== 'charts' && <MenuButton open={menuOpen} onToggle={() => setMenuOpen(!menuOpen)} label="Menu" />}
             {TABS.map((t) => (
               <Link key={t.tab} to={`/${t.tab}`} className={`ma-tab${tab === t.tab ? ' is-active' : ''}`}>
                 {t.icon}
