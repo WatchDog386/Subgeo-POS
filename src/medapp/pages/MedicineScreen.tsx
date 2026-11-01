@@ -483,11 +483,44 @@ export function MedicineEntry({ productId, onClose }: { productId?: number; onCl
           }}
         />
       )}
-      {pick === 'group' && <PickList title="Product Group" options={groups} onClose={() => setPick(null)} onPick={(x) => (set({ group: x }), setPick(null))} />}
+      {pick === 'group' && (
+        <PickList
+          title="Product Group"
+          options={groups}
+          addLabel="product group"
+          onAdd={async (name) => {
+            // A new group is saved straight away (shared by every chemist), then picked.
+            if (!(await db.categories.toArray()).some((c) => c.name.toUpperCase() === name)) await db.categories.add({ name, color: '#607d8b' })
+            set({ group: name })
+            setPick(null)
+            toast(`Product group ${name} added`)
+          }}
+          onClose={() => setPick(null)}
+          onPick={(x) => (set({ group: x }), setPick(null))}
+        />
+      )}
       {pick === 'type' && <PickList title="Stock/Non-Stock" options={['S', 'N']} onClose={() => setPick(null)} onPick={(x) => (set({ type: x }), setPick(null))} />}
-      {pick === 'molecular' && <PickList title="MOLECULOR NAME" options={moleculars} onClose={() => setPick(null)} onPick={(x) => (set({ molecular: x }), setPick(null))} />}
-      {pick === 'productType' && <PickList title="Product Type" options={productTypes} onClose={() => setPick(null)} onPick={(x) => (set({ productType: x }), setPick(null))} />}
-      {pick === 'supplier' && <PickList title="Preffered Supplier" options={suppliers.map((s) => s.name.toUpperCase())} onClose={() => setPick(null)} onPick={(x) => (set({ supplier: x }), setPick(null))} />}
+      {pick === 'molecular' && (
+        <PickList title="MOLECULOR NAME" options={moleculars} addLabel="molecular name" onAdd={(x) => (set({ molecular: x }), setPick(null))} onClose={() => setPick(null)} onPick={(x) => (set({ molecular: x }), setPick(null))} />
+      )}
+      {pick === 'productType' && (
+        <PickList title="Product Type" options={productTypes} addLabel="product type" onAdd={(x) => (set({ productType: x }), setPick(null))} onClose={() => setPick(null)} onPick={(x) => (set({ productType: x }), setPick(null))} />
+      )}
+      {pick === 'supplier' && (
+        <PickList
+          title="Preffered Supplier"
+          options={suppliers.map((s) => s.name.toUpperCase())}
+          addLabel="supplier"
+          onAdd={async (name) => {
+            if (!(await db.suppliers.toArray()).some((x) => x.name.toUpperCase() === name)) await db.suppliers.add({ name, notes: 'Added from the Medicine form' } as Supplier)
+            set({ supplier: name })
+            setPick(null)
+            toast(`Supplier ${name} added to Party Master`)
+          }}
+          onClose={() => setPick(null)}
+          onPick={(x) => (set({ supplier: x }), setPick(null))}
+        />
+      )}
     </div>
   )
 }

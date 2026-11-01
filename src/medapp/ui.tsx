@@ -300,19 +300,57 @@ export function PickList({
   options,
   onPick,
   onClose,
+  onAdd,
+  addLabel,
 }: {
   title: string
   options: string[]
   onPick: (v: string) => void
   onClose: () => void
+  /** Offer an Add button: called with the typed text (upper-cased) when it isn't in the list. */
+  onAdd?: (v: string) => void | Promise<void>
+  /** e.g. "group" → "Add new group". */
+  addLabel?: string
 }) {
   const [q, setQ] = useState('')
   const list = options.filter((o) => o.toLowerCase().includes(q.toLowerCase()))
+  const typed = q.trim().toUpperCase()
+  const exact = options.find((o) => o.trim().toUpperCase() === typed)
+  const canAdd = !!onAdd && !!typed && !exact
+  const add = () => {
+    if (!onAdd) return
+    if (!typed) return
+    if (exact) return onPick(exact)
+    void onAdd(typed)
+  }
   return (
     <Dialog title={title} onClose={onClose}>
-      <SearchBar value={q} onChange={setQ} width={300} autoFocus />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <SearchBar value={q} onChange={setQ} width={300} autoFocus onEnter={() => (list.length === 1 ? onPick(list[0]) : exact ? onPick(exact) : canAdd ? add() : undefined)} />
+        {onAdd && (
+          <button
+            type="button"
+            className="ma-ibtn"
+            title={typed ? (exact ? `${exact} is already in the list` : `Add "${typed}" as a new ${addLabel ?? 'entry'}`) : `Type the new ${addLabel ?? 'entry'} in the search box, then press Add`}
+            aria-label={`Add new ${addLabel ?? 'entry'}`}
+            disabled={!canAdd}
+            onClick={add}
+            style={{ opacity: canAdd ? 1 : 0.45 }}
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden>
+              <circle cx="9" cy="9" r="8" fill="#43a047" />
+              <path d="M9 4.5v9M4.5 9h9" stroke="#fff" strokeWidth="2.2" />
+            </svg>
+          </button>
+        )}
+      </div>
       <div className="ma-listbox" style={{ height: 260, width: 300, marginTop: 6 }}>
-        {list.length === 0 && <div className="li" style={{ color: '#888', cursor: 'default' }}>No records</div>}
+        {list.length === 0 && !canAdd && <div className="li" style={{ color: '#888', cursor: 'default' }}>{onAdd ? `No records — type a new ${addLabel ?? 'entry'} above and press +` : 'No records'}</div>}
+        {canAdd && (
+          <div className="li" style={{ color: '#2e7d32', fontWeight: 'bold' }} onClick={add} title="Add it to the list">
+            + Add &quot;{typed}&quot; as a new {addLabel ?? 'entry'}
+          </div>
+        )}
         {list.map((o) => (
           <div key={o} className="li" onDoubleClick={() => onPick(o)} onClick={() => onPick(o)}>
             {o}
