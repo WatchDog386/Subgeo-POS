@@ -179,6 +179,19 @@ Pick whichever method suits you:
 - **Relational tables:** they can always be rebuilt from the synced records
   with `npm run db:rebuild`.
 
+## Clearing a chemist's stock to key it in again
+
+On the server (replace `12` with the chemist's number; HQ is `100`):
+
+```bash
+cd ~/Subgeo-POS && npm run stock:reset -- 12
+```
+This only shows what would be deleted. To delete it:
+```bash
+cd ~/Subgeo-POS && npm run stock:reset -- 12 --yes
+```
+It saves a backup in `backups/` first. It then deletes that chemist's medicines (services are kept), its stock history, and its Pur/GRN, STEP 3 GRN, Stock Adjust and Medicine-form records. Sales, customers, shifts, indents and LPOs are kept. The chemist's tills drop the old stock on their next sync. Run it when that chemist is not selling.
+
 ## When something looks wrong
 
 | Problem | Fix |

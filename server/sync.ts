@@ -664,3 +664,81 @@ export function setupSubgeoChemists(count = 12): string[] {
   })()
   return out
 }
+
+/* ── Clear one chemist's stock so it can be keyed in afresh ─────────────── */
+
+/** Document registers that hold stock (receipts, adjustments, the Medicine form). */
+export const STOCK_DOC_SLUGS = ['pur-grn-direct-invoice', 'pur-inv-grn', 'stock-adjust-minus', 'stock-adjust-plus', 'medicine'] as const
+
+export type StockResetPlan = {
+  branchId: number
+  code: string
+  name: string
+  medicines: number
+  services: number
+  movements: number
+  docs: Record<string, number>
+  total: number
+}
+
+type LiveRow = { tbl: string; id: string; data: string }
+
+function stockRowsOf(branchId: number): { plan: Omit<StockResetPlan, 'branchId' | 'code' | 'name'>; rows: LiveRow[] } {
+  const live = sql
+    .prepare("SELECT tbl, id, data FROM sync_records WHERE scope = ? AND deleted = 0 AND tbl IN ('products', 'movements', 'docs')")
+    .all(branchId) as LiveRow[]
+  const rows: LiveRow[] = []
+  const docs: Record<string, number> = Object.fromEntries(STOCK_DOC_SLUGS.map((s) => [s, 0]))
+  let medicines = 0
+  let services = 0
+  let movements = 0
+  for (const r of live) {
+    const d = JSON.parse(r.data) as Rec
+    if (r.tbl === 'products') {
+      // Services (Services Master, SKU "SRV-…") are not stock: keep them.
+      if (/^SRV-/i.test(String(d.sku ?? ''))) {
+        services++
+        continue
+      }
+      medicines++
+    } else if (r.tbl === 'movements') movements++
+    else {
+      const slug = String(d.slug ?? '')
+      if (!(slug in docs)) continue
+      docs[slug]++
+    }
+    rows.push(r)
+  }
+  return { plan: { medicines, services, movements, docs, total: rows.length }, rows }
+}
+
+/** Find a chemist by its number (12 = SUBGEO12, 100 = HQ). */
+export function chemistByNumber(n: number): { id: number; code: string; name: string } | undefined {
+  for (const r of sql.prepare("SELECT id, data FROM sync_records WHERE tbl = 'branches' AND scope = 0 AND deleted = 0").all() as { id: string; data: string }[]) {
+    const b = JSON.parse(r.data) as Rec
+    if (Number(b.number) === n) return { id: Number(r.id), code: chemCode(n), name: String(b.name ?? '') }
+  }
+  return undefined
+}
+
+/** What resetChemistStock would delete (nothing is changed). */
+export function planStockReset(branchId: number, code: string, name: string): StockResetPlan {
+  return { branchId, code, name, ...stockRowsOf(branchId).plan }
+}
+
+/**
+ * Delete every medicine of one chemist, with its stock history and stock
+ * documents. Each record is deleted exactly as a till would delete it, so every
+ * till removes it too on its next sync. Sales, customers, shifts, indents and
+ * LPOs stay (their lines keep the medicine name; the link is cleared).
+ */
+export function resetChemistStock(branchId: number): number {
+  const { rows } = stockRowsOf(branchId)
+  const now = Date.now()
+  // Documents and movements first, then the medicines they point at.
+  const order = (t: string) => (t === 'products' ? 1 : 0)
+  sql.transaction(() => {
+    for (const r of [...rows].sort((a, b) => order(a.tbl) - order(b.tbl))) writeRow(r.tbl, branchId, r.id, null, now, null)
+  })()
+  return rows.length
+}

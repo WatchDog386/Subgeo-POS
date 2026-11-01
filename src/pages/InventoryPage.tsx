@@ -3,7 +3,7 @@ import type { ComponentType, ReactNode } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useSearchParams } from 'react-router-dom'
 import { Download, FileText, History, Package, Pencil, Plus, Printer, Search, SlidersHorizontal, Tag, Trash2, Upload } from 'lucide-react'
-import { db } from '../db/db'
+import { clearSynced, db } from '../db/db'
 import { useSettings } from '../db/settings'
 import { adjustStock } from '../db/sales'
 import type { Product } from '../db/types'
@@ -70,8 +70,9 @@ export default function InventoryPage() {
 
   const clearAllInventory = async () => {
     if (!confirm('Are you sure you want to delete ALL medicines from stock? This cannot be undone.')) return
-    // Each delete is uploaded too, so the chemist's medicines go from the server as well.
-    await db.products.clear()
+    // One by one (not Table.clear(), which skips the sync hooks), so every delete is
+    // uploaded and the medicines go from the server and the chemist's other tills too.
+    await clearSynced(db.products)
     toast('All medicines deleted from stock')
     setQ('')
     setCat('all')
