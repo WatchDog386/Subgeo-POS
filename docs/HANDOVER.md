@@ -30,6 +30,18 @@
    Both are also on *Home → Quick Access*. Each one is filed with its number, and the stock ledger records why.
 5. **Purchase** sees the stock after the sales in *Modules → Medicine* (column *Qty In Stock*), and *Home → To-Do List* shows what has run out.
 
+## Screen sizes
+
+The POS fits any desktop monitor, including 1024×768, 1280×1024, 1366×768, 1920×1080 and larger, and Windows display scaling of 125% or 150%. Nothing is cut off; long tables scroll inside their own box.
+
+- **1501px wide and up:** the full layout.
+- **1280–1500px:** the admin header is tighter, without the EMR-lite logo.
+- **1100–1279px:** the admin tool icons move to a second header row, and the side menu is a little narrower.
+- **901–1099px** (a 1024 monitor, or 1366 at 125%): the side menu opens from **☰ Menu** on the tab bar, so the work area uses the whole width.
+- **900px and below:** the phone layout (below).
+
+If a till still looks cut after an update, press Ctrl+Shift+R, then check the browser zoom is 100% (Ctrl+0).
+
 ## Using it on a phone
 
 Open `https://pos.subgeoholding.com` on the phone's browser (Chrome or Safari) and sign in as usual. On screens up to 900px wide (phones, and tablets held upright), the layout changes for touch. Desktop computers and tills keep the same layout as before.

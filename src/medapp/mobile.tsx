@@ -11,6 +11,9 @@ export function isMobile(): boolean {
   return typeof window !== 'undefined' && !!window.matchMedia?.(MOBILE_QUERY).matches
 }
 
+/** Widths where the sidebar is a slide-in menu (phones and small desktop monitors). */
+export const DRAWER_QUERY = '(max-width: 1099px)'
+
 /**
  * The sidebar becomes a slide-in menu on phones. It closes whenever the page
  * changes, and opens by itself on a bare section (e.g. /modules) so the user
@@ -19,7 +22,7 @@ export function isMobile(): boolean {
 export function useSideMenu(path: string, autoOpenOn: string[]): [boolean, (open: boolean) => void] {
   const [open, setOpen] = useState(false)
   useEffect(() => {
-    setOpen(isMobile() && autoOpenOn.includes(path))
+    setOpen(typeof window !== 'undefined' && !!window.matchMedia?.(DRAWER_QUERY).matches && autoOpenOn.includes(path))
   }, [path]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!open) return

@@ -1811,3 +1811,173 @@
     padding-top: 3vh;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Desktop monitors of every size (≥ 901px). Wider than 1500px: unchanged.
+ * Narrower monitors (1366 / 1280 / 1024, or 125–150% Windows scaling) used to
+ * cut off the right of the header and of the screen; these bands fit it in.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/* 1280–1500px: the admin header fits on one row. */
+@media (min-width: 1280px) and (max-width: 1500px) {
+  .ma-admin .ma-welcome {
+    margin-left: 120px;
+  }
+  .ma-admin .ma-brand {
+    margin-left: 30px;
+  }
+  .ma-admin .ma-header-tools {
+    gap: 4px;
+  }
+  .ma-admin .ma-emr {
+    display: none;
+  }
+}
+
+/* 901–1279px: the app fills the window; admin tool icons get their own row. */
+@media (min-width: 901px) and (max-width: 1279px) {
+  .ma {
+    min-width: 0;
+  }
+  .ma-emr {
+    display: none !important;
+  }
+  .ma-admin .ma-header {
+    height: auto;
+    min-height: 62px;
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 2px;
+    padding: 4px 0 4px;
+  }
+  .ma-admin .ma-logo {
+    position: static;
+    margin-left: 8px;
+  }
+  .ma-admin .ma-version {
+    position: static;
+    margin-left: 10px;
+    align-self: flex-start;
+    margin-top: 9px;
+  }
+  .ma-admin .ma-welcome {
+    margin-left: 40px;
+  }
+  .ma-admin .ma-brand {
+    margin-left: 40px;
+    min-width: 0;
+    flex-shrink: 1;
+  }
+  .ma-admin .ma-company {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .ma-admin .ma-header-right {
+    margin-left: auto;
+  }
+  .ma-admin .ma-header-tools {
+    order: 9;
+    flex: 1 1 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    padding: 0 12px 2px;
+  }
+  .ma-panel-inner {
+    min-width: 0;
+  }
+  .ma-panel [style*='min-width: 960px'] {
+    min-width: 0 !important;
+  }
+}
+
+/* 1100–1279px: slimmer sidebar. */
+@media (min-width: 1100px) and (max-width: 1279px) {
+  .ma-side {
+    max-width: 210px;
+  }
+}
+
+/* 901–1099px (1024 monitors, 1366 at 125%): the sidebar slides in from ☰ Menu,
+ * so the work area gets the full width. */
+@media (min-width: 901px) and (max-width: 1099px) {
+  .ma-side,
+  .ma-side[style] {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 55;
+    width: 280px !important;
+    margin: 0;
+    transform: translateX(-105%);
+    transition: transform 0.2s ease;
+    box-shadow: 4px 0 18px rgba(0, 0, 0, 0.35);
+  }
+  .ma-side.is-open {
+    transform: none;
+  }
+  .ma-side-back {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 54;
+    background: rgba(0, 0, 0, 0.3);
+  }
+  .ma-side-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+    height: 40px;
+    padding: 0 6px 0 12px;
+    background: #fff;
+    border-bottom: 2px solid #8cc4e6;
+    font-size: 13px;
+    font-weight: bold;
+    color: #1b4f8a;
+  }
+  .ma-side-head button {
+    width: 30px;
+    height: 30px;
+    border: 1px solid #c3c3c3;
+    border-radius: 3px;
+    background: linear-gradient(to bottom, #fafafa, #e2e2e2);
+    font-size: 18px;
+    line-height: 1;
+    color: #333;
+  }
+  .ma-split {
+    display: none;
+  }
+  .ma-body[style] {
+    padding-left: 2px !important;
+  }
+  .ma-menu-btn {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 7px;
+    height: 38px;
+    padding: 0 12px;
+    border: 1px solid #0f5fae;
+    border-bottom: 0;
+    color: #fff;
+    font-size: 13px;
+    font-weight: bold;
+    background: linear-gradient(to bottom, #5ab9fd 0%, #3aa6f8 46%, #1e90f0 52%, #1c8cee 100%);
+  }
+  .ma-menu-btn .bars {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .ma-menu-btn .bars span {
+    display: block;
+    width: 16px;
+    height: 2px;
+    background: #fff;
+    border-radius: 1px;
+  }
+}

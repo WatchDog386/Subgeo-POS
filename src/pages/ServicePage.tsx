@@ -206,7 +206,7 @@ export default function ServicePage() {
           return (
             <div
               key={col.id}
-              className={`flex min-h-0 flex-col overflow-hidden rounded-xl border-t-4 bg-slate-200/60 md:border-t-0 ${col.tone}`}
+              className={`flex min-h-[170px] flex-col overflow-hidden rounded-xl border-t-4 bg-slate-200/60 md:border-t-0 ${col.tone}`}
             >
               <div
                 className={`flex items-center justify-between px-3 py-2 text-sm font-semibold text-slate-700 md:text-white ${col.hdr}`}
