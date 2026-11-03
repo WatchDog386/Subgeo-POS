@@ -144,6 +144,8 @@ function MonthWise() {
       return { a, b: b ?? '', v: count ? String(v) : amt(v) }
     })
     if (!rows.length) toast('No records found for the selection', 'error')
+    const total = rows.reduce((s, r) => s + Number(r.v.replace(/[^0-9.-]/g, '') || 0), 0)
+    rows.push({ a: 'TOTAL', b: '', v: amt(total) })
     setRes({ title: 'Month Wise Report', cols, rows, chart: [...chart.entries()].map(([label, v]) => ({ label, values: [count ? v : v / 100] })) })
   }
 
