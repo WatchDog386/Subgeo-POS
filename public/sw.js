@@ -3,13 +3,13 @@
    Same-origin assets: cache-first (hashed build files are immutable).
    /api/* is live data (sync, stock, M-Pesa status) and always goes to the network.
    v2: v1 also cached /api responses — bumping the name deletes that cache.
-   v3: pre-cache square logo icons for the installed taskbar icon. */
-const CACHE = 'subgeo-shell-v3'
+   v3: pre-cache square logo icons for the installed taskbar icon.
+   v4: new logo (transparent background) for every icon. */
+const CACHE = 'subgeo-shell-v4'
 const SHELL = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
-  '/icon.svg',
   '/icon-192.png',
   '/icon-512.png',
   '/apple-touch-icon.png',

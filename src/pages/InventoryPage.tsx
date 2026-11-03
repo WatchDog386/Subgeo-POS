@@ -3,7 +3,7 @@ import type { ComponentType, ReactNode } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useSearchParams } from 'react-router-dom'
 import { Download, FileText, History, Package, Pencil, Plus, Printer, Search, SlidersHorizontal, Tag, Trash2, Upload } from 'lucide-react'
-import { db } from '../db/db'
+import { clearSynced, db } from '../db/db'
 import { useSettings } from '../db/settings'
 import { MEDICINE_LIST } from '../db/medicineList'
 import { adjustStock } from '../db/sales'
@@ -15,7 +15,6 @@ import { printBarcodeLabel } from '../lib/printReceipt'
 import { useSession } from '../session'
 import { Badge, Empty, ListPanel, Modal, PageHeader, errorText, useToast } from '../components/ui'
 import { MedicineNameInput } from '../components/MedicineNameInput'
-import { quotationImportSummary, quotationProductSkus } from '../db/quotationProducts'
 
 const CSV_HEADER = ['sku', 'name', 'barcode', 'regNumber', 'category', 'brand', 'cost', 'price', 'stock', 'reorderLevel', 'location', 'taxable', 'serialized', 'trackStock']
 
@@ -62,8 +61,6 @@ export default function InventoryPage() {
   const stockValue = products.filter((p) => p.trackStock && p.stock > 0).reduce((s, p) => s + p.stock * p.cost, 0)
   const lowCount = products.filter((p) => p.active && p.trackStock && p.stock <= p.reorderLevel).length
   const inactiveCount = products.filter((p) => !p.active).length
-  const quoteProducts = products.filter((product) => quotationProductSkus.has(product.sku))
-  const quoteSetupCount = quoteProducts.filter((product) => !product.barcode || product.price <= 0 || !product.active).length
 
   const exportCsv = () => {
     const data = products.map((p) => [
@@ -75,8 +72,9 @@ export default function InventoryPage() {
 
   const clearAllInventory = async () => {
     if (!confirm('Are you sure you want to delete ALL medicines from stock? This cannot be undone.')) return
-    // Each delete is uploaded too, so the chemist's medicines go from the server as well.
-    await db.products.clear()
+    // One by one (not Table.clear(), which skips the sync hooks), so every delete is
+    // uploaded and the medicines go from the server and the chemist's other tills too.
+    await clearSynced(db.products)
     toast('All medicines deleted from stock')
     setQ('')
     setCat('all')
@@ -162,13 +160,15 @@ export default function InventoryPage() {
             categoryId: categoryId ?? prev?.categoryId,
             cost: m.cost !== undefined ? toCents(m.cost) : prev?.cost ?? 0,
             price: m.price !== undefined ? toCents(m.price) : prev?.price ?? 0,
-            stock: m.stock ?? prev?.stock ?? 0,
+            // The PDF is a delivery: its quantity adds to what is on the shelf.
+            stock: (prev?.stock ?? 0) + (m.stock ?? 0),
             reorderLevel: m.reorderLevel ?? prev?.reorderLevel ?? 0,
             location: m.location || prev?.location,
             taxable: m.taxable ?? prev?.taxable ?? true,
             serialized: m.serialized ?? prev?.serialized ?? false,
             trackStock: m.trackStock ?? prev?.trackStock ?? true,
-            active: prev?.active ?? true,
+            // New medicines need a selling price before they can be sold.
+            active: prev?.active ?? (m.price ?? 0) > 0,
             fitment: [],
             createdAt: prev?.createdAt ?? now,
             updatedAt: now,
@@ -211,14 +211,6 @@ export default function InventoryPage() {
           </>
         }
       />
-      {quoteProducts.length > 0 && (
-        <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-950">
-          <div className="font-semibold">Quotation {quotationImportSummary.reference}: {quoteProducts.length} medicines in the catalog</div>
-          <p className="mt-1 text-blue-800">
-            {quoteSetupCount} still need barcode, selling price, or activation. The quoted {quotationImportSummary.requestedUnits} units are not counted as on-hand stock; record a receipt after availability is confirmed.
-          </p>
-        </div>
-      )}
       {/* Mobile: search + category dropdown + low-stock toggle (replaces the dark bar and toolbar) */}
       <div className="mb-3 flex items-center gap-2 sm:hidden">
         <input
@@ -427,6 +419,7 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
   const [printCopies, setPrintCopies] = useState(() => Math.max(1, (initial as Product | undefined)?.stock ?? 1))
   const [cost, setCost] = useState(String((p.cost ?? 0) / 100))
   const [price, setPrice] = useState(String((p.price ?? 0) / 100))
+  const [minPrice, setMinPrice] = useState(p.minPrice ? String(p.minPrice / 100) : '')
   const [newCat, setNewCat] = useState('')
   const knownGroups = useMemo(() => {
     const map = new Map<string, string>()
@@ -454,10 +447,10 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
       // New medicines without a code get the next free MED-#### code.
       if (!p.sku?.trim()) p.sku = await nextMedicineCode()
       if (p.active && toCents(price) <= 0) throw new Error('Set a selling price above zero before activating this medicine')
-      if (p.active && quotationProductSkus.has(p.sku.trim())) {
-        if (!p.barcode?.trim()) throw new Error('Add the barcode before activating this quoted medicine')
-        if (p.trackStock !== false && (p.stock ?? 0) <= 0) throw new Error('Receive stock before activating this quoted medicine')
-      }
+      const floor = minPrice.trim() ? toCents(minPrice) : undefined
+      if (floor !== undefined && floor < 0) throw new Error('Best Price cannot be negative')
+      if (floor !== undefined && toCents(price) < floor) throw new Error(`Best Price ${(floor / 100).toFixed(2)} is above the selling price — the best price is the lowest it may be sold for`)
+      if (p.maxStock !== undefined && p.maxStock < (p.reorderLevel ?? 0)) throw new Error('Maximum stock is below the re-order level')
       const clash = await db.products.where('sku').equals(p.sku.trim()).first()
       if (clash && clash.id !== p.id) throw new Error(`SKU ${p.sku} is already used by ${clash.name}`)
       let barcode = p.barcode?.trim()
@@ -477,6 +470,7 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
         categoryId,
         cost: toCents(cost),
         price: toCents(price),
+        minPrice: minPrice.trim() ? toCents(minPrice) : undefined,
         createdAt: p.createdAt ?? now,
         updatedAt: now,
       } as Product
@@ -663,6 +657,14 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
           <div>
             <label className="label">Reorder at</label>
             <input className="input" type="number" min={0} value={p.reorderLevel ?? 0} onChange={(e) => set('reorderLevel', Number(e.target.value))} />
+          </div>
+          <div>
+            <label className="label">Maximum stock</label>
+            <input className="input" type="number" min={0} placeholder="blank = no limit" value={p.maxStock ?? ''} onChange={(e) => set('maxStock', e.target.value === '' ? (undefined as never) : Number(e.target.value))} />
+          </div>
+          <div>
+            <label className="label">Best Price (lowest it may be sold for, KES)</label>
+            <input className="input" inputMode="decimal" placeholder="blank = none" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} />
           </div>
         </div>
       </Section>

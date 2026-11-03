@@ -171,7 +171,7 @@ export default function StaffPage() {
             ))}
           </div>
           <div className="m-3 rounded-lg border border-mc-cobalt-line bg-mc-cobalt-soft p-3 text-xs leading-relaxed text-mc-cobalt-hover">
-            Each person signs in with a user name and password. Cashiers and managers work in one chemist (CHEM number); the admin sees every chemist. The last active admin cannot be disabled.
+            Each person signs in with a user name and password. Cashiers and managers work in one chemist (SUBGEO number); the admin sees every chemist. The last active admin cannot be disabled.
           </div>
         </section>
       </div>

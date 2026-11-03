@@ -60,6 +60,18 @@ export interface Supplier {
   phone?: string
   email?: string
   notes?: string
+  /** Party Master details. */
+  address?: string
+  poBox?: string
+  kraPin?: string
+  contactPerson?: string
+  /** Phone of the contact person. */
+  contactPhone?: string
+  /** Ledger group, e.g. SUNDRY DEBTORS / SUNDRY CREDITORS. */
+  groupAccount?: string
+  /** PAY LATER = may take goods on account; PAY NOW = must pay on the spot. */
+  billType?: 'PAY LATER' | 'PAY NOW'
+  blacklisted?: boolean
 }
 
 export interface Product {
@@ -75,8 +87,13 @@ export interface Product {
   fitment: string[]
   cost: number
   price: number
+  /** Lowest price it may ever be sold for (cents); unset = no floor. */
+  minPrice?: number
   stock: number
+  /** Re-order when stock falls to this level (minimum stock). */
   reorderLevel: number
+  /** Most it should hold; re-orders top up to this. Unset = no limit. */
+  maxStock?: number
   supplierId?: number
   /** Shelf / bin location in the store room. */
   location?: string
@@ -103,10 +120,22 @@ export interface Customer {
   balance: number
   creditLimit: number
   notes?: string
+  /** Party Master details. */
+  address?: string
+  poBox?: string
+  kraPin?: string
+  contactPerson?: string
+  /** Phone of the contact person. */
+  contactPhone?: string
+  /** Ledger group, e.g. SUNDRY DEBTORS / SUNDRY CREDITORS. */
+  groupAccount?: string
+  /** PAY LATER = may take goods on account; PAY NOW = must pay on the spot. */
+  billType?: 'PAY LATER' | 'PAY NOW'
+  blacklisted?: boolean
   createdAt: number
 }
 
-export type PaymentMethod = 'cash' | 'mpesa' | 'card' | 'account'
+export type PaymentMethod = 'cash' | 'mpesa' | 'card' | 'cheque' | 'account'
 
 export interface Payment {
   method: PaymentMethod
@@ -128,6 +157,11 @@ export interface SaleLine {
   taxable: boolean
   serial?: string
   refundedQty?: number
+  /** Pharmacy details typed on the OTC bill: dosage form, how to take it, batch and expiry. */
+  form?: string
+  instruction?: string
+  batch?: string
+  expiry?: string
 }
 
 export type SaleStatus = 'completed' | 'refunded' | 'partially_refunded' | 'voided'
@@ -153,6 +187,14 @@ export interface Sale {
   refundOf?: number
   /** Chemist that issued it, as printed on the receipt, e.g. "CHEM2 - SCL KAYOLE". */
   branch?: string
+  /** PATIENT INFORMATION of OTC / service bills. */
+  location?: string
+  patientName?: string
+  patientAge?: string
+  patientPhone?: string
+  /** Service Request/Bill: the bill is filed under its service number, e.g. SER-BILL-3-26. */
+  serviceBill?: boolean
+  docLabel?: string
 }
 
 export interface ParkedSale {
@@ -249,7 +291,6 @@ export interface Settings {
   receiptFooter: string
   currency: string
   mpesaTill: string
-  mpesaMode: 'manual' | 'stk'
   apiUrl: string
   dosageForms: string[]
   paperWidth: 58 | 80
@@ -273,4 +314,87 @@ export interface LogEntry {
   detail?: string
   userId?: number
   userName?: string
+}
+
+/** A document of a medapp transaction screen (purchase indent, LPO, GRN,
+ * direct invoice, petty cash voucher, quotation, medicine master entry…).
+ * One record per document, so two tills saving at the same time never
+ * overwrite each other. */
+export interface DocRecord {
+  id: number
+  /** Transaction screen it belongs to, e.g. "purchase-indent". */
+  slug: string
+  /** Running document number, e.g. "PI-3-26" (copied from values.docNo). */
+  docNo?: string
+  /** The screen's fields, keyed by field name, as typed (dates dd-mm-yyyy, money 0.00). */
+  values: Record<string, string>
+  /** Product lines (quotations, delivery notes, invoices, credit notes). */
+  lines?: DocLine[]
+  createdAt: number
+  updatedAt?: number
+  createdBy?: number
+}
+
+/** One product line of a whole-sale document. Money in cents. */
+export interface DocLine {
+  productId?: number
+  name: string
+  sku?: string
+  qty: number
+  cost: number
+  rate: number
+  vatPct: number
+  vat: number
+  discount: number
+  total: number
+  batch?: string
+  expiry?: string
+  /** The document this line was adjusted from (ADJUST …): its screen, number and line index. */
+  srcSlug?: string
+  srcDocNo?: string
+  srcLine?: number
+  /** GRN lines: discount % and the extra "less discount" typed, and the selling price set. */
+  discPct?: number
+  less?: number
+  retail?: number
+  /** Best Price set on this line (cents): the lowest the medicine may be sold for. */
+  best?: number
+  /** Supplier invoice in packs: packs received, pieces per pack, pieces sold at a time (qty = packs × perPack ÷ sellBy). */
+  packs?: number
+  perPack?: number
+  sellBy?: number
+  /** Stock adjustments: the type of adjustment, e.g. EXPIRY, OPENING STOCK. */
+  reason?: string
+}
+
+/** A task the admin (or anyone) assigns to staff of a chemist (Home → To-Do List). */
+export interface StaffTask {
+  id: number
+  text: string
+  doc?: string
+  createdAt: number
+  due?: number
+  assignerId?: number
+  assigner: string
+  /** Undefined = anyone at the chemist. */
+  assigneeId?: number
+  assignee: string
+  status: 'PENDING' | 'COMPLETED'
+  completedAt?: number
+  completedBy?: string
+}
+
+/** Internal message between staff (company-wide, every chemist). */
+export interface StaffMessage {
+  id?: number
+  fromId: number
+  fromName: string
+  /** Undefined = every member of staff. */
+  toId?: number
+  toName: string
+  subject: string
+  body: string
+  at: number
+  /** Users who opened it. */
+  readBy: number[]
 }

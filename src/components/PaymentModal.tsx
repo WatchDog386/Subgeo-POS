@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
-import { Loader2, Smartphone, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Loader2, Trash2 } from 'lucide-react'
 import { Modal, NumPad, errorText } from './ui'
 import type { Customer, Payment, PaymentMethod, Settings } from '../db/types'
 import { changeDue, paidAmount, quickCashOptions } from '../lib/cart'
 import { money, toCents } from '../lib/money'
-import { isValidMpesaCode, normalizePhone, stkPush, stkStatus } from '../lib/mpesa'
+import { isValidMpesaCode } from '../lib/mpesa'
 
 const METHODS: { id: PaymentMethod; label: string; img?: string }[] = [
   { id: 'cash', label: 'Cash', img: '/cash.png' },
@@ -16,7 +16,7 @@ const CLOSED_LABELS: Partial<Record<PaymentMethod, string>> = { card: 'Card', ac
 export default function PaymentModal({
   total,
   settings,
-  customer,
+  customer: _customer,
   onClose,
   onComplete,
   initialMethod,
@@ -33,10 +33,8 @@ export default function PaymentModal({
   const [method, setMethod] = useState<PaymentMethod>(initialMethod ?? 'cash')
   const [entry, setEntry] = useState('')
   const [reference, setReference] = useState('')
-  const [phone, setPhone] = useState(customer?.phone ?? '')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [stk, setStk] = useState<{ id: string; message: string } | null>(null)
 
   const paid = paidAmount(payments)
   const remaining = Math.max(0, total - paid)
@@ -71,39 +69,6 @@ export default function PaymentModal({
       return add({ method, amount, reference: reference.trim().toUpperCase() })
     }
     add({ method, amount, reference: reference.trim() || undefined })
-  }
-
-  // --- M-Pesa STK push polling ---
-  const pollRef = useRef<number | undefined>(undefined)
-  useEffect(() => () => window.clearInterval(pollRef.current), [])
-
-  const sendStk = async () => {
-    setError('')
-    const msisdn = normalizePhone(phone)
-    if (!msisdn) return setError('Enter a valid Safaricom number, e.g. 0712 345 678')
-    setBusy(true)
-    try {
-      const r = await stkPush(settings.apiUrl, msisdn, amount, settings.shopName.slice(0, 12))
-      setStk({ id: r.checkoutRequestId, message: 'Prompt sent. Ask the customer to enter their M-Pesa PIN…' })
-      const started = Date.now()
-      const stkAmount = amount
-      pollRef.current = window.setInterval(async () => {
-        const s = await stkStatus(settings.apiUrl, r.checkoutRequestId)
-        if (s.status === 'success') {
-          window.clearInterval(pollRef.current)
-          setStk(null)
-          setPayments((ps) => [...ps, { method: 'mpesa', amount: stkAmount, reference: s.receipt }])
-        } else if (s.status === 'failed' || Date.now() - started > 90_000) {
-          window.clearInterval(pollRef.current)
-          setStk(null)
-          setError(s.message ?? 'No response from M-Pesa. Try again or enter the code manually.')
-        }
-      }, 3000)
-    } catch (e) {
-      setError(errorText(e))
-    } finally {
-      setBusy(false)
-    }
   }
 
   const finish = async () => {
@@ -214,20 +179,9 @@ export default function PaymentModal({
             </div>
           )}
 
-          {method === 'mpesa' && settings.mpesaMode === 'stk' && (
-            <div className="pos-pay-fields">
-              <input className="input" placeholder="Customer phone, e.g. 0712 345 678" value={phone} onChange={(e) => setPhone(e.target.value)} />
-              <button className="pos-pay-mpesa-btn" onClick={sendStk} disabled={busy || !!stk}>
-                {stk ? <Loader2 className="animate-spin" size={18} /> : <Smartphone size={18} />}
-                {stk ? 'Waiting for customer…' : `Send M-Pesa prompt for ${money(amount, c)}`}
-              </button>
-              {stk && <p className="pos-pay-hint">{stk.message}</p>}
-              <p className="pos-pay-note">Or type the confirmation code from the customer's SMS:</p>
-            </div>
-          )}
           {method === 'mpesa' && (
             <div className="pos-pay-fields">
-              {settings.mpesaTill && settings.mpesaMode === 'manual' && (
+              {settings.mpesaTill && (
                 <p className="pos-pay-till">
                   Customer pays to Till <b>{settings.mpesaTill}</b>. Check the SMS, then enter the code.
                 </p>

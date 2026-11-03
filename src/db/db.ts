@@ -3,6 +3,7 @@ import type {
   Branch,
   Category,
   Customer,
+  DocRecord,
   LogEntry,
   MedicineNameRec,
   ParkedSale,
@@ -11,10 +12,13 @@ import type {
   Sale,
   ServiceJob,
   Shift,
+  StaffMessage,
+  StaffTask,
   StockMovement,
   Supplier,
   User,
 } from './types'
+import { LEGACY_DOCS_PREFIX, LEGACY_TASKS_KEY, convertLegacyDocs, convertLegacyTasks } from './legacyDemo'
 import { BRANCH_TABLES, COUNTER_FIELDS, GLOBAL_KV_KEYS, GLOBAL_TABLES, SYNCED_TABLES, V3_TABLES, isLocalKvKey, isMetaField, isSeqKvKey } from './syncSchema'
 
 export interface KV {
@@ -105,6 +109,9 @@ export class PosDB extends Dexie {
   shifts!: EntityTable<Shift, 'id'>
   jobs!: EntityTable<ServiceJob, 'id'>
   logs!: EntityTable<LogEntry, 'id'>
+  docs!: EntityTable<DocRecord, 'id'>
+  tasks!: EntityTable<StaffTask, 'id'>
+  messages!: EntityTable<StaffMessage, 'id'>
   kv!: EntityTable<KV, 'key'>
   outbox!: EntityTable<Tombstone, 'seq'>
 
@@ -158,7 +165,9 @@ export class PosDB extends Dexie {
         // Only tables that existed at v3: a later table (medicineNames, v4)
         // does not exist yet and must not be touched here.
         const now = Date.now()
-        for (const name of V3_TABLES) {
+        for (const name of SYNCED_TABLES) {
+          // Tables added by later versions don't exist yet at this step.
+          if (name === 'users' || name === 'branches' || !V3_TABLES.has(name)) continue
           await tx
             .table(name)
             .toCollection()
@@ -170,10 +179,34 @@ export class PosDB extends Dexie {
             })
         }
       })
-    // v4: the company-wide medicine name / group list used for type-ahead.
-    this.version(4).stores({
-      medicineNames: '++id, name, group, source, active, _dirty',
-    })
+    // v4: documents, tasks and staff messages get their own tables (one record
+    // each) instead of one kv list per screen, which two tills saving at the
+    // same time used to overwrite. The old lists are converted with stable ids
+    // (the server converts its copy the same way, so nothing doubles up).
+    // v4 also adds the company-wide medicine name / group list used for
+    // type-ahead (starts empty; the server seeds the standard names).
+    this.version(4)
+      .stores({
+        medicineNames: '++id, name, group, source, active, _dirty',
+        docs: '++id, slug, docNo, createdAt, _dirty',
+        tasks: '++id, status, assigneeId, createdAt, _dirty',
+        messages: '++id, at, toId, fromId, _dirty',
+      })
+      .upgrade(async (tx) => {
+        markRemote(tx)
+        const kv = tx.table('kv')
+        const rows = (await kv.toArray()) as (KV & { _dirty?: number; _ts?: number })[]
+        for (const r of rows) {
+          const meta = { _dirty: r._dirty ?? 0, _ts: r._ts ?? 0 }
+          if (r.key.startsWith(LEGACY_DOCS_PREFIX)) {
+            for (const d of convertLegacyDocs(r.key, r.value)) await tx.table('docs').put({ ...d, ...meta })
+            await kv.delete(r.key)
+          } else if (r.key === LEGACY_TASKS_KEY) {
+            for (const t of convertLegacyTasks(r.value)) await tx.table('tasks').put({ ...t, ...meta })
+            await kv.delete(r.key)
+          }
+        }
+      })
 
     for (const name of SYNCED_TABLES) this.installHooks(name)
   }

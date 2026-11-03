@@ -5,10 +5,12 @@ import crypto from 'node:crypto'
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import { sql } from './db'
 import { hashPassword } from '../src/lib/sha256'
-import { SEED_BRANCH, SEED_PURCHASE, SEED_USERS, chemCode } from '../src/db/seedData'
-import { COUNTER_FIELDS, GLOBAL_KV_KEYS, GLOBAL_TABLES, SYNCED_TABLES, isLocalKvKey, isSeqKvKey } from '../src/db/syncSchema'
+import { HQ_NUMBER, SEED_BRANCH, SEED_PURCHASE, SEED_USERS, chemCode } from '../src/db/seedData'
+import { COUNTER_FIELDS, GLOBAL_KV_KEYS, GLOBAL_TABLES, SYNCED_TABLES, hasAdminRights, isLocalKvKey, isSeqKvKey } from '../src/db/syncSchema'
 import { MEDICINE_GROUPS, MEDICINE_LIST } from '../src/db/medicineList'
-import type { Branch, MedicineNameRec, Product, Role, User } from '../src/db/types'
+import type { Branch, MedicineNameRec, Product, Role, StaffMessage, User } from '../src/db/types'
+import { LEGACY_DOCS_PREFIX, LEGACY_TASKS_KEY, convertLegacyDocs, convertLegacyTasks } from '../src/db/legacyDemo'
+import { ensureRelational, project } from './relational'
 
 type Rec = Record<string, unknown>
 type Row = { tbl: string; scope: number; id: string; data: string | null; deleted: number; ts: number; seq: number }
@@ -56,6 +58,40 @@ function writeRow(tbl: string, scope: number, id: string | number, data: Rec | n
     updated_by: userId,
     updated_at: Date.now(),
   })
+  // Keep the relational tables (migrations/004) in step.
+  project(tbl, scope, String(id), data)
+}
+
+const isLegacyKvKey = (key: string) => key.startsWith(LEGACY_DOCS_PREFIX) || key === LEGACY_TASKS_KEY
+
+/**
+ * Old builds kept documents and tasks as one kv list per screen. Turn every
+ * such list into one docs/tasks record per entry (stable ids: the tills
+ * convert their own copies the same way) and delete the list. Runs on boot and
+ * after a push from a till still on an old build, so nothing typed there is lost.
+ */
+function convertLegacyKv(scope?: number): number {
+  const where = scope === undefined ? '' : ' AND scope = ?'
+  const rows = sql
+    .prepare(`SELECT * FROM sync_records WHERE tbl = 'kv' AND deleted = 0 AND (id LIKE ? OR id = ?)${where}`)
+    .all(`${LEGACY_DOCS_PREFIX}%`, LEGACY_TASKS_KEY, ...(scope === undefined ? [] : [scope])) as (Row & { updated_by: number | null })[]
+  let n = 0
+  for (const row of rows) {
+    const value = (JSON.parse(row.data ?? '{}') as Rec).value
+    const recs: [string, Rec][] =
+      row.id === LEGACY_TASKS_KEY
+        ? convertLegacyTasks(value).map((t) => ['tasks', t])
+        : convertLegacyDocs(row.id, value).map((d) => ['docs', d as unknown as Rec])
+    for (const [t, rec] of recs) {
+      const cur = getRow(t, row.scope, rec.id as number)
+      if (cur && cur.ts > row.ts) continue // changed (or deleted) on a new till since
+      if (cur && !cur.deleted && cur.data === JSON.stringify(rec)) continue
+      writeRow(t, row.scope, rec.id as number, rec, row.ts, row.updated_by)
+      n++
+    }
+    writeRow('kv', row.scope, row.id, null, row.ts, row.updated_by)
+  }
+  return n
 }
 
 function listTable<T = Rec>(tbl: string, scope: number): T[] {
@@ -82,11 +118,15 @@ function toPulled(row: Row) {
 }
 
 /** Create the starter admin, CHEM1 cashier and Chemist 1 on a new server.
- * On companies that started before the purchases dashboard, add the passwordless
+ * On companies that started before the purchases dashboard, add the
  * purchase account (server-assigned id and the first open chemist, so no till
  * id can clash). */
 export function ensureSeeds(): void {
   sql.transaction(() => {
+    // The chemist first: staff accounts point at it.
+    if (!(sql.prepare("SELECT 1 FROM sync_records WHERE tbl = 'branches' LIMIT 1").get())) {
+      writeRow('branches', 0, SEED_BRANCH.id, SEED_BRANCH as unknown as Rec, 0, null)
+    }
     if (!(sql.prepare("SELECT 1 FROM sync_records WHERE tbl = 'users' LIMIT 1").get())) {
       for (const u of SEED_USERS) writeRow('users', 0, u.id, u as unknown as Rec, 0, null)
     } else if (
@@ -98,8 +138,18 @@ export function ensureSeeds(): void {
       const home = branches().find((b) => b.active) ?? branches()[0]
       if (home) writeRow('users', 0, next, { ...SEED_PURCHASE, id: next, branchId: home.id } as unknown as Rec, Date.now(), null)
     }
-    if (!(sql.prepare("SELECT 1 FROM sync_records WHERE tbl = 'branches' LIMIT 1").get())) {
-      writeRow('branches', 0, SEED_BRANCH.id, SEED_BRANCH as unknown as Rec, 0, null)
+  })()
+  ensureRelational()
+  sql.transaction(() => convertLegacyKv())()
+  // The purchases account used to have no password; it now has the admin's rights,
+  // so one without a password gets the admin's starter password subgeo22.
+  sql.transaction(() => {
+    for (const u of users()) {
+      if (u.role === 'purchase' && safeEqual(hashPassword(u.salt, ''), u.passHash)) {
+        const salt = crypto.randomBytes(8).toString('hex')
+        writeRow('users', 0, u.id, { ...u, salt, passHash: hashPassword(salt, 'subgeo22') } as unknown as Rec, Date.now(), null)
+        console.log(`Account "${u.username}" had no password: it is now subgeo22`)
+      }
     }
   })()
   seedStandardMedicineData()
@@ -151,7 +201,7 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
 }
 
 function requireOwner(req: Request, res: Response, next: NextFunction) {
-  if ((req as AuthedRequest).user.role !== 'owner') {
+  if (!hasAdminRights((req as AuthedRequest).user.role)) {
     res.status(403).json({ error: 'Admin only' })
     return
   }
@@ -160,7 +210,7 @@ function requireOwner(req: Request, res: Response, next: NextFunction) {
 
 /** Owners reach every chemist; everyone else only their own. */
 function canAccessBranch(user: AuthedUser, branchId: number): boolean {
-  return user.role === 'owner' || user.branchId === branchId
+  return hasAdminRights(user.role) || user.branchId === branchId
 }
 
 function branchParam(v: unknown): number | undefined {
@@ -178,8 +228,11 @@ function denyReason(user: AuthedUser, tbl: string, scope: number, id: string | n
     if (!ROLES.includes(u.role)) return `Unknown role "${String(u.role)}"`
     if (u.role !== 'owner' && !branchParam(u.branchId)) return `${u.username} needs a chemist number`
     if (u.branchId && !parse(getRow('branches', 0, u.branchId))) return `Chemist ${u.branchId} does not exist`
-    const clash = users().find((x) => x.username === u.username && String(x.id) !== String(id))
-    if (clash) return `User name "${u.username}" is already taken`
+    // A user name may be shared only by cashiers / managers of different chemists (passwords differ).
+    const sharable = (r: Role) => r === 'cashier' || r === 'manager'
+    const same = users().filter((x) => x.username === u.username && String(x.id) !== String(id))
+    if (same.some((x) => !sharable(x.role)) || (same.length && !sharable(u.role))) return `User name "${u.username}" is already taken`
+    if (same.some((x) => x.branchId === u.branchId)) return `"${u.username}" already has an account at that chemist`
   }
   if (tbl === 'users') {
     // Never leave the company without an active admin.
@@ -193,10 +246,20 @@ function denyReason(user: AuthedUser, tbl: string, scope: number, id: string | n
     const clash = branches().find((x) => x.number === b.number && String(x.id) !== String(id))
     if (clash) return `${chemCode(b.number)} already exists`
   }
-  if (user.role === 'owner') return undefined
+  if (tbl === 'categories' || tbl === 'suppliers' || tbl === 'medicineNames') return undefined
+  if (hasAdminRights(user.role)) return undefined
 
   if (scope !== 0) return scope === user.branchId ? undefined : 'Not your chemist'
-  if (tbl === 'categories' || tbl === 'suppliers' || tbl === 'medicineNames') return undefined
+  if (tbl === 'messages') {
+    const was = existing as unknown as StaffMessage | undefined
+    if (!incoming) return was?.fromId === user.id ? undefined : 'You can only delete messages you sent'
+    if (!was) return (incoming as unknown as StaffMessage).fromId === user.id ? undefined : 'A message must be sent as yourself'
+    if (was.fromId === user.id) return undefined
+    // Everyone else may only mark it read.
+    const { readBy: _a, ...before } = existing!
+    const { readBy: _b, ...after } = incoming
+    return JSON.stringify(before) === JSON.stringify(after) ? undefined : 'Only the sender can change a message'
+  }
   if (tbl === 'kv') return user.role === 'manager' ? undefined : 'Only the admin or a manager can change shared settings'
   if (tbl === 'users') {
     if (String(id) !== String(user.id) || !incoming || !existing) return 'Only the admin can manage staff'
@@ -220,23 +283,20 @@ syncRouter.post('/auth/login', (req, res) => {
     res.status(429).json({ error: 'Too many wrong passwords. Try again in a few minutes.' })
     return
   }
-  const user = users().find((u) => u.username === username)
-  // The purchases dashboard signs in with no password; only accounts whose
-  // role is "purchase" and whose hash is an empty-password hash accept it.
-  const passwordless =
-    password === '' && user?.role === 'purchase' && safeEqual(hashPassword(user.salt, ''), user.passHash)
-  if (
-    !user ||
-    !user.active ||
-    !(passwordless || safeEqual(hashPassword(user.salt, password), user.passHash))
-  ) {
+  // Cashiers of different chemists may share a user name ("subgeo"): the password picks the account.
+  const named = users().filter((u) => u.username === username)
+  // Every account needs its password (an empty one is never accepted).
+  const matches = (u: AuthedUser) => password !== '' && safeEqual(hashPassword(u.salt, password), u.passHash)
+  const hit = named.filter(matches)
+  const user = hit.find((u) => u.active) ?? hit[0] ?? (named.length === 1 ? named[0] : undefined)
+  if (!user || !user.active || !hit.includes(user)) {
     const n = (f?.n ?? 0) + 1
     failures.set(key, { n, until: n >= 8 ? Date.now() + 5 * 60_000 : 0 })
     res.status(401).json({ error: user && !user.active ? 'This account is disabled' : 'Invalid user name or password' })
     return
   }
   failures.delete(key)
-  if (user.role !== 'owner') {
+  if (!hasAdminRights(user.role)) {
     const b = user.branchId ? (parse(getRow('branches', 0, user.branchId)) as Branch | undefined) : undefined
     if (!b || !b.active) {
       res.status(403).json({ error: 'Your chemist is closed or not set. Ask the admin.' })
@@ -291,6 +351,7 @@ syncRouter.post('/sync/push', requireAuth, (req, res) => {
     rejected.push({ t, id, reason, current: row ? toPulled(row) : null })
   }
 
+  let legacyPushed = false
   try {
     sql.transaction(() => {
       for (const c of changes) {
@@ -322,6 +383,7 @@ syncRouter.post('/sync/push', requireAuth, (req, res) => {
           if (t === 'kv' && isSeqKvKey(String(id))) next.value = Math.max(Number(existing.value ?? 0), Number(data.value ?? 0))
         }
         writeRow(t, scope, id, next, Math.max(ts, row?.ts ?? 0), user.id)
+        if (t === 'kv' && isLegacyKvKey(String(id))) legacyPushed = true
       }
       for (const d of deletes) {
         const t = String(d.t)
@@ -337,6 +399,7 @@ syncRouter.post('/sync/push', requireAuth, (req, res) => {
         }
         writeRow(t, scope, id, null, Math.max(Number(d.at) || Date.now(), row.ts), user.id)
       }
+      if (legacyPushed) convertLegacyKv(branchId)
     })()
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : String(e) })
@@ -368,7 +431,7 @@ syncRouter.get('/admin/overview', requireAuth, requireOwner, (req, res) => {
   const stock = sql
     .prepare(
       `SELECT scope,
-         COUNT(*) AS products,
+         SUM(CASE WHEN json_extract(data, '$.trackStock') THEN 1 ELSE 0 END) AS products,
          SUM(CASE WHEN json_extract(data, '$.trackStock') AND json_extract(data, '$.stock') > 0
                   THEN json_extract(data, '$.stock') * json_extract(data, '$.cost') ELSE 0 END) AS stockValue,
          SUM(CASE WHEN json_extract(data, '$.active') AND json_extract(data, '$.trackStock')
@@ -537,4 +600,167 @@ function branchCode(branchId: number): string {
 function addLog(scope: number, user: AuthedUser, action: string, detail: string) {
   const id = newServerId()
   writeRow('logs', scope, id, { id, at: Date.now(), kind: 'stock', action, detail, userId: user.id, userName: user.name }, Date.now(), user.id)
+}
+
+/* ── One-time company setup: chemists SUBGEO1 … SUBGEO12 ─────────────────── */
+/**
+ * Make sure chemists 1 … count exist (shown as SUBGEO1 … SUBGEOn) and each has
+ * a cashier signing in as "subgeo" with password 0001 … 00nn (the password
+ * picks the chemist). The chemist that is number 1 today becomes number
+ * `count` first, keeping all its data. Safe to run again: nothing that exists
+ * is recreated, and passwords that were changed are left alone.
+ * Run on the server: npm run setup:subgeo
+ */
+export function setupSubgeoChemists(count = 12): string[] {
+  const out: string[] = []
+  sql.transaction(() => {
+    const now = Date.now()
+    // Medicines + sales recorded for a chemist (its data lives under its id, not its number).
+    const stocked = (id: number) =>
+      (sql.prepare("SELECT COUNT(*) AS n FROM sync_records WHERE scope = ? AND deleted = 0 AND tbl IN ('products', 'sales')").get(id) as { n: number }).n
+    const starterName = (name: string, n: number) => new RegExp(`^(CHEMIST ${n}|SUBGEO ${n}|SCL UMOJA 3)$`, 'i').test(name.trim())
+    let list = branches()
+    const first = list.find((b) => b.number === 1)
+    const last = list.find((b) => b.number === count)
+    // The stocked chemist that is number 1 today becomes number `count`. An empty
+    // chemist already holding that number swaps to 1 (data never moves, only numbers).
+    if (first && stocked(first.id) > 0 && (!last || stocked(last.id) === 0)) {
+      if (last) writeRow('branches', 0, last.id, { ...last, number: 9999 } as unknown as Rec, now, null)
+      writeRow('branches', 0, first.id, { ...first, number: count, name: starterName(first.name, 1) ? `SUBGEO ${count}` : first.name } as unknown as Rec, now, null)
+      out.push(`${chemCode(1)} (${first.name}, ${stocked(first.id)} medicines/sales) is now ${chemCode(count)} — all its data stays with it`)
+      if (last) {
+        writeRow('branches', 0, last.id, { ...last, number: 1, name: starterName(last.name, count) ? 'SUBGEO 1' : last.name } as unknown as Rec, now, null)
+        out.push(`The empty ${chemCode(count)} (${last.name}) is now ${chemCode(1)}`)
+      }
+    } else if (first && last && stocked(first.id) > 0 && stocked(last.id) > 0) {
+      out.push(`NOT renumbered: both ${chemCode(1)} (${first.name}) and ${chemCode(count)} (${last.name}) already hold medicines or sales — tell support which one is which`)
+    }
+    list = branches()
+    for (let n = 1; n <= count; n++) {
+      if (list.some((b) => b.number === n)) continue
+      const id = newServerId()
+      writeRow('branches', 0, id, { id, number: n, name: `SUBGEO ${n}`, location: '', phone: '', active: true, createdAt: now } as unknown as Rec, now, null)
+      out.push(`Created ${chemCode(n)} (name and location: set them in Utilities → Chemists → Edit Selected)`)
+    }
+    list = branches()
+    for (let n = 1; n <= count; n++) {
+      const b = list.find((x) => x.number === n)!
+      const password = String(n).padStart(4, '0')
+      const mine = users().find((u) => u.username === 'subgeo' && u.branchId === b.id)
+      if (mine) {
+        // A starter password (0000, or another chemist's 0001 … 00nn) moves to the chemist's own
+        // one, so no two "subgeo" accounts share a password; a password someone chose is kept.
+        const starters = Array.from({ length: count + 1 }, (_, i) => String(i).padStart(4, '0')).filter((x) => x !== password)
+        const starter = starters.some((x) => safeEqual(hashPassword(mine.salt, x), mine.passHash))
+        if (starter) {
+          const salt = crypto.randomBytes(8).toString('hex')
+          writeRow('users', 0, mine.id, { ...mine, salt, passHash: hashPassword(salt, password), name: /^SUBGEO\d*$/.test(mine.name) ? chemCode(n) : mine.name } as unknown as Rec, now, null)
+          out.push(`Cashier subgeo of ${chemCode(n)}: password is now ${password}`)
+        }
+        continue
+      }
+      const id = newServerId()
+      const salt = crypto.randomBytes(8).toString('hex')
+      writeRow('users', 0, id, { id, name: chemCode(n), username: 'subgeo', salt, passHash: hashPassword(salt, password), role: 'cashier', active: true, branchId: b.id } as unknown as Rec, now, null)
+      out.push(`Cashier subgeo / ${password} → ${chemCode(n)}`)
+    }
+
+    // HQ: the head-office pharmacy, cashier "subgeo" / 0000 (no SUBGEO cashier keeps 0000 after the loop above).
+    let hq = branches().find((b) => b.number === HQ_NUMBER)
+    if (!hq) {
+      const id = newServerId()
+      writeRow('branches', 0, id, { id, number: HQ_NUMBER, name: 'HQ', location: '', phone: '', active: true, createdAt: now } as unknown as Rec, now, null)
+      hq = branches().find((b) => b.number === HQ_NUMBER)!
+      out.push('Created HQ (head office)')
+    }
+    if (!users().some((u) => u.username === 'subgeo' && u.branchId === hq!.id)) {
+      const taken = users().some((u) => u.username === 'subgeo' && safeEqual(hashPassword(u.salt, '0000'), u.passHash))
+      if (taken) out.push('HQ cashier NOT created: another "subgeo" account still uses 0000 — change that one first')
+      else {
+        const id = newServerId()
+        const salt = crypto.randomBytes(8).toString('hex')
+        writeRow('users', 0, id, { id, name: 'HQ', username: 'subgeo', salt, passHash: hashPassword(salt, '0000'), role: 'cashier', active: true, branchId: hq.id } as unknown as Rec, now, null)
+        out.push('Cashier subgeo / 0000 → HQ')
+      }
+    }
+  })()
+  return out
+}
+
+/* ── Clear one chemist's stock so it can be keyed in afresh ─────────────── */
+
+/** Document registers that hold stock (receipts, adjustments, the Medicine form). */
+export const STOCK_DOC_SLUGS = ['pur-grn-direct-invoice', 'pur-inv-grn', 'stock-adjust-minus', 'stock-adjust-plus', 'medicine'] as const
+
+export type StockResetPlan = {
+  branchId: number
+  code: string
+  name: string
+  medicines: number
+  services: number
+  movements: number
+  docs: Record<string, number>
+  total: number
+}
+
+type LiveRow = { tbl: string; id: string; data: string }
+
+function stockRowsOf(branchId: number): { plan: Omit<StockResetPlan, 'branchId' | 'code' | 'name'>; rows: LiveRow[] } {
+  const live = sql
+    .prepare("SELECT tbl, id, data FROM sync_records WHERE scope = ? AND deleted = 0 AND tbl IN ('products', 'movements', 'docs')")
+    .all(branchId) as LiveRow[]
+  const rows: LiveRow[] = []
+  const docs: Record<string, number> = Object.fromEntries(STOCK_DOC_SLUGS.map((s) => [s, 0]))
+  let medicines = 0
+  let services = 0
+  let movements = 0
+  for (const r of live) {
+    const d = JSON.parse(r.data) as Rec
+    if (r.tbl === 'products') {
+      // Services (Services Master, SKU "SRV-…") are not stock: keep them.
+      if (/^SRV-/i.test(String(d.sku ?? ''))) {
+        services++
+        continue
+      }
+      medicines++
+    } else if (r.tbl === 'movements') movements++
+    else {
+      const slug = String(d.slug ?? '')
+      if (!(slug in docs)) continue
+      docs[slug]++
+    }
+    rows.push(r)
+  }
+  return { plan: { medicines, services, movements, docs, total: rows.length }, rows }
+}
+
+/** Find a chemist by its number (12 = SUBGEO12, 100 = HQ). */
+export function chemistByNumber(n: number): { id: number; code: string; name: string } | undefined {
+  for (const r of sql.prepare("SELECT id, data FROM sync_records WHERE tbl = 'branches' AND scope = 0 AND deleted = 0").all() as { id: string; data: string }[]) {
+    const b = JSON.parse(r.data) as Rec
+    if (Number(b.number) === n) return { id: Number(r.id), code: chemCode(n), name: String(b.name ?? '') }
+  }
+  return undefined
+}
+
+/** What resetChemistStock would delete (nothing is changed). */
+export function planStockReset(branchId: number, code: string, name: string): StockResetPlan {
+  return { branchId, code, name, ...stockRowsOf(branchId).plan }
+}
+
+/**
+ * Delete every medicine of one chemist, with its stock history and stock
+ * documents. Each record is deleted exactly as a till would delete it, so every
+ * till removes it too on its next sync. Sales, customers, shifts, indents and
+ * LPOs stay (their lines keep the medicine name; the link is cleared).
+ */
+export function resetChemistStock(branchId: number): number {
+  const { rows } = stockRowsOf(branchId)
+  const now = Date.now()
+  // Documents and movements first, then the medicines they point at.
+  const order = (t: string) => (t === 'products' ? 1 : 0)
+  sql.transaction(() => {
+    for (const r of [...rows].sort((a, b) => order(a.tbl) - order(b.tbl))) writeRow(r.tbl, branchId, r.id, null, now, null)
+  })()
+  return rows.length
 }

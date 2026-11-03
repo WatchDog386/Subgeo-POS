@@ -3,17 +3,19 @@
 
 /** Tables shared by every chemist (company-wide). */
 // Order matters: a new chemist must reach the server before the cashiers assigned to it.
-export const GLOBAL_TABLES = ['branches', 'users', 'categories', 'suppliers'] as const
-/** Tables that belong to one chemist. */
-export const BRANCH_TABLES = ['products', 'customers', 'sales', 'parked', 'movements', 'purchaseOrders', 'shifts', 'jobs', 'logs'] as const
-export const SYNCED_TABLES: readonly string[] = [...GLOBAL_TABLES, ...BRANCH_TABLES, 'medicineNames', 'kv']
+export const GLOBAL_TABLES = ['branches', 'users', 'categories', 'suppliers', 'messages', 'medicineNames'] as const
+/** Tables that belong to one chemist. Parents come before the records that
+ * point at them (a sale names its shift), so the server always has the parent
+ * when it links the child in the relational tables. */
+export const BRANCH_TABLES = ['products', 'customers', 'shifts', 'sales', 'parked', 'movements', 'purchaseOrders', 'jobs', 'logs', 'docs', 'tasks'] as const
+export const SYNCED_TABLES: readonly string[] = [...GLOBAL_TABLES, ...BRANCH_TABLES, 'kv']
 
 /** Tables that existed at schema v3. The v3 upgrade loop must not touch tables
  * added later (medicineNames doesn't exist in a v3 database). */
-export const V3_TABLES: readonly string[] = [
+export const V3_TABLES = new Set<string>([
   'users', 'branches', 'categories', 'suppliers', 'products', 'customers', 'sales', 'parked',
   'movements', 'purchaseOrders', 'shifts', 'jobs', 'logs', 'kv', 'outbox',
-] as const
+])
 
 /** Fields that are counters: merged by adding deltas instead of overwriting. */
 export const COUNTER_FIELDS: Record<string, string[]> = { products: ['stock'], customers: ['balance'] }
@@ -26,3 +28,7 @@ export const isLocalKvKey = (key: string) => key.startsWith('_local:')
 export const isSeqKvKey = (key: string) => key.startsWith('seq:') || key.startsWith('medapp:seq:')
 
 export const isMetaField = (k: string) => k.startsWith('_')
+
+/** Accounts with the admin's rights: every chemist, staff, chemists, transfers.
+ * The purchases dashboard is run by the admin, so "purchase" has them too. */
+export const hasAdminRights = (role: string | undefined) => role === 'owner' || role === 'purchase'

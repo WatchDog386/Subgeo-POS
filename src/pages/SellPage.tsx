@@ -91,7 +91,10 @@ export default function SellPage() {
 
   const addProduct = (p: Product) => {
     const inCart = cart.lines.filter((l) => l.productId === p.id).reduce((s, l) => s + l.qty, 0)
-    if (p.trackStock && p.stock - inCart <= 0) toast(`${p.name}: no stock recorded — sale will go negative`, 'error')
+    if (p.trackStock && p.stock - inCart <= 0) {
+      toast(p.stock <= 0 ? `${p.name} is out of stock — receive it first` : `Only ${p.stock} of ${p.name} in stock`, 'error')
+      return
+    }
     setCart((c) => {
       // Serial-tracked items always get their own line so each serial can be captured.
       const idx = p.serialized ? -1 : c.lines.findIndex((l) => l.productId === p.id && !l.serial)
@@ -140,8 +143,15 @@ export default function SellPage() {
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  const setQty = (i: number, qty: number) =>
+  const setQty = (i: number, qty: number) => {
+    const line = cart.lines[i]
+    const p = line?.productId !== undefined ? products.find((x) => x.id === line.productId) : undefined
+    if (p?.trackStock && qty > (line?.qty ?? 0)) {
+      const elsewhere = cart.lines.filter((l, j) => j !== i && l.productId === p.id).reduce((s, l) => s + l.qty, 0)
+      if (qty + elsewhere > p.stock) return toast(`Only ${p.stock} of ${p.name} in stock`, 'error')
+    }
     setCart((c) => ({ ...c, lines: qty <= 0 ? c.lines.filter((_, j) => j !== i) : c.lines.map((l, j) => (j === i ? { ...l, qty } : l)) }))
+  }
 
   const clear = () => setCart({ lines: [], discount: 0 })
 
@@ -162,6 +172,12 @@ export default function SellPage() {
 
   const charge = () => {
     if (!cart.lines.length) return
+    // Stock may have changed since the items were added (another till, a transfer).
+    for (const l of cart.lines) {
+      const p = l.productId !== undefined ? products.find((x) => x.id === l.productId) : undefined
+      const want = cart.lines.filter((x) => x.productId === l.productId).reduce((s, x) => s + x.qty, 0)
+      if (p?.trackStock && want > p.stock) return toast(`Only ${p.stock} of ${p.name} in stock — lower the quantity`, 'error')
+    }
     if (cart.lines.some((l) => products.find((p) => p.id === l.productId)?.serialized && !l.serial)) {
       return toast('Enter serial numbers for serial-tracked items', 'error')
     }
@@ -786,6 +802,8 @@ function LineEditor({
   const [price, setPrice] = useState(String(line.unitPrice / 100))
   const [discount, setDiscount] = useState(String(line.discount / 100))
   const [serial, setSerial] = useState(line.serial ?? '')
+  // Best Price: offer the selling price first; if the customer complains, come down to this.
+  const best = useLiveQuery(async () => (line.productId !== undefined ? (await db.products.get(line.productId))?.minPrice : undefined), [line.productId])
   return (
     <Modal
       title={line.name}
@@ -826,6 +844,25 @@ function LineEditor({
           <input className="input" inputMode="decimal" value={discount} disabled={!allowPrice} onChange={(e) => setDiscount(e.target.value)} />
         </div>
       </div>
+      {best ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <span>
+            Best Price <b>{money(best)}</b> — the lowest it may be sold for.
+          </span>
+          {allowPrice && (
+            <button
+              type="button"
+              className="btn-ghost ml-auto"
+              onClick={() => {
+                setPrice(String(best / 100))
+                setDiscount('0')
+              }}
+            >
+              Use Best Price
+            </button>
+          )}
+        </div>
+      ) : null}
       {serialized && (
         <div className="mt-3">
           <label className="label">Serial number *</label>

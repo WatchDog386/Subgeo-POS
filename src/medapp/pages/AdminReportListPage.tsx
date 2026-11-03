@@ -60,7 +60,7 @@ const ADMIN_REPORTS: Record<string, ReportDef> = {
         rows.push({
           date: dmy(s.createdAt),
           doc: billNo(s, d.billPrefix),
-          part: s.refundOf ? 'OTC MEDICINE RETURN' : party ? 'CREDIT SALE' : 'OTC MEDICINE ISSUE',
+          part: s.refundOf ? 'OTC MEDICINE RETURN' : s.serviceBill ? 'SERVICE REQUEST/BILL' : party ? 'CREDIT SALE' : 'OTC MEDICINE ISSUE',
           debit: debit ? amt(debit) : '',
           credit: credit ? amt(credit) : '',
           bal: amt(bal),
@@ -193,19 +193,21 @@ const ADMIN_REPORTS: Record<string, ReportDef> = {
     async run(from, to) {
       const d = await getMedDefaults()
       const sales = (await db.sales.orderBy('createdAt').toArray()).filter((s) => inRange(s.createdAt, from, to))
-      const t = { cash: 0, mpesa: 0, card: 0, total: 0 }
+      const t = { cash: 0, mpesa: 0, card: 0, cheque: 0, total: 0 }
       const rows = sales.map((s) => {
         const cash = paidBy(s, 'cash')
         const mpesa = paidBy(s, 'mpesa')
         const card = paidBy(s, 'card')
-        const total = cash + mpesa + card
+        const cheque = paidBy(s, 'cheque')
+        const total = cash + mpesa + card + cheque
         t.cash += cash
         t.mpesa += mpesa
         t.card += card
+        t.cheque += cheque
         t.total += total
-        return { date: dmy(s.createdAt), rec: billNo(s, d.billPrefix), cash: amt(cash), mpesa: amt(mpesa), card: amt(card), cheque: '0.00', total: amt(total) }
+        return { date: dmy(s.createdAt), rec: billNo(s, d.billPrefix), cash: amt(cash), mpesa: amt(mpesa), card: amt(card), cheque: amt(cheque), total: amt(total) }
       })
-      if (rows.length) rows.push({ date: 'TOTAL', rec: '', cash: amt(t.cash), mpesa: amt(t.mpesa), card: amt(t.card), cheque: '0.00', total: amt(t.total) })
+      if (rows.length) rows.push({ date: 'TOTAL', rec: '', cash: amt(t.cash), mpesa: amt(t.mpesa), card: amt(t.card), cheque: amt(t.cheque), total: amt(t.total) })
       return {
         cols: [C('date', 'Date', 105), C('rec', 'Rec No', 150), C('cash', 'Cash', 100, 'right'), C('mpesa', 'Mpesa', 100, 'right'), C('card', 'Credit Card', 105, 'right'), C('cheque', 'Cheque', 110, 'right'), C('total', 'Total Rec Amt', 130, 'right')],
         rows,
@@ -259,13 +261,13 @@ const ADMIN_REPORTS: Record<string, ReportDef> = {
       const d = await getMedDefaults()
       const customers = await db.customers.toArray()
       const cName = new Map(customers.map((c) => [c.id!, c.name.toUpperCase()]))
-      const sales = (await db.sales.orderBy('createdAt').toArray()).filter((s) => !s.refundOf && inRange(s.createdAt, from, to))
+      const sales = (await db.sales.orderBy('createdAt').toArray()).filter((s) => !s.refundOf && !s.serviceBill && inRange(s.createdAt, from, to))
       const rows = sales.flatMap((s) =>
         s.lines.map((l) => ({
           doc: billNo(s, d.billPrefix),
           date: dmy(s.createdAt),
-          patient: s.customerId !== undefined ? (cName.get(s.customerId) ?? d.patientCategory) : d.patientCategory,
-          age: '-',
+          patient: s.patientName || (s.customerId !== undefined ? (cName.get(s.customerId) ?? d.patientCategory) : d.patientCategory),
+          age: s.patientAge || '-',
           med: l.name,
           qty: String(l.qty),
           rate: amt(l.unitPrice),

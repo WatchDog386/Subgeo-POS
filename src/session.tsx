@@ -4,6 +4,7 @@ import { activeBranchId, db, markRemote, switchBranchDb } from './db/db'
 import { logActivity } from './db/logs'
 import { HttpError, api, flushPending, setForbiddenHandler, setSyncToken, setUnauthorizedHandler, startSync, stopSync, syncNow, syncToken } from './db/sync'
 import { chemCode } from './db/seedData'
+import { hasAdminRights } from './db/syncSchema'
 import { hashPassword } from './lib/sha256'
 import type { Branch, Role, Shift, User } from './db/types'
 
@@ -36,7 +37,8 @@ export const PERMS: Record<Role, Permission[]> = {
   owner: ['refund', 'discount', 'inventory', 'reports', 'settings', 'purchasing', 'users', 'logs', 'branches'],
   manager: ['refund', 'discount', 'inventory', 'reports', 'purchasing', 'logs'],
   cashier: ['discount'],
-  purchase: ['purchasing', 'inventory', 'reports'],
+  // The purchases dashboard is run by the admin: same rights.
+  purchase: ['refund', 'discount', 'inventory', 'reports', 'settings', 'purchasing', 'users', 'logs', 'branches'],
 }
 
 /** Minimum password length for new or changed passwords. */
@@ -48,9 +50,10 @@ type LoginResponse = { token: string; user: User & { id: number }; branches: (Br
 
 /** Chemist an account works in; the admin keeps the last one opened. */
 function homeBranch(user: User, branches: Branch[]): number | undefined {
-  if (user.role !== 'owner') return user.branchId
+  if (!hasAdminRights(user.role)) return user.branchId
+  // Admin rights: keep the chemist last opened on this computer, else the account's own, else the first open one.
   const open = branches.filter((b) => b.active)
-  return (open.find((b) => b.id === activeBranchId) ?? open[0] ?? branches[0])?.id
+  return (open.find((b) => b.id === activeBranchId) ?? open.find((b) => b.id === user.branchId) ?? open[0] ?? branches[0])?.id
 }
 
 /** Store what the server said about this account and the chemists, unless there are local edits not yet uploaded. */
@@ -100,7 +103,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const u = await db.users.get(Number(id))
       if (cancelled) return
       if (u && u.active) {
-        if (u.role !== 'owner' && u.branchId && u.branchId !== activeBranchId) await openBranch(u.branchId)
+        if (!hasAdminRights(u.role) && u.branchId && u.branchId !== activeBranchId) await openBranch(u.branchId)
         if (localStorage.getItem('syncTokenUser') !== String(u.id)) setSyncToken(null)
         setAuthUser(u)
       }
@@ -113,7 +116,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   // The admin moved this cashier to another chemist while signed in: follow.
   useEffect(() => {
-    if (user && user.role !== 'owner' && user.branchId && user.branchId !== activeBranchId) void openBranch(user.branchId)
+    if (user && !hasAdminRights(user.role) && user.branchId && user.branchId !== activeBranchId) void openBranch(user.branchId)
   }, [user, openBranch])
 
   // Background sync while someone is signed in (it restarts on every chemist switch).
@@ -197,9 +200,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const login = useCallback(
     async (username: string, pass: string): Promise<LoginResult> => {
       const uname = username.trim().toLowerCase()
-      // The purchase dashboard signs in with no password; the server only
-      // accepts one from an account whose role is "purchase".
-      if (!uname || (!pass && uname !== 'purchase')) return { ok: false, error: 'Enter your user name and password' }
+      if (!uname || !pass) return { ok: false, error: 'Enter your user name and password' }
       let u: User | undefined
       try {
         const r = await api<LoginResponse>('/auth/login', {
@@ -220,13 +221,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // Wrong password, disabled account, closed chemist… — the server's answer is final.
         if (e instanceof HttpError && e.status !== 503 && e.status < 500) return { ok: false, error: e.message }
         // Server unreachable: sign in against the copy of the staff list on this till.
-        const local = await db.users.where('username').equals(uname).first()
-        if (!local || hashPassword(local.salt, pass) !== local.passHash) return { ok: false, error: 'Invalid user name or password' }
+        // Cashiers may share a user name ("subgeo"); the password picks the account.
+        const named = await db.users.where('username').equals(uname).toArray()
+        const hits = named.filter((x) => hashPassword(x.salt, pass) === x.passHash)
+        const local = hits.find((x) => x.active) ?? hits[0]
+        if (!local) return { ok: false, error: 'Invalid user name or password' }
         if (!local.active) return { ok: false, error: 'This account is disabled' }
         const allBranches = await db.branches.toArray()
         const target = homeBranch(local, allBranches)
         if (!target) return { ok: false, error: 'This account has no chemist. Ask the admin.' }
-        if (local.role !== 'owner' && !allBranches.find((b) => b.id === target)?.active) {
+        if (!hasAdminRights(local.role) && !allBranches.find((b) => b.id === target)?.active) {
           return { ok: false, error: 'Your chemist is closed or not set. Ask the admin.' }
         }
         await openBranch(target)
@@ -248,7 +252,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const switchBranch = useCallback(
     async (branchId: number) => {
-      if (!user || user.role !== 'owner') return { ok: false, warning: 'Only the admin can switch chemist' }
+      if (!user || !hasAdminRights(user.role)) return { ok: false, warning: 'Only the admin can switch chemist' }
       if (branchId === activeBranchId) return { ok: true }
       const flushed = await Promise.race([flushPending(), new Promise<boolean>((r) => setTimeout(() => r(false), 10_000))]).catch(() => false)
       const from = branch ? chemCode(branch.number) : ''

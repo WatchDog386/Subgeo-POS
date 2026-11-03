@@ -160,7 +160,7 @@ function useTodoRows(team: boolean): TodoRow[] {
   for (const t of tasksFor(tasks, null)) add('TASK', `t${t.id}`, t.doc ?? '', t.createdAt, t.text, t.due && t.due < Date.now() ? 'OVERDUE' : 'PENDING', '#tasks', { assigner: t.assigner, assignee: t.assignee })
   for (const s of local?.shifts ?? []) add('DAY SHIFT', `s${s.id}`, `${branchCode}`, s.openedAt, `Shift opened by ${users.get(s.userId)?.name ?? '?'} not closed`, 'CLOSE SHIFT', '/shift')
   for (const p of local?.pos ?? []) add('PURCHASE', `po${p.id}`, p.poNo, p.createdAt, `${p.lines.length} line(s) to ${p.status === 'draft' ? 'order' : 'receive'}`, p.status.toUpperCase(), '/purchasing')
-  for (const p of local?.low ?? []) add('RE-ORDER', `p${p.id}`, p.sku, p.updatedAt, `${p.name} — ${p.stock} left (re-order at ${p.reorderLevel})`, p.stock <= 0 ? 'OUT OF STOCK' : 'LOW STOCK', '/reports/reorder')
+  for (const p of local?.low ?? []) add('RE-ORDER', `p${p.id}`, p.sku, p.updatedAt, `${p.name} — ${p.stock} left (re-order at ${p.reorderLevel}${p.maxStock !== undefined ? `, order ${Math.max(0, p.maxStock - p.stock)} to reach ${p.maxStock}` : ''})`, p.stock <= 0 ? 'OUT OF STOCK' : 'LOW STOCK', '/reports/reorder')
   for (const c of local?.owing ?? []) add('DEBTOR', `c${c.id}`, c.phone ?? '', c.createdAt, `${c.name.toUpperCase()} owes ${amt(c.balance)}`, 'COLLECT', '/customers')
   for (const j of local?.jobs ?? []) add('SERVICE', `j${j.id}`, j.jobNo, j.createdAt, `${j.customerName} — ${j.complaint}`, j.status.replace('_', ' ').toUpperCase(), '/service')
   if (local?.pending) add('SYNC', 'sync', branchCode, Date.now(), `${local.pending} bill(s) not uploaded yet`, 'WAITING', '/utilities/sync')
@@ -441,7 +441,7 @@ function QuickAccess() {
         <span className="ma-label" style={{ fontSize: 12 }}>
           Role
         </span>
-        <Select value={role} onChange={setRole} options={['SELECT', 'ADMIN']} width={168} />
+        <Select value={role} onChange={setRole} options={['SELECT', ...new Set(ADMIN_TRANSACTIONS.map((t) => t.role.toUpperCase()))]} width={168} />
       </div>
       <div style={{ display: 'flex', alignItems: 'center', marginTop: 9 }}>
         <SearchBar value={q} onChange={setQ} width={560} />

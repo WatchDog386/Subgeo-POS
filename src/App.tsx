@@ -4,6 +4,7 @@ import LoadingScreen from './components/LoadingScreen'
 import MedApp from './medapp/MedApp'
 import AdminApp from './medapp/AdminApp'
 import MedLogin from './medapp/MedLogin'
+import { hasAdminRights } from './db/syncSchema'
 
 export default function App() {
   const { user, restoring, dbEpoch } = useSession()
@@ -32,5 +33,6 @@ export default function App() {
   // The admin (owner) gets the admin shell and can open any chemist; cashiers
   // and managers work in their own chemist. Keyed on the open chemist's
   // database so every screen reloads its data after a switch.
-  return user.role === 'owner' ? <AdminApp key={dbEpoch} /> : <MedApp key={dbEpoch} />
+  // The purchases dashboard is run by the admin: same rights and frame, its own menu and home.
+  return hasAdminRights(user.role) ? <AdminApp key={dbEpoch} /> : <MedApp key={dbEpoch} />
 }

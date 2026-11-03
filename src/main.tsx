@@ -4,12 +4,13 @@ import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App'
 import { seedIfEmpty } from './db/seed'
-import { seedAdminDocs } from './medapp/data'
 import { SessionProvider } from './session'
 import { ToastProvider } from './components/ui'
 import { initAutoFullscreen } from './lib/fullscreen'
+import { preventIosInputZoom } from './medapp/mobile'
 
 initAutoFullscreen()
+preventIosInputZoom()
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -17,9 +18,7 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   })
 }
 
-seedIfEmpty()
-  .finally(seedAdminDocs)
-  .finally(() => {
+seedIfEmpty().finally(() => {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <BrowserRouter>

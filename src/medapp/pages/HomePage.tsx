@@ -9,6 +9,9 @@ import { Grid, Rows, SearchBar, Select, type Col } from '../ui'
 import { setTaskStatus, tasksFor, useTasks } from '../tasks'
 import { useSession } from '../../session'
 import { useToast } from '../../components/ui'
+import PurchaseTodo from './PurchaseTodo'
+import { ADMIN_TRANSACTIONS } from '../nav-admin'
+import { hasAdminRights } from '../../db/syncSchema'
 
 type Section = 'todo' | 'quick' | 'stats' | 'favs' | 'reports' | 'charts' | 'utilities'
 const TOP: { id: Section; label: string }[] = [
@@ -26,7 +29,11 @@ const ALL = [...TOP, ...BOTTOM]
 
 /** Home tab (screenshot 11.14.09): stacked accordion, Quick Access open. */
 export default function HomePage() {
-  const [open, setOpen] = useState<Section>('quick')
+  const { user } = useSession()
+  // The purchases dashboard opens on its To-Do List (To-Do List / Task To-Do /
+  // Pending-Completed); every other role opens on Quick Access.
+  const purchase = user?.role === 'purchase'
+  const [open, setOpen] = useState<Section>(purchase ? 'todo' : 'quick')
   const idx = ALL.findIndex((s) => s.id === open)
   const before = ALL.slice(0, idx + 1)
   const after = ALL.slice(idx + 1)
@@ -39,7 +46,7 @@ export default function HomePage() {
           </button>
         ))}
         <div style={{ flex: 1, minHeight: 0, overflow: 'auto', borderBottom: '1px solid #c3c3c3' }}>
-          <SectionBody id={open} />
+          {purchase && open === 'todo' ? <PurchaseTodo /> : <SectionBody id={open} />}
         </div>
         {after.map((s) => (
           <button key={s.id} type="button" className="ma-acc-head" onClick={() => setOpen(s.id)}>
@@ -81,7 +88,10 @@ function QuickAccess() {
   const nav = useNavigate()
   const [role, setRole] = useState('SELECT')
   const [q, setQ] = useState('')
-  const rows = TRANSACTIONS.filter((t) => role === 'SELECT' || t.role.toUpperCase() === role)
+  const { user } = useSession()
+  // The purchases dashboard has the admin's rights, so it gets the admin's list (with STOCK ADJUSTMENTS).
+  const list = hasAdminRights(user?.role) ? ADMIN_TRANSACTIONS : TRANSACTIONS
+  const rows = list.filter((t) => role === 'SELECT' || t.role.toUpperCase() === role)
     .filter((t) => !q.trim() || [t.module, t.label, t.role, t.description].some((v) => v.toLowerCase().includes(q.trim().toLowerCase())))
     .map((t, i) => ({ id: i, cells: { module: t.module, transaction: t.label, role: t.role, description: t.description }, to: t.to }))
   return (
@@ -90,7 +100,7 @@ function QuickAccess() {
         <span className="ma-label" style={{ fontSize: 12 }}>
           Role
         </span>
-        <Select value={role} onChange={setRole} options={['SELECT', 'PHARMACY']} width={86} round />
+        <Select value={role} onChange={setRole} options={['SELECT', ...new Set(list.map((t) => t.role.toUpperCase()))]} width={86} round />
       </div>
       <div style={{ display: 'flex', alignItems: 'center', marginTop: 9 }}>
         <SearchBar value={q} onChange={setQ} width={553} />

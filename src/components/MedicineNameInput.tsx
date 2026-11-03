@@ -16,6 +16,21 @@ export interface MedicineNameInputProps {
 /** Type-ahead for medicine names: the bundled standard list plus names admins
  * have keyed in before (synced company-wide). Picking an unknown name adds it
  * to the list for future use. */
+
+/** Remember a name the user keyed in on a form that saved without picking
+ * from the type-ahead (so every till suggests it next time). */
+export async function rememberMedicineName(name: string, group: string): Promise<void> {
+  const trimmed = name.trim()
+  if (!trimmed) return
+  if (MEDICINE_LIST.some((m) => m.name.toUpperCase() === trimmed.toUpperCase())) return
+  const existing = await db.medicineNames.where('name').equalsIgnoreCase(trimmed).first()
+  if (existing) {
+    if (group && existing.group !== group) await db.medicineNames.update(existing.id!, { group, updatedAt: Date.now() })
+    return
+  }
+  await db.medicineNames.add({ name: trimmed, group, source: 'admin', active: true, createdAt: Date.now(), updatedAt: Date.now() })
+}
+
 export function MedicineNameInput({ value, onChange, placeholder, disabled, autoFocus }: MedicineNameInputProps) {
   const [open, setOpen] = useState(false)
   const [highlight, setHighlight] = useState(-1)

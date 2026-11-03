@@ -7,8 +7,9 @@ import type { Branch, User } from './types'
 export const SEED_BRANCH: Branch & { id: number } = {
   id: 1,
   number: 1,
-  name: 'SCL UMOJA 3',
-  location: 'UMOJA 3',
+  // Rename it in Chemists → Edit after the first sign-in.
+  name: 'CHEMIST 1',
+  location: '',
   phone: '',
   active: true,
   createdAt: 0,
@@ -25,27 +26,25 @@ export const SEED_ADMIN: User & { id: number } = {
   active: true,
 }
 
-/** subgeo / 0000 — the cashier of CHEM1. */
+/** subgeo / 0001 — the cashier of SUBGEO1 (cashiers share the user name; the password picks the chemist). */
 export const SEED_CASHIER: User & { id: number } = {
   id: 2,
   name: 'SUBGEO',
   username: 'subgeo',
   salt: 'seed-cashier',
-  passHash: hashPassword('seed-cashier', '0000'),
+  passHash: hashPassword('seed-cashier', '0001'),
   role: 'cashier',
   active: true,
   branchId: 1,
 }
 
-/** purchase — the purchases dashboard (indents, POs, GRNs, medicine master).
- * Signs in with NO password: an empty-password hash is only accepted for this
- * role (see server/sync.ts auth/login and session.tsx). */
+/** purchase / subgeo22 — the purchases dashboard, run by the admin (admin rights). */
 export const SEED_PURCHASE: User & { id: number } = {
   id: 3,
   name: 'PURCHASE',
   username: 'purchase',
   salt: 'seed-purchase',
-  passHash: hashPassword('seed-purchase', ''),
+  passHash: hashPassword('seed-purchase', 'subgeo22'),
   role: 'purchase',
   active: true,
   branchId: 1,
@@ -53,7 +52,11 @@ export const SEED_PURCHASE: User & { id: number } = {
 
 export const SEED_USERS = [SEED_ADMIN, SEED_CASHIER, SEED_PURCHASE]
 
-/** "CHEM1" for chemist number 1. */
+/** "SUBGEO1" for chemist number 1 (the chemists are SUBGEO1 … SUBGEO12). */
+/** The head-office pharmacy "HQ" is kept on this chemist number (shown as HQ, not SUBGEO100). */
+export const HQ_NUMBER = 100
+
 export function chemCode(number: number | undefined): string {
-  return number ? `CHEM${number}` : ''
+  if (number === HQ_NUMBER) return 'HQ'
+  return number ? `SUBGEO${number}` : ''
 }

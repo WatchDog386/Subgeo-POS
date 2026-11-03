@@ -25,6 +25,8 @@ fs.mkdirSync(path.dirname(dbPath), { recursive: true })
 
 export const sql = new Database(dbPath)
 sql.pragma('journal_mode = WAL')
+// The relational tables (migrations/004) rely on their foreign keys.
+sql.pragma('foreign_keys = ON')
 
 /**
  * Apply every server/migrations/*.sql file that hasn't run yet, in filename

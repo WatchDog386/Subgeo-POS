@@ -1,14 +1,28 @@
 import * as pdfjsLib from 'pdfjs-dist'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import pdfjsWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url'
+import { parseInvoiceText, type ParsedInvoice, type TextItem } from './invoiceParse'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl
-function normalizeText(text: string): string {
-  return text
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
-    .replace(/[ \t]+/g, ' ')
-    .trim()
+
+/** The positioned text of every page of a PDF. */
+export async function pdfText(file: File): Promise<TextItem[][]> {
+  const pdf = (await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise) as PDFDocumentProxy
+  const pages: TextItem[][] = []
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const content = await (await pdf.getPage(i)).getTextContent()
+    pages.push(
+      (content.items as Array<{ str?: string; transform?: number[] }>)
+        .filter((it) => typeof it.str === 'string' && it.transform)
+        .map((it) => ({ x: it.transform![4], y: it.transform![5], str: it.str! })),
+    )
+  }
+  return pages
+}
+
+/** Read a supplier invoice / proforma / sales order PDF. */
+export async function readInvoicePdf(file: File): Promise<ParsedInvoice> {
+  return parseInvoiceText(await pdfText(file))
 }
 
 export interface ParsedMedicine {
@@ -17,8 +31,10 @@ export interface ParsedMedicine {
   barcode?: string
   brand?: string
   category?: string
+  /** Unit cost on the invoice, KES. */
   cost?: number
   price?: number
+  /** Quantity on the invoice (received). */
   stock?: number
   reorderLevel?: number
   location?: string
@@ -27,36 +43,10 @@ export interface ParsedMedicine {
   trackStock?: boolean
 }
 
+/** Item lines of a supplier PDF as medicines (Inventory → Import PDF). */
 export async function parsePdf(file: File): Promise<ParsedMedicine[]> {
-  const arrayBuffer = await file.arrayBuffer()
-  const pdf = (await pdfjsLib.getDocument({ data: arrayBuffer }).promise) as PDFDocumentProxy
-  const medicines: ParsedMedicine[] = []
-
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i)
-    const content = await page.getTextContent()
-    const items = content.items as Array<{ str: string; dir?: string; transform?: number[] }>
-    const text = items.map((it) => it.str).join(' ')
-    const lines = normalizeText(text).split(/\n+/)
-
-    for (const line of lines) {
-      const m = line.match(/^(.+?)\s+([A-Z0-9][A-Z0-9\-]{3,})\s+([\d,.]+)\s+([\d,.]+)\s*(\d+)?\s*$/)
-      if (!m) continue
-      medicines.push({
-        name: m[1].trim(),
-        sku: m[2],
-        price: parseFloat(m[4].replace(/,/g, '')),
-        cost: parseFloat(m[3].replace(/,/g, '')),
-        stock: m[5] ? parseInt(m[5], 10) : 0,
-        reorderLevel: 2,
-        taxable: true,
-        serialized: false,
-        trackStock: true,
-      })
-    }
-  }
-
-  return medicines
+  const inv = await readInvoicePdf(file)
+  return inv.lines.map((l) => ({ name: l.name.toUpperCase(), sku: l.code, cost: l.unitPrice, stock: l.qty, trackStock: true, serialized: false }))
 }
 
 export function medicineToCsvRow(m: ParsedMedicine): (string | number | undefined)[] {

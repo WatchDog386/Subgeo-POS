@@ -22,14 +22,37 @@ export interface CheckoutInput {
   userId: number
   shiftId?: number
   note?: string
+  /** PATIENT INFORMATION typed on the OTC / service bill. */
+  patient?: Pick<Sale, 'location' | 'patientName' | 'patientAge' | 'patientPhone'>
+  /** A Service Request/Bill and its service number. */
+  service?: { docLabel: string }
 }
 
 /**
  * Complete a sale atomically: write the sale, deduct stock, log stock movements and
  * post any on-account amount to the customer's balance.
  */
+/**
+ * Every medicine must sell at or above its Best Price (minPrice), after its
+ * line discount and its share of the bill discount. Throws when one doesn't.
+ */
+export async function checkPriceFloor(lines: SaleLine[], billDiscount: number): Promise<void> {
+  const net = (l: SaleLine) => Math.max(0, l.qty * l.unitPrice - l.discount)
+  const gross = lines.reduce((s, l) => s + net(l), 0)
+  for (const l of lines) {
+    if (l.productId === undefined || l.qty <= 0) continue
+    const p = await db.products.get(l.productId)
+    if (!p?.minPrice) continue
+    const share = gross > 0 ? (billDiscount * net(l)) / gross : 0
+    const each = (net(l) - share) / l.qty
+    if (each + 0.5 < p.minPrice)
+      throw new SaleError(`${p.name} cannot be sold below its Best Price KES ${(p.minPrice / 100).toFixed(2)} (this bill sells it at ${(each / 100).toFixed(2)} each)`)
+  }
+}
+
 export async function completeSale(input: CheckoutInput): Promise<Sale> {
   if (input.lines.length === 0) throw new SaleError('Cart is empty')
+  await checkPriceFloor(input.lines, input.discount)
   const settings = await getSettings()
   const totals = computeTotals(input.lines, input.discount, settings.vatRate, settings.pricesIncludeVat)
   const paid = paidAmount(input.payments)
@@ -38,6 +61,8 @@ export async function completeSale(input: CheckoutInput): Promise<Sale> {
   const onAccount = input.payments.filter((p) => p.method === 'account').reduce((s, p) => s + p.amount, 0)
   if (onAccount > 0 && !input.customerId) throw new SaleError('Select a customer to sell on account')
   const branch = await branchStamp()
+  // Bills and refunds count in the open shift's cash-up even when the screen didn't pass it.
+  const shiftId = input.shiftId ?? (await db.shifts.filter((x) => !x.closedAt).last())?.id
 
   return db.transaction('rw', [db.sales, db.products, db.movements, db.customers, db.kv], async () => {
     if (onAccount > 0) {
@@ -63,10 +88,12 @@ export async function completeSale(input: CheckoutInput): Promise<Sale> {
       change: changeDue(totals.total, input.payments),
       customerId: input.customerId,
       userId: input.userId,
-      shiftId: input.shiftId,
+      shiftId,
       status: 'completed',
       note: input.note,
       branch,
+      ...input.patient,
+      ...(input.service ? { serviceBill: true, docLabel: input.service.docLabel } : {}),
     }
     sale.id = await db.sales.add(sale)
 
@@ -104,12 +131,15 @@ export interface RefundRequest {
   userId: number
   shiftId?: number
   reason?: string
+  patient?: Pick<Sale, 'location' | 'patientName' | 'patientAge' | 'patientPhone'>
 }
 
 /** Refund some or all lines of a sale. Creates a negative sale record for reporting. */
 export async function refundSale(saleId: number, req: RefundRequest): Promise<Sale> {
   const settings = await getSettings()
   const branch = await branchStamp()
+  // Bills and refunds count in the open shift's cash-up even when the screen didn't pass it.
+  const shiftId = req.shiftId ?? (await db.shifts.filter((x) => !x.closedAt).last())?.id
   const refund = await db.transaction('rw', [db.sales, db.products, db.movements, db.customers, db.kv], async () => {
     const original = await db.sales.get(saleId)
     if (!original) throw new SaleError('Sale not found')
@@ -148,11 +178,12 @@ export async function refundSale(saleId: number, req: RefundRequest): Promise<Sa
       change: 0,
       customerId: original.customerId,
       userId: req.userId,
-      shiftId: req.shiftId,
+      shiftId,
       status: 'completed',
       note: req.reason,
       refundOf: original.id,
       branch,
+      ...req.patient,
     }
     refund.id = await db.sales.add(refund)
 

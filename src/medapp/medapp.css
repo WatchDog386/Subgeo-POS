@@ -1205,3 +1205,808 @@
   white-space: normal !important;
   line-height: 1.35;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Phones and small tablets (≤ 900px wide).
+ *
+ * Everything below is either hidden on wider screens or inside the @media
+ * block, so the desktop layout is untouched. The legacy screens are laid out
+ * with inline pixel styles; the block turns them into a one-column, touch-
+ * friendly layout:
+ *   - header wraps onto rows; the sidebar becomes a slide-in menu (☰);
+ *   - tabs scroll sideways; the work panel uses the full width;
+ *   - legacy absolute "canvas" forms flow as label / field rows;
+ *   - wide tables and grids scroll sideways inside their own box;
+ *   - dialogs fill the screen width.
+ * ══════════════════════════════════════════════════════════════════════════ */
+.ma-menu-btn,
+.ma-side-head,
+.ma-side-back {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  /* ── Shell ─────────────────────────────────────────────────────────── */
+  .ma {
+    min-width: 0;
+    height: 100%;
+    font-size: 12px;
+  }
+
+  .ma-header,
+  .ma-admin .ma-header {
+    height: auto;
+    min-height: 50px;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+    padding: 6px 8px 5px;
+    overflow: visible;
+  }
+  .ma-header > * {
+    position: static !important;
+    transform: none !important;
+  }
+  .ma-logo {
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+  }
+  .ma-version,
+  .ma-emr,
+  .ma-hspacer {
+    display: none !important;
+  }
+  .ma-welcome,
+  .ma-admin .ma-welcome {
+    margin-left: 0;
+    font-size: 12px;
+    line-height: 15px;
+    gap: 6px;
+    min-width: 0;
+  }
+  .ma-welcome svg {
+    width: 26px;
+    height: 26px;
+  }
+  /* Company name (and the chemist switch on the admin) on a full row. */
+  .ma-company,
+  .ma-admin .ma-brand {
+    order: 5;
+    flex: 1 1 100%;
+    margin-left: 0;
+    min-width: 0;
+  }
+  .ma-company {
+    font-size: 15px;
+    line-height: 1.25;
+    white-space: normal;
+    letter-spacing: 0;
+  }
+  .ma-admin .ma-company {
+    font-size: 15px;
+  }
+  .ma-chem-switch {
+    width: 100%;
+    margin-top: 4px;
+  }
+  .ma-chem-switch select {
+    flex: 1;
+    min-width: 0;
+    max-width: none;
+    height: 32px;
+  }
+  /* Log out / sync / messages: top right. */
+  .ma-logout {
+    margin-left: auto;
+    width: 34px;
+    height: 34px;
+  }
+  .ma-logout svg {
+    width: 30px;
+    height: 30px;
+  }
+  .ma-header-right,
+  .ma-admin .ma-header-right {
+    margin-left: auto;
+    margin-right: 0;
+    gap: 10px;
+  }
+  .ma-logout + .ma-header-right {
+    margin-left: 0;
+  }
+  /* Admin tool icons: one row that scrolls sideways. */
+  .ma-admin .ma-header-tools {
+    order: 6;
+    flex: 1 1 100%;
+    gap: 14px;
+    padding: 3px 0 1px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .ma-admin .ma-header-tools::-webkit-scrollbar {
+    display: none;
+  }
+  .ma-admin .ma-header-tools .ma-ibtn {
+    flex-shrink: 0;
+  }
+
+  .ma-body,
+  .ma-body[style] {
+    padding: 4px 4px 0 !important;
+  }
+  .ma-split {
+    display: none;
+  }
+
+  /* Sidebar → slide-in menu. */
+  .ma-side,
+  .ma-side[style] {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 55;
+    width: min(300px, 86vw) !important;
+    margin: 0;
+    transform: translateX(-105%);
+    transition: transform 0.2s ease;
+    box-shadow: 4px 0 18px rgba(0, 0, 0, 0.35);
+  }
+  .ma-side.is-open {
+    transform: none;
+  }
+  .ma-side-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+    height: 46px;
+    padding: 0 6px 0 14px;
+    background: #fff;
+    border-bottom: 2px solid #8cc4e6;
+    font-size: 15px;
+    font-weight: bold;
+    color: #1b4f8a;
+  }
+  .ma-side-head button {
+    width: 38px;
+    height: 38px;
+    border: 1px solid #c3c3c3;
+    border-radius: 4px;
+    background: linear-gradient(to bottom, #fafafa, #e2e2e2);
+    font-size: 22px;
+    line-height: 1;
+    color: #333;
+  }
+  .ma-side-back {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 54;
+    background: rgba(0, 0, 0, 0.35);
+  }
+  .ma-side-list {
+    height: auto;
+    max-height: none;
+  }
+  .ma-blue {
+    height: 44px;
+    font-size: 13px;
+  }
+  .ma-side-item,
+  .ma-tree-item {
+    height: 42px;
+    font-size: 14px;
+  }
+  .ma-tree-root {
+    height: 34px;
+  }
+
+  /* Tabs: one sideways-scrolling row, with the menu button first. */
+  .ma-tabs {
+    gap: 3px;
+    height: 40px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .ma-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .ma-tab {
+    flex-shrink: 0;
+    height: 36px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+  .ma-tab.is-active {
+    height: 38px;
+  }
+  .ma-menu-btn {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 7px;
+    height: 36px;
+    padding: 0 11px;
+    position: sticky;
+    left: 0;
+    z-index: 3;
+    border: 1px solid #0f5fae;
+    border-bottom: 0;
+    color: #fff;
+    font-size: 12px;
+    font-weight: bold;
+    background: linear-gradient(to bottom, #5ab9fd 0%, #3aa6f8 46%, #1e90f0 52%, #1c8cee 100%);
+  }
+  .ma-menu-btn .bars {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .ma-menu-btn .bars span {
+    display: block;
+    width: 16px;
+    height: 2px;
+    background: #fff;
+    border-radius: 1px;
+  }
+
+  /* ── Work panel ────────────────────────────────────────────────────── */
+  .ma-panel {
+    -webkit-overflow-scrolling: touch;
+  }
+  .ma-panel-inner {
+    min-width: 0;
+    padding: 10px 8px;
+  }
+  .ma-panel [style*='min-width: 900px'],
+  .ma-panel [style*='min-width: 960px'],
+  .ma-panel [style*='min-width: 998px'],
+  .ma-panel [style*='min-width: 1000px'] {
+    min-width: 0 !important;
+  }
+  .ma-title {
+    font-size: 14px;
+  }
+  /* Fixed-width desktop columns take the phone's width instead. */
+  .ma-fluid,
+  .ma-fluid[style] {
+    width: 100% !important;
+    flex: 1 1 100% !important;
+    min-width: 0;
+  }
+
+  /* Inline flex rows (title bars, tool bars, form columns, button rows) wrap. */
+  .ma-panel [style*='display: flex']:not([style*='flex-direction: column']):not(.ma-at):not(td *):not(.ma-hscroll *):not(.ma-search *) {
+    flex-wrap: wrap !important;
+    row-gap: 8px;
+  }
+  .ma-panel [style*='display: flex']:not([style*='flex-direction: column']):not(.ma-at):not(td *):not(.ma-hscroll *):not(.ma-search *) > * {
+    max-width: 100%;
+  }
+  /* Input + lookup button pairs shrink with their cell. */
+  .ma-panel [style*='display: inline-flex']:not(td *) {
+    max-width: 100%;
+  }
+  .ma-panel [style*='display: inline-flex']:not(td *) > .ma-input {
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+  .ma-panel [style*='display: flex'][style*='height: 2']:not(.ma-at):not(td *):not(.ma-hscroll *):not(.ma-search *),
+  .ma-panel [style*='display: flex'][style*='height: 3']:not(.ma-at):not(td *):not(.ma-hscroll *):not(.ma-search *) {
+    height: auto !important;
+    min-height: 26px;
+  }
+  /* Empty spacer spans and the large left indents of the desktop layout. */
+  .ma-panel span:empty[style^='width:'] {
+    display: none !important;
+  }
+  .ma-panel [style*='padding-left: 118px'],
+  .ma-panel [style*='padding-left: 120px'],
+  .ma-panel [style*='padding-left: 190px'],
+  .ma-panel [style*='padding-left: 200px'],
+  .ma-panel [style*='padding-left: 210px'],
+  .ma-panel [style*='padding-left: 300px'] {
+    padding-left: 0 !important;
+  }
+  .ma-panel [style*='margin-left: 52px'],
+  .ma-panel [style*='margin-left: 80px'],
+  .ma-panel [style*='margin-left: 104px'],
+  .ma-panel [style*='margin-left: 120px'],
+  .ma-panel [style*='margin-left: 170px'] {
+    margin-left: 0 !important;
+  }
+  .ma-panel [style*='margin: 0px 0px 12px 18px'] {
+    margin-left: 0 !important;
+  }
+
+  /* Nothing wider than the screen: boxes shrink, tables scroll inside. */
+  .ma-panel .ma-grid,
+  .ma-panel .ma-search,
+  .ma-panel .ma-hscroll,
+  .ma-panel .ma-group,
+  .ma-panel .ma-greybox,
+  .ma-panel .ma-box,
+  .ma-panel .ma-listbox,
+  .ma-panel .ma-help,
+  .ma-panel .ma-input,
+  .ma-panel .ma-select,
+  .ma-panel textarea,
+  .ma-panel img,
+  .ma-modal .ma-grid,
+  .ma-modal .ma-search,
+  .ma-modal .ma-input {
+    max-width: 100%;
+  }
+  .ma-panel svg:not(.ma-ibtn svg):not(.ma-btn svg):not(.ma-tab svg) {
+    max-width: 100%;
+    height: auto;
+  }
+  .ma-grid {
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pan-y;
+  }
+  .ma-panel div:has(> table):not(.ma-grid),
+  .ma-modal div:has(> table):not(.ma-grid) {
+    overflow-x: auto;
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
+  }
+  .ma-grid td {
+    height: 34px;
+    font-size: 12px;
+  }
+  .ma-grid th {
+    font-size: 12px;
+  }
+
+  /* Two-column forms: narrower label column, fields fill the rest. */
+  .ma-form:not(.ma-form-keep) {
+    grid-template-columns: minmax(84px, 36%) minmax(0, 1fr) !important;
+    column-gap: 8px !important;
+  }
+  .ma-form > * {
+    min-width: 0;
+  }
+  .ma-form > label {
+    white-space: normal;
+  }
+  .ma-form.ma-form-keep {
+    grid-template-columns: minmax(84px, 32%) minmax(0, 1fr) auto !important;
+    column-gap: 6px !important;
+  }
+  /* Long explanatory labels wrap (short ones still fit on their row). */
+  .ma-panel .ma-label,
+  .ma-panel .ma-green-label,
+  .ma-panel .ma-bold-label,
+  .ma-modal .ma-label {
+    white-space: normal;
+  }
+  .ma-panel [style*='repeat(4, minmax(170px, 1fr))'] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Legacy "canvas" pages (absolute coordinates) flow as label / field rows. */
+  .ma-panel [style*='position: absolute'][style*='left:']:not(textarea) {
+    position: static !important;
+    transform: none !important;
+    width: auto !important;
+    max-width: 100% !important;
+    height: auto !important;
+    margin-bottom: 8px;
+  }
+  .ma-panel textarea[style*='position: absolute'] {
+    position: static !important;
+    width: 100% !important;
+  }
+  .ma-canvas,
+  .ma-canvas[style] {
+    height: auto !important;
+    min-width: 0 !important;
+    padding: 8px 6px 14px;
+  }
+  .ma-panel :has(> .ma-at) {
+    display: flex !important;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .ma-at {
+    flex: 1 1 100%;
+    min-width: 0;
+    flex-wrap: wrap;
+    white-space: normal !important;
+    margin-bottom: 0 !important;
+  }
+  .ma-at-label {
+    flex: 0 0 34%;
+  }
+  .ma-at-label + .ma-at:not(.ma-at-label) {
+    flex: 1 1 calc(66% - 8px);
+  }
+  .ma-at-label + .ma-at-label {
+    flex: 1 1 calc(66% - 8px);
+  }
+  .ma-at-title {
+    justify-content: center;
+    margin: 2px 0 4px;
+  }
+  .ma-at > * {
+    max-width: 100%;
+  }
+
+  /* Subtabs scroll sideways rather than wrapping under each other. */
+  .ma-subtabs {
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-wrap: nowrap !important;
+    scrollbar-width: none;
+  }
+  .ma-subtab {
+    flex-shrink: 0;
+  }
+
+  /* Bigger touch targets. */
+  .ma-btn {
+    min-height: 30px;
+  }
+  .ma-ibtn.is-lg {
+    width: 34px;
+    height: 34px;
+  }
+  .ma-acc-head {
+    min-height: 38px;
+    font-size: 12px;
+  }
+
+  /* ── Dialogs fill the width ────────────────────────────────────────── */
+  .ma-modal,
+  .ma-modal[style] {
+    min-width: 0;
+    width: calc(100vw - 12px) !important;
+    max-width: none;
+    max-height: calc(100% - 16px);
+  }
+  .ma-modal-head {
+    height: 36px;
+    font-size: 13px;
+  }
+  .ma-modal-head button {
+    width: 28px;
+    height: 28px;
+    font-size: 16px;
+  }
+  .ma-modal-body {
+    padding: 10px 8px;
+  }
+  .ma-modal-foot {
+    flex-wrap: wrap;
+  }
+  .ma-msg {
+    top: 8px;
+    max-width: calc(100vw - 16px);
+    white-space: normal;
+    text-align: center;
+  }
+
+  /* ── Login ─────────────────────────────────────────────────────────── */
+  .ma-login .ma-logout,
+  .ma-login .ma-header-right {
+    display: none !important;
+  }
+  .ma-login .ma-header .ma-company {
+    flex: 1 1 0;
+    order: 0;
+    font-size: 14px;
+    text-align: right;
+  }
+  .ma-login .ma-welcome {
+    display: none;
+  }
+  .ma-login-card {
+    justify-content: flex-start;
+    padding: 9vh 18px 40px;
+    gap: 16px;
+  }
+  .ma-login-form,
+  .ma-login-form .ma-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    width: min(340px, 100%);
+  }
+  .ma-login-label {
+    font-size: 13px;
+    margin-top: 6px;
+  }
+  .ma-login-form .ma-input,
+  .ma-login-form .ma-input[style] {
+    width: 100% !important;
+    height: 44px;
+    font-size: 16px;
+    padding: 6px 10px;
+  }
+  .ma-login-btn {
+    width: 100%;
+    height: 46px;
+    margin-top: 12px;
+    font-size: 15px;
+  }
+  .ma-login-msg {
+    width: min(340px, 100%);
+    text-align: center;
+  }
+  .ma-login-brand {
+    font-size: 26px;
+    white-space: normal;
+    text-align: center;
+    margin-top: 14px;
+  }
+}
+
+/* Phone held sideways: one compact header row so the work panel keeps its height. */
+@media (max-width: 900px) and (max-height: 500px) {
+  .ma-header,
+  .ma-admin .ma-header {
+    flex-wrap: nowrap;
+    min-height: 44px;
+    padding: 3px 6px;
+    gap: 8px;
+  }
+  .ma-logo {
+    width: 32px;
+    height: 32px;
+  }
+  .ma-welcome,
+  .ma-admin .ma-welcome,
+  .ma-admin .ma-company {
+    display: none;
+  }
+  .ma-company {
+    order: 1;
+    flex: 0 1 auto;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .ma-admin .ma-brand {
+    order: 1;
+    flex: 0 1 270px;
+  }
+  .ma-chem-switch {
+    margin-top: 0;
+  }
+  .ma-chem-switch select {
+    height: 28px;
+  }
+  .ma-admin .ma-header-tools {
+    order: 2;
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0;
+  }
+  .ma-header-right,
+  .ma-admin .ma-header-right,
+  .ma-logout {
+    order: 3;
+  }
+  .ma-logout {
+    margin-left: auto;
+  }
+  .ma-tabs {
+    height: 36px;
+  }
+  .ma-tab,
+  .ma-menu-btn {
+    height: 32px;
+  }
+  .ma-tab.is-active {
+    height: 34px;
+  }
+  .ma-login-card {
+    padding-top: 3vh;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Desktop monitors of every size (≥ 901px). Wider than 1500px: unchanged.
+ * Narrower monitors (1366 / 1280 / 1024, or 125–150% Windows scaling) used to
+ * cut off the right of the header and of the screen; these bands fit it in.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/* 1280–1500px: the admin header fits on one row. */
+@media (min-width: 1280px) and (max-width: 1500px) {
+  .ma-admin .ma-welcome {
+    margin-left: 120px;
+  }
+  .ma-admin .ma-brand {
+    margin-left: 30px;
+  }
+  .ma-admin .ma-header-tools {
+    gap: 4px;
+  }
+  .ma-admin .ma-emr {
+    display: none;
+  }
+}
+
+/* 901–1279px: the app fills the window; admin tool icons get their own row. */
+@media (min-width: 901px) and (max-width: 1279px) {
+  .ma {
+    min-width: 0;
+  }
+  .ma-emr {
+    display: none !important;
+  }
+  .ma-admin .ma-header {
+    height: auto;
+    min-height: 62px;
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 2px;
+    padding: 4px 0 4px;
+  }
+  .ma-admin .ma-logo {
+    position: static;
+    margin-left: 8px;
+  }
+  .ma-admin .ma-version {
+    position: static;
+    margin-left: 10px;
+    align-self: flex-start;
+    margin-top: 9px;
+  }
+  .ma-admin .ma-welcome {
+    margin-left: 40px;
+  }
+  .ma-admin .ma-brand {
+    margin-left: 40px;
+    min-width: 0;
+    flex-shrink: 1;
+  }
+  .ma-admin .ma-company {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .ma-admin .ma-header-right {
+    margin-left: auto;
+  }
+  .ma-admin .ma-header-tools {
+    order: 9;
+    flex: 1 1 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    padding: 0 12px 2px;
+  }
+  .ma-panel-inner {
+    min-width: 0;
+  }
+  .ma-panel [style*='min-width: 960px'] {
+    min-width: 0 !important;
+  }
+}
+
+/* 1100–1279px: slimmer sidebar. */
+@media (min-width: 1100px) and (max-width: 1279px) {
+  .ma-side {
+    max-width: 210px;
+  }
+}
+
+/* 901–1099px (1024 monitors, 1366 at 125%): the sidebar slides in from ☰ Menu,
+ * so the work area gets the full width. */
+@media (min-width: 901px) and (max-width: 1099px) {
+  .ma-side,
+  .ma-side[style] {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 55;
+    width: 280px !important;
+    margin: 0;
+    transform: translateX(-105%);
+    transition: transform 0.2s ease;
+    box-shadow: 4px 0 18px rgba(0, 0, 0, 0.35);
+  }
+  .ma-side.is-open {
+    transform: none;
+  }
+  .ma-side-back {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 54;
+    background: rgba(0, 0, 0, 0.3);
+  }
+  .ma-side-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+    height: 40px;
+    padding: 0 6px 0 12px;
+    background: #fff;
+    border-bottom: 2px solid #8cc4e6;
+    font-size: 13px;
+    font-weight: bold;
+    color: #1b4f8a;
+  }
+  .ma-side-head button {
+    width: 30px;
+    height: 30px;
+    border: 1px solid #c3c3c3;
+    border-radius: 3px;
+    background: linear-gradient(to bottom, #fafafa, #e2e2e2);
+    font-size: 18px;
+    line-height: 1;
+    color: #333;
+  }
+  .ma-split {
+    display: none;
+  }
+  .ma-body[style] {
+    padding-left: 2px !important;
+  }
+  .ma-menu-btn {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 7px;
+    height: 38px;
+    padding: 0 12px;
+    border: 1px solid #0f5fae;
+    border-bottom: 0;
+    color: #fff;
+    font-size: 13px;
+    font-weight: bold;
+    background: linear-gradient(to bottom, #5ab9fd 0%, #3aa6f8 46%, #1e90f0 52%, #1c8cee 100%);
+  }
+  .ma-menu-btn .bars {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .ma-menu-btn .bars span {
+    display: block;
+    width: 16px;
+    height: 2px;
+    background: #fff;
+    border-radius: 1px;
+  }
+}
+
+/* "◀ Back" at the start of the tab bar (every page). */
+.ma-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  align-self: flex-end;
+  height: 32px;
+  margin: 0 4px 3px 0;
+  padding: 0 11px;
+  border: 1px solid #a8a8a8;
+  border-radius: 3px;
+  background: linear-gradient(to bottom, #ffffff 0%, #e6e6e6 100%);
+  color: #1b4f8a;
+  font-size: 12px;
+  font-weight: bold;
+  white-space: nowrap;
+}
+.ma-back-btn:hover {
+  background: linear-gradient(to bottom, #ffffff 0%, #d9e9f7 100%);
+}
+@media (max-width: 900px) {
+  .ma-back-btn {
+    height: 34px;
+    margin-bottom: 2px;
+    padding: 0 10px;
+  }
+}

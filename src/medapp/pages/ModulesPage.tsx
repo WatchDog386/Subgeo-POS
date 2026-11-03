@@ -1,11 +1,8 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
-import type { Customer, Payment, Product, Sale, SaleLine, ServiceJob, Supplier } from '../../db/types'
-import { completeSale, refundSale } from '../../db/sales'
-import { toCents } from '../../lib/money'
-import { MedicineNameInput } from '../../components/MedicineNameInput'
+import type { DocLine, Product, Sale, ServiceJob, Supplier } from '../../db/types'
 import { useSession } from '../../session'
 import { useToast } from '../../components/ui'
 import { downloadCsv } from '../../lib/csv'
@@ -26,6 +23,13 @@ import {
   yy,
 } from '../data'
 import { MODULE_GROUPS } from '../nav'
+import { OtcEntry, PartyEntry, WHOLESALE_RULES, WholesaleEntry } from './EntryScreens'
+import { useInvoiceUpload } from './InvoiceImport'
+import { ADJUST_MINUS, ADJUST_PLUS, GrnEntry, StockAdjustEntry } from './StockScreens'
+import { MedicineEntry } from './MedicineScreen'
+import PriceTable from './PriceTable'
+import { hasAdminRights } from '../../db/syncSchema'
+import { ProductLookup } from './ProductLookup'
 import {
   EyeIcon,
   FindIcon,
@@ -39,10 +43,11 @@ import {
   ToolGlyph,
   type ToolKey,
 } from '../icons'
-import { Btn, Check, Dialog, Grid, HScroll, IBtn, Input, PickList, Rows, SearchBar, Select, ToolBtn, type Col, type Opt } from '../ui'
+import { Btn, Dialog, Grid, HScroll, IBtn, Input, PickList, Rows, Select, ToolBtn, type Col } from '../ui'
 
 /* ── Definitions ───────────────────────────────────────────────────────── */
-type Source = 'otc' | 'otc-return' | 'service' | 'party' | 'services' | 'docs'
+/** medicine: the real stock list (products), with the Medicine form's extra details. */
+type Source = 'otc' | 'otc-return' | 'service' | 'party' | 'services' | 'docs' | 'medicine'
 type FieldKind = 'docno' | 'date' | 'user' | 'location' | 'text' | 'party' | 'money'
 interface Field {
   key: string
@@ -57,7 +62,59 @@ interface ModuleDef {
   yellowChk?: boolean
   prefix?: string
   fields?: Field[]
+  /** "+" opens a full-page stock screen (StockScreens.tsx) instead of the pop-up form; saving moves stock. */
+  entry?: 'grn' | 'adjust' | 'medicine'
+  /** Offer "Upload Supplier Invoice (PDF)" (reads the lines and receives them into stock). */
+  importInvoice?: boolean
 }
+
+/** What to type in each field: shown greyed inside the empty input. */
+const FIELD_HINTS: Record<string, string> = {
+  accId: 'Account code, e.g. 4010',
+  address: 'Postal / street address',
+  advDetails: 'What the advance is for',
+  approx: 'Estimated cost, e.g. 2500.00',
+  cheque: 'Cheque number (blank if cash/M-Pesa)',
+  cost: 'Buying price per unit, e.g. 45.00',
+  customer: 'Type or look up the customer',
+  depositTo: 'Account the money goes to, e.g. MPESA',
+  expense: 'Expense account, e.g. PURCHASES MEDICINE',
+  faxNo: 'Fax (optional)',
+  fromAccount: 'Paying account, e.g. CASH / BANK',
+  group: 'Product group, e.g. SYRUPS, TABS/CAPSULES',
+  indentNo: 'Indent no. this follows, e.g. PI-3-26',
+  indentor: 'Who asked for the items',
+  invoice: "Supplier's invoice / receipt no.",
+  invoiceNo: 'Invoice number',
+  lpoNo: 'LPO no. this receives, e.g. PO-4-26',
+  name: 'Full name as it should print',
+  narration: 'What the payment is for',
+  packSize: 'Units per pack, e.g. 1 or 100',
+  partyId: 'Party code (optional)',
+  pettyCash: 'Petty cash account',
+  phoneNo: 'Phone, e.g. 0712 345 678',
+  purpose: 'Why: reorder, new stock, …',
+  quoteNo: 'Quotation no. this follows',
+  receivedBy: 'Who received the goods',
+  ref: 'Reference / description',
+  refNo: 'Reference number',
+  retail: 'Retail price per unit, e.g. 150.00',
+  status: 'e.g. GOOD RECEIVED, INDENT APPROVED',
+  supplierName: 'Type or look up the supplier',
+  total: 'Total value, e.g. 1746.00',
+  type: 'S = stock item, N = non-stock',
+  minPrice: 'Best Price: lowest it may be sold for (KES)',
+  reorder: 'Re-order when stock falls to, e.g. 10',
+  maxStock: 'Most to hold (blank = no limit)',
+  uom: 'Unit, e.g. ML, MG, TABS',
+  vendorName: 'Type or look up the vendor',
+  whole: 'Wholesale price per unit',
+}
+const hintFor = (f: Field): string | undefined =>
+  FIELD_HINTS[f.key] ?? (f.kind === 'date' ? 'dd-mm-yyyy' : f.kind === 'money' ? '0.00' : f.kind === 'party' ? 'Type or look up a name' : undefined)
+
+/** Fields filled from the newest record of the same register (what the shop usually types). */
+const REPEAT_FIELDS = new Set(['expense', 'status', 'receivedBy', 'fromAccount', 'pettyCash', 'depositTo', 'group', 'uom', 'type', 'packSize', 'indentor'])
 
 const C = (key: string, label: string, width: number, align?: 'right'): Col => ({ key, label, width, align })
 const BASE_TOOLS: ToolKey[] = ['mail', 'add', 'list', 'note', 'chat', 'edit', 'copy', 'print', 'scanner', 'fax', 'download', 'docs']
@@ -72,6 +129,8 @@ const DEFS: Record<string, ModuleDef> = {
       C('billNo', 'Bill No.', 100),
       C('date', 'Date', 98),
       C('category', 'Patient Category', 200),
+      C('patient', 'Patient Name', 150),
+      C('contact', 'Contact No', 110),
       C('payable', 'Payable By', 190),
       C('narration', 'Narration', 200),
       C('amount', 'Bill Amount', 75, 'right'),
@@ -86,8 +145,11 @@ const DEFS: Record<string, ModuleDef> = {
     yellowChk: true,
     tools: BASE_TOOLS,
     cols: [
+      C('returnNo', 'Return No.', 100),
       C('date', 'Date', 100),
       C('category', 'Patient Category', 200),
+      C('patient', 'Patient Name', 150),
+      C('contact', 'Contact No', 110),
       C('payable', 'Payable By', 190),
       C('narration', 'Narration', 200),
       C('amount', 'Bill Amount', 75, 'right'),
@@ -103,6 +165,7 @@ const DEFS: Record<string, ModuleDef> = {
     cols: [
       C('billNo', 'SERV Bill No', 100),
       C('patient', 'Patient Name', 150),
+      C('contact', 'Contact No', 110),
       C('location', 'Location', 190),
       C('category', 'Patient Category', 190),
       C('amount', 'Bill Amount', 75, 'right'),
@@ -118,7 +181,7 @@ const DEFS: Record<string, ModuleDef> = {
     source: 'docs',
     prefix: 'SQ',
     tools: ['mail', 'add', 'list', 'note', 'chat', 'edit', 'copyAll', 'print', 'scanner', 'fax', 'download', 'docs'],
-    cols: [C('location', 'Location', 200), C('docNo', 'Quote.No', 100), C('date', 'Date', 75), C('customer', 'Customer Name', 190), C('user', 'User', 410)],
+    cols: [C('location', 'Location', 200), C('docNo', 'Quote.No', 100), C('date', 'Date', 75), C('customer', 'Customer Name', 190), C('contact', 'Contact No', 110), C('total', 'Total', 75, 'right'), C('user', 'User', 225)],
     fields: [
       { key: 'location', kind: 'location' },
       { key: 'docNo', kind: 'docno' },
@@ -136,6 +199,7 @@ const DEFS: Record<string, ModuleDef> = {
       C('location', 'Location', 200),
       C('date', 'Date', 75),
       C('customer', 'Customer Name', 190),
+      C('contact', 'Contact No', 110),
       C('invoiceNo', 'Invoice No', 100),
       C('docNo', 'Delivery No.', 100),
       C('quoteNo', 'Quote.No', 100),
@@ -163,6 +227,7 @@ const DEFS: Record<string, ModuleDef> = {
       C('docNo', 'Return No', 100),
       C('date', 'Date', 75),
       C('customer', 'Organization Name', 190),
+      C('contact', 'Contact No', 110),
       C('quoteNo', 'Quotation No', 100),
       C('user', 'User', 100),
       C('total', 'Net Amt', 75, 'right'),
@@ -184,7 +249,7 @@ const DEFS: Record<string, ModuleDef> = {
     source: 'docs',
     prefix: 'WSI',
     tools: ['mail', 'add', 'list', 'note', 'chat', 'edit', 'globe', 'copyAll', 'print', 'scanner', 'fax', 'download', 'docs'],
-    cols: [C('location', 'Location', 200), C('quoteNo', 'Quote.No', 100), C('date', 'Date', 75), C('customer', 'Customer Name', 190), C('user', 'User', 100), C('_', '', 310)],
+    cols: [C('location', 'Location', 200), C('quoteNo', 'Quote.No', 100), C('date', 'Date', 75), C('customer', 'Customer Name', 190), C('contact', 'Contact No', 110), C('total', 'Total', 75, 'right'), C('user', 'User', 100), C('_', '', 125)],
     fields: [
       { key: 'location', kind: 'location' },
       { key: 'docNo', kind: 'docno' },
@@ -200,7 +265,7 @@ const DEFS: Record<string, ModuleDef> = {
     source: 'docs',
     prefix: 'CRN',
     tools: BASE_TOOLS,
-    cols: [C('location', 'Location', 200), C('docNo', 'CR Note.No', 100), C('date', 'Date', 75), C('customer', 'Customer Name', 190), C('partyId', 'Party ID', 75), C('user', 'User', 100), C('_', '', 235)],
+    cols: [C('location', 'Location', 200), C('docNo', 'CR Note.No', 100), C('date', 'Date', 75), C('customer', 'Customer Name', 190), C('contact', 'Contact No', 110), C('partyId', 'Party ID', 75), C('total', 'Total', 75, 'right'), C('user', 'User', 100), C('_', '', 50)],
     fields: [
       { key: 'location', kind: 'location' },
       { key: 'docNo', kind: 'docno' },
@@ -221,6 +286,7 @@ const DEFS: Record<string, ModuleDef> = {
       C('date', 'Date', 100),
       C('advDetails', 'Adv Details', 250),
       C('customer', 'Received From', 200),
+      C('contact', 'Contact No', 110),
       C('depositTo', 'Deposit To', 200),
       C('docNo', 'Receipt No', 100),
       C('total', 'Total', 75, 'right'),
@@ -250,6 +316,10 @@ const DEFS: Record<string, ModuleDef> = {
       C('pobox', 'P.O Box No', 100),
       C('phone', 'Telephone', 110),
       C('email', 'Email', 160),
+      C('contactPerson', 'Contact Person', 150),
+      C('contactPhone', 'Contacts No', 110),
+      C('kraPin', 'KRA PIN', 110),
+      C('billType', 'Bill Type', 90),
     ],
   },
   'services-master': {
@@ -268,6 +338,7 @@ const DEFS: Record<string, ModuleDef> = {
       C('docNo', 'Payment Vouche', 95),
       C('voucherDate', 'Voucher Date', 100),
       C('supplierName', 'Supplier Name', 215),
+      C('contact', 'Contact No', 110),
       C('fromAccount', 'From Account', 250),
       C('refNo', 'REF NO#', 100),
       C('ref', 'REF', 250),
@@ -319,6 +390,7 @@ const DEFS: Record<string, ModuleDef> = {
       C('indentDate', 'Indent Date', 205),
       C('docNo', 'PO No', 190),
       C('vendorName', 'Vendor Name', 210),
+      C('contact', 'Contact No', 110),
       C('address', 'Address', 220),
     ],
     fields: [
@@ -365,15 +437,19 @@ const DEFS: Record<string, ModuleDef> = {
     hscroll: 0.6,
     tools: BASE_TOOLS,
     cols: [
-      C('docNo', 'Mrn No', 115),
-      C('mrnDate', 'Mrn Date', 120),
-      C('invoice', 'Invoice/Receipt', 125),
-      C('vendorName', 'Vendor Name', 200),
-      C('total', 'TOTAL VALUE', 115, 'right'),
+      C('docNo', 'Mran No', 100),
+      C('mrnDate', 'Mran Date', 100),
+      C('invoice', 'Invoice/Receipt', 100),
+      C('vendorName', 'Vendor Name', 190),
+      C('total', 'TOTAL VALUE', 100, 'right'),
       C('expense', 'Expense A/c', 200),
-      C('receivedBy', 'Received By', 115),
-      C('status', 'Status', 120),
+      C('receivedBy', 'Received By', 100),
+      C('status', 'Status', 200),
+      C('phoneNo', 'Phone No', 120),
+      C('address', 'Address', 200),
     ],
+    entry: 'grn',
+    importInvoice: true,
     fields: [
       { key: 'docNo', kind: 'docno' },
       { key: 'mrnDate', kind: 'date' },
@@ -383,11 +459,52 @@ const DEFS: Record<string, ModuleDef> = {
       { key: 'expense', kind: 'text' },
       { key: 'receivedBy', kind: 'text' },
       { key: 'status', kind: 'text' },
+      { key: 'phoneNo', kind: 'text' },
+      { key: 'address', kind: 'text' },
     ],
+  },
+  [ADJUST_MINUS]: {
+    title: 'Stock Adjust -',
+    source: 'docs',
+    prefix: 'SAM',
+    hscroll: 0.5,
+    tools: BASE_TOOLS,
+    cols: [
+      C('docNo', 'Doc No', 100),
+      C('date', 'Date', 100),
+      C('location', 'Location', 140),
+      C('types', 'Type Of Adjustment', 200),
+      C('items', 'Products', 80, 'right'),
+      C('qty', 'Qty', 80, 'right'),
+      C('total', 'Value (Cost)', 110, 'right'),
+      C('user', 'User', 110),
+      C('approval', 'Status', 160),
+    ],
+    entry: 'adjust',
+  },
+  [ADJUST_PLUS]: {
+    title: 'Stock Adjust +(DBH)',
+    source: 'docs',
+    prefix: 'SAP',
+    hscroll: 0.5,
+    tools: BASE_TOOLS,
+    cols: [
+      C('docNo', 'Doc No', 100),
+      C('date', 'Date', 100),
+      C('location', 'Location', 140),
+      C('types', 'Type Of Adjustment', 200),
+      C('items', 'Products', 80, 'right'),
+      C('qty', 'Qty', 80, 'right'),
+      C('total', 'Value (Cost)', 110, 'right'),
+      C('user', 'User', 110),
+      C('approval', 'Status', 160),
+    ],
+    entry: 'adjust',
   },
   'medicine': {
     title: 'Medicine',
-    source: 'docs',
+    source: 'medicine',
+    entry: 'medicine',
     prefix: 'PRD00',
     hscroll: 0.75,
     tools: BASE_TOOLS,
@@ -397,10 +514,19 @@ const DEFS: Record<string, ModuleDef> = {
       C('group', 'Product Group', 310),
       C('uom', 'UOM', 100),
       C('retail', 'Retail Sale', 130, 'right'),
+      C('minPrice', 'Best Price', 110, 'right'),
       C('whole', 'Whole sale', 140, 'right'),
       C('cost', 'Cost Rate', 130, 'right'),
       C('packSize', 'Pack Size', 110, 'right'),
       C('type', 'Stock/Non-Stock', 80),
+      C('stock', 'Qty In Stock', 90, 'right'),
+      C('reorder', 'Re-order Level', 100, 'right'),
+      C('maxStock', 'Max Level', 90, 'right'),
+      C('molecular', 'Moleculor Name', 160),
+      C('productType', 'Product Type', 110),
+      C('supplier', 'Preffered Supplier', 200),
+      C('markup', 'Markup%', 80, 'right'),
+      C('vat', 'VAT ?', 60),
     ],
     fields: [
       { key: 'docNo', kind: 'docno' },
@@ -412,6 +538,9 @@ const DEFS: Record<string, ModuleDef> = {
       { key: 'cost', kind: 'money' },
       { key: 'packSize', kind: 'money' },
       { key: 'type', kind: 'text' },
+      { key: 'minPrice', kind: 'money' },
+      { key: 'reorder', kind: 'text' },
+      { key: 'maxStock', kind: 'text' },
     ],
   },
   /* Purchases dashboard — Petty Cash Issue (screenshot 12.24.48 (1)). */
@@ -462,9 +591,11 @@ const TOOL_TITLES: Record<ToolKey, string> = {
   columns: 'Columns',
 }
 
-type RawRow = { id: string; ts: number; cells: Record<string, string>; detail?: Sale | ServiceJob }
+type RawRow = { id: string; ts: number; cells: Record<string, string>; detail?: Sale | ServiceJob; docLines?: DocLine[]; productId?: number; docId?: number }
 
 const PAGE = 50
+/** Approval workflow stamps (Modules list → approval dropdown + stamp). */
+const APPROVALS = ['APPROVAL REQUEST', 'APPROVED', 'REJECTED', 'ON HOLD'] as const
 const OPS = ['WHERE', '=', 'LIKE', 'START WITH', '>', '<']
 
 /* ── Data adapters ─────────────────────────────────────────────────────── */
@@ -483,6 +614,12 @@ function useRows(slug: string, def: ModuleDef): RawRow[] {
     [def.source],
     [] as ServiceJob[],
   )
+  // Bills raised from a Service Request belong to that register, not the OTC list.
+  const serviceSaleIds = useLiveQuery(
+    async () => (def.source === 'otc' ? new Set((await db.jobs.toArray()).map((j) => j.saleId).filter((x): x is number => x !== undefined)) : new Set<number>()),
+    [def.source],
+    new Set<number>(),
+  )
   const jobSales = useLiveQuery(
     async () => {
       const ids = jobs.map((j) => j.saleId).filter((x): x is number => x !== undefined)
@@ -491,19 +628,37 @@ function useRows(slug: string, def: ModuleDef): RawRow[] {
     [jobs],
     [] as (Sale | undefined)[],
   )
-  const suppliers = useLiveQuery(() => (def.source === 'party' ? db.suppliers.toArray() : Promise.resolve([] as Supplier[])), [def.source], [] as Supplier[])
+  // Suppliers: the Party Master list, and the contact numbers of vendors on documents.
+  const suppliers = useLiveQuery(() => db.suppliers.toArray(), [], [] as Supplier[])
   const services = useLiveQuery(
     () => (def.source === 'services' ? db.products.filter((p) => !p.trackStock).toArray() : Promise.resolve([] as Product[])),
     [def.source],
     [] as Product[],
   )
+  // Medicine register: every medicine in stock (typed here, received on a GRN / uploaded invoice, or keyed in Inventory).
+  const medicines = useLiveQuery(
+    async () => {
+      if (def.source !== 'medicine') return { products: [] as Product[], cats: new Map<number, string>(), docs: [] as { id: number; values: Record<string, string> }[] }
+      const [products, cats, docs] = await Promise.all([db.products.filter((p) => !/^SRV-/i.test(p.sku)).toArray(), db.categories.toArray(), db.docs.where('slug').equals('medicine').toArray()])
+      return { products, cats: new Map(cats.map((c) => [c.id!, c.name])), docs }
+    },
+    [def.source],
+  )
   const uname = (id?: number) => (id !== undefined ? users.get(id)?.name.toUpperCase() ?? '' : '')
+  /** Contact number of a party by name: contact person's phone, else its own phone. */
+  const contactOf = (name?: string) => {
+    const n = (name ?? '').trim().toUpperCase()
+    if (!n) return ''
+    const p = [...customers.values()].find((c) => c.name.toUpperCase() === n) ?? suppliers.find((x) => x.name.toUpperCase() === n)
+    return p?.contactPhone || p?.phone || ''
+  }
+  const custPhone = (id?: number) => (id !== undefined ? customers.get(id)?.contactPhone || customers.get(id)?.phone || '' : '')
 
   return useMemo(() => {
     switch (def.source) {
       case 'otc':
         return sales
-          .filter((s) => !s.refundOf)
+          .filter((s) => !s.refundOf && !s.serviceBill && !serviceSaleIds.has(s.id!))
           .map((s) => ({
             id: `s${s.id}`,
             ts: s.createdAt,
@@ -512,11 +667,13 @@ function useRows(slug: string, def: ModuleDef): RawRow[] {
               billNo: billNo(s, d.billPrefix),
               date: dmy(s.createdAt),
               category: s.customerId !== undefined ? (customers.get(s.customerId)?.name ?? d.patientCategory).toUpperCase() : d.patientCategory,
+              patient: s.patientName ?? '',
+              contact: s.patientPhone || custPhone(s.customerId),
               payable: payableBy(s, customers),
               narration: `${s.note ? `${s.note} ` : ''}-${uname(s.userId)}`,
               amount: amt(s.total),
               user: uname(s.userId),
-              location: d.location,
+              location: s.location || d.location,
             },
           }))
       case 'otc-return': {
@@ -530,13 +687,16 @@ function useRows(slug: string, def: ModuleDef): RawRow[] {
               ts: s.createdAt,
               detail: s,
               cells: {
+                returnNo: `RTN-${seqOf(s.receiptNo)}-${yy(s.createdAt)}`,
                 date: dmy(s.createdAt),
-                category: d.patientCategory,
+                category: s.customerId !== undefined ? (customers.get(s.customerId)?.name ?? d.patientCategory).toUpperCase() : d.patientCategory,
+                patient: s.patientName ?? orig?.patientName ?? '',
+                contact: s.patientPhone || orig?.patientPhone || custPhone(s.customerId),
                 payable: payableBy(s, customers),
-                narration: `${orig ? `RET ${billNo(orig, d.billPrefix)} ` : ''}-${uname(s.userId)}`,
+                narration: `${orig ? `RET ${billNo(orig, d.billPrefix)} ` : ''}${s.note ? `${s.note} ` : ''}-${uname(s.userId)}`,
                 amount: amt(-s.total),
                 user: uname(s.userId),
-                location: d.location,
+                location: s.location || d.location,
               },
             }
           })
@@ -545,9 +705,9 @@ function useRows(slug: string, def: ModuleDef): RawRow[] {
         const saleMap = new Map<number, Sale>()
         for (const s of jobSales) if (s) saleMap.set(s.id!, s)
         return jobs.map((j) => {
-          const total = j.labour + j.lines.reduce((s, l) => s + l.qty * l.unitPrice - l.discount, 0)
           const sale = j.saleId !== undefined ? saleMap.get(j.saleId) : undefined
-          const paid = (m: 'cash' | 'mpesa' | 'card' | 'account') => (sale ? amt(paidBy(sale, m)) : '0.00')
+          const total = sale?.total ?? j.labour + j.lines.reduce((s, l) => s + l.qty * l.unitPrice - l.discount, 0)
+          const paid = (m: 'cash' | 'mpesa' | 'card' | 'cheque' | 'account') => (sale ? amt(paidBy(sale, m)) : '0.00')
           return {
             id: `j${j.id}`,
             ts: j.createdAt,
@@ -555,49 +715,39 @@ function useRows(slug: string, def: ModuleDef): RawRow[] {
             cells: {
               billNo: `${d.servicePrefix}-${seqOf(j.jobNo)}-${yy(j.createdAt)}`,
               patient: (j.customerName || 'OTC CLIENT').toUpperCase(),
-              location: d.location,
-              category: d.patientCategory,
+              contact: j.phone || sale?.patientPhone || custPhone(j.customerId),
+              location: sale?.location || d.location,
+              category: j.customerId !== undefined ? (customers.get(j.customerId)?.name ?? d.patientCategory).toUpperCase() : d.patientCategory,
               amount: amt(total),
               cash: paid('cash'),
               mpesa: paid('mpesa'),
               credit: paid('account'),
-              cheque: '0.00',
+              cheque: paid('cheque'),
               card: paid('card'),
             },
           }
         })
       }
-      case 'party':
+      case 'party': {
+        const card = (p: Supplier, kind: 'SUPPLIERS' | 'CUSTOMER') => ({
+          name: p.name.toUpperCase(),
+          group: p.groupAccount || (kind === 'SUPPLIERS' ? 'SUNDRY CREDITORS' : 'SUNDRY DEBTORS'),
+          type: kind,
+          blacklisted: p.blacklisted || /blacklist/i.test(p.notes ?? '') ? 'YES' : 'NO',
+          address: p.address || p.notes || '-',
+          pobox: p.poBox || '-',
+          phone: p.phone || '-',
+          email: p.email || '-',
+          contactPerson: p.contactPerson || '-',
+          contactPhone: p.contactPhone || '-',
+          kraPin: p.kraPin || '-',
+          billType: p.billType || 'PAY LATER',
+        })
         return [
-          ...suppliers.map((s) => ({
-            id: `sup${s.id}`,
-            ts: s.id ?? 0,
-            cells: {
-              name: s.name.toUpperCase(),
-              group: 'Sundry Creditors',
-              type: 'SUPPLIERS',
-              blacklisted: 'NO',
-              address: s.notes || '-',
-              pobox: '-',
-              phone: s.phone || '-',
-              email: s.email || '-',
-            },
-          })),
-          ...[...customers.values()].map((c) => ({
-            id: `cus${c.id}`,
-            ts: c.createdAt,
-            cells: {
-              name: c.name.toUpperCase(),
-              group: 'SUNDRY DEBTORS',
-              type: 'CUSTOMER',
-              blacklisted: /blacklist/i.test(c.notes ?? '') ? 'YES' : 'NO',
-              address: c.notes || '-',
-              pobox: '-',
-              phone: c.phone || '-',
-              email: c.email || '-',
-            },
-          })),
+          ...suppliers.map((s) => ({ id: `sup${s.id}`, ts: s.id ?? 0, cells: card(s, 'SUPPLIERS') })),
+          ...[...customers.values()].map((c) => ({ id: `cus${c.id}`, ts: c.createdAt, cells: card(c, 'CUSTOMER') })),
         ].sort((a, b) => b.ts - a.ts)
+      }
       case 'services':
         return services
           .sort((a, b) => b.createdAt - a.createdAt)
@@ -606,15 +756,60 @@ function useRows(slug: string, def: ModuleDef): RawRow[] {
             ts: p.createdAt,
             cells: { name: p.name.toUpperCase(), charges: amt(p.price), outsource: p.brand === 'OUTSOURCED' ? 'YES' : 'NO' },
           }))
+      case 'medicine': {
+        if (!medicines) return []
+        const byKey = new Map<string, { id: number; values: Record<string, string> }>()
+        for (const doc of medicines.docs) {
+          if (doc.values.name) byKey.set(`n:${doc.values.name.trim().toUpperCase()}`, doc)
+          if (doc.values.docNo) byKey.set(`c:${doc.values.docNo.trim().toUpperCase()}`, doc)
+        }
+        return medicines.products.map((p) => {
+          const doc = byKey.get(`c:${p.sku.trim().toUpperCase()}`) ?? byKey.get(`n:${p.name.trim().toUpperCase()}`)
+          const v = doc?.values ?? {}
+          return {
+            id: `p${p.id}`,
+            ts: p.updatedAt || p.createdAt,
+            productId: p.id,
+            docId: doc?.id,
+            cells: {
+              docNo: p.sku,
+              name: p.name.toUpperCase(),
+              group: (p.categoryId !== undefined ? medicines.cats.get(p.categoryId) : undefined)?.toUpperCase() || v.group || '',
+              uom: v.uom || '',
+              retail: amt(p.price),
+              whole: v.whole || amt(p.price),
+              cost: amt(p.cost),
+              packSize: v.packSize || '1.00',
+              type: p.trackStock ? 'S' : 'N',
+              stock: String(p.stock),
+              minPrice: p.minPrice ? amt(p.minPrice) : '',
+              reorder: String(p.reorderLevel ?? 0),
+              maxStock: p.maxStock !== undefined ? String(p.maxStock) : '',
+              molecular: v.molecular || 'NONE',
+              productType: v.productType || 'MEDICINE',
+              supplier: (p.supplierId !== undefined ? suppliers.find((x) => x.id === p.supplierId)?.name : undefined)?.toUpperCase() || v.supplier || '',
+              markup: v.markup || '0.00',
+              vat: p.taxable ? 'YES' : 'NO',
+            },
+          }
+        })
+      }
       case 'docs':
-        return docs.map((doc) => ({ id: `d${doc.id}`, ts: doc.createdAt, cells: doc.values }))
+        return docs.map((doc) => {
+          const v = doc.values
+          const contact = v.contact || v.phoneNo || contactOf(v.customer || v.vendorName || v.supplierName)
+          return { id: `d${doc.id}`, ts: doc.createdAt, cells: { ...v, contact }, docLines: doc.lines }
+        })
     }
-  }, [def.source, sales, jobs, jobSales, suppliers, customers, services, docs, d, users]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [def.source, sales, jobs, jobSales, suppliers, customers, services, docs, d, users, serviceSaleIds, medicines]) // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /* ── Screen ────────────────────────────────────────────────────────────── */
 export function ModuleListPage() {
   const { slug = '' } = useParams()
+  const { user } = useSession()
+  // Medicine Prices (Best Price): admin / purchase only.
+  if (slug === 'medicine-prices') return hasAdminRights(user?.role) ? <PriceTable /> : <ModulesEmpty />
   const def = DEFS[slug]
   if (!def) return <ModulesEmpty />
   return <ModuleList key={slug} slug={slug} def={def} />
@@ -624,14 +819,20 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
   const nav = useNavigate()
   const toast = useToast()
   const all = useRows(slug, def)
+  const medicineProducts = useLiveQuery(() => (def.entry === 'medicine' ? db.products.filter((p) => !/^SRV-/i.test(p.sku)).toArray() : []), [def.entry], [] as Product[])
+  const upload = useInvoiceUpload()
   const [quick, setQuick] = useState('')
   const [col, setCol] = useState('SELECT')
   const [op, setOp] = useState('WHERE')
   const [val, setVal] = useState('')
   const [applied, setApplied] = useState<{ col: string; op: string; val: string } | null>(null)
-  const [approval, setApproval] = useState('SPECIMEN COLLECTED')
+  const [approval, setApproval] = useState<string>(APPROVALS[0])
+  const { user } = useSession()
   const [asc, setAsc] = useState(false)
   const [page, setPage] = useState(0)
+  // Eye with nothing selected: every record on one page, no filters.
+  const [showAll, setShowAll] = useState(false)
+  const [findMed, setFindMed] = useState(false)
   const [checked, setChecked] = useState<Set<string | number>>(new Set())
   const [selected, setSelected] = useState<string | number | undefined>()
   const [showFilter, setShowFilter] = useState(true)
@@ -639,8 +840,8 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
   const [view, setView] = useState<RawRow | null>(null)
   const [edit, setEdit] = useState<RawRow | 'new' | null>(null)
   const [action, setAction] = useState('SELECT')
-  const [otcOpen, setOtcOpen] = useState(false)
-  const [refund, setRefund] = useState<Sale | null | undefined>(undefined)
+  // Full-page entry screens (EntryScreens.tsx) that replace the list while open.
+  const [screen, setScreen] = useState<{ kind: 'wholesale' | 'grn' | 'adjust' | 'medicine'; editId?: number } | { kind: 'otc'; mode: 'bill' | 'return' | 'service'; sale?: Sale } | { kind: 'party'; row?: RawRow } | null>(null)
 
   const colKey = def.cols.find((c) => c.label === col)?.key
   const filtered = all
@@ -665,9 +866,10 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
       }
     })
     .sort((a, b) => (asc ? a.ts - b.ts : b.ts - a.ts))
-  const pages = Math.max(1, Math.ceil(filtered.length / PAGE))
+  const size = showAll ? Math.max(filtered.length, 1) : PAGE
+  const pages = Math.max(1, Math.ceil(filtered.length / size))
   const pg = Math.min(page, pages - 1)
-  const pageRows = filtered.slice(pg * PAGE, pg * PAGE + PAGE)
+  const pageRows = filtered.slice(pg * size, pg * size + size)
   const target = () => all.find((r) => r.id === selected) ?? all.find((r) => checked.has(r.id))
 
   const exportCsv = () =>
@@ -681,24 +883,60 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
     return rows.length ? rows : target() ? [target()!] : []
   }
   const newDoc = () => {
-    if (def.source === 'otc') setOtcOpen(true)
-    else if (def.source === 'otc-return') setRefund(undefined)
-    else if (def.source === 'service') nav('/service')
+    if (def.source === 'otc') setScreen({ kind: 'otc', mode: 'bill' })
+    else if (def.source === 'otc-return') setScreen({ kind: 'otc', mode: 'return' })
+    else if (def.source === 'service') setScreen({ kind: 'otc', mode: 'service' })
+    else if (def.source === 'party') setScreen({ kind: 'party' })
+    else if (WHOLESALE_RULES[slug]) setScreen({ kind: 'wholesale' })
+    else if (def.entry) setScreen({ kind: def.entry })
     else setEdit('new')
   }
   const editDoc = () => {
     const t = target()
+    // Medicine: with nothing selected, search for the one to edit.
+    if (!t && def.entry === 'medicine') return setFindMed(true)
     if (!t) return toast('Select a record first', 'error')
-    if (def.source === 'otc') setRefund(t.detail as Sale)
+    if (def.entry === 'medicine') return setScreen({ kind: 'medicine', editId: t.productId })
+    if (def.source === 'otc') setScreen({ kind: 'otc', mode: 'return', sale: t.detail as Sale })
     else if (def.source === 'otc-return') setView(t)
     else if (def.source === 'service') nav('/service')
+    else if (WHOLESALE_RULES[slug]) setScreen({ kind: 'wholesale', editId: Number(String(t.id).slice(1)) })
+    else if (def.entry === 'grn' || def.entry === 'adjust') setScreen({ kind: def.entry, editId: Number(String(t.id).slice(1)) })
+    else if (def.source === 'party') setScreen({ kind: 'party', row: t })
     else setEdit(t)
   }
   const viewDoc = () => {
     const t = target()
-    if (!t) return toast('Select a record first', 'error')
-    setView(t)
+    // Medicine: its details page shows every field (no separate view box).
+    if (t && def.entry === 'medicine') return setScreen({ kind: 'medicine', editId: t.productId })
+    if (t) return setView(t)
+    // Nothing selected: show everything (all records, no filters, one page).
+    setQuick('')
+    setApplied(null)
+    setVal('')
+    setCol('SELECT')
+    setOp('WHERE')
+    setPage(0)
+    setShowAll(true)
+    toast(`Showing all ${all.length} record(s) — double-click one to open it`)
   }
+  /** Stamp the approval status on the chosen documents (synced to every till). */
+  const approve = async () => {
+    const rows = chosenRows()
+    if (!rows.length) return toast('Tick or select the record(s) to stamp first', 'error')
+    const hasStatus = def.fields?.some((f) => f.key === 'status')
+    const at = dmy(Date.now())
+    for (const r of rows) {
+      const id = Number(String(r.id).slice(1))
+      const doc = await db.docs.get(id)
+      if (!doc) continue
+      const values: Record<string, string> = { ...doc.values, approval, approvedBy: user?.name.toUpperCase() ?? '', approvedOn: at }
+      if (hasStatus) values.status = approval
+      await saveDoc(slug, values, id)
+    }
+    toast(`${rows.length} record(s) marked ${approval}`)
+  }
+
   const tool = (k: ToolKey) => {
     switch (k) {
       case 'mail': {
@@ -710,6 +948,7 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
       case 'add':
         return newDoc()
       case 'list':
+        setShowAll(false)
         setQuick('')
         setApplied(null)
         setVal('')
@@ -752,6 +991,14 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
     }
   }
 
+  if (screen?.kind === 'medicine') return <MedicineEntry productId={screen.editId} onClose={() => setScreen(null)} />
+  if (screen?.kind === 'grn') return <GrnEntry editId={screen.editId} onClose={() => setScreen(null)} />
+  if (screen?.kind === 'adjust') return <StockAdjustEntry slug={slug as typeof ADJUST_MINUS} editId={screen.editId} onClose={() => setScreen(null)} />
+  if (screen?.kind === 'wholesale') return <WholesaleEntry slug={slug} def={def} editId={screen.editId} onClose={() => setScreen(null)} />
+  if (screen?.kind === 'otc') return <OtcEntry mode={screen.mode} fromSale={screen.sale} onClose={() => setScreen(null)} />
+  if (screen?.kind === 'party')
+    return <PartyEntry party={screen.row ? { kind: String(screen.row.id).startsWith('sup') ? 'supplier' : 'customer', id: Number(String(screen.row.id).replace(/\D/g, '')) } : undefined} onClose={() => setScreen(null)} />
+
   return (
     <div className="ma-panel-inner" style={{ paddingTop: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 10, height: 30 }}>
@@ -770,6 +1017,14 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
         <IBtn lg title="Filter" onClick={() => setShowFilter(!showFilter)}>
           <FunnelIcon />
         </IBtn>
+        {def.importInvoice && (
+          <span style={{ marginLeft: 24 }}>
+            <Btn onClick={upload.pick} disabled={upload.busy} title="Read a supplier invoice / proforma / sales order PDF and receive all its lines into stock">
+              {upload.busy ? 'Reading PDF…' : 'Upload Supplier Invoice (PDF)'}
+            </Btn>
+          </span>
+        )}
+        {upload.element}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, whiteSpace: 'nowrap' }}>
@@ -804,16 +1059,14 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
           </>
         )}
         <span style={{ borderLeft: '1px solid #c3c3c3', height: 20 }} />
-        <Select value={approval} onChange={setApproval} width={170} options={['SPECIMEN COLLECTED', 'APPROVED', 'PENDING', 'REJECTED']} />
-        <IBtn
-          title="Approve"
-          onClick={() => {
-            const n = chosenRows().length
-            toast(n ? `${n} record(s) approved` : 'Select a record first', n ? 'ok' : 'error')
-          }}
-        >
-          <StampIcon />
-        </IBtn>
+        {def.source === 'docs' && (
+          <>
+            <Select value={approval} onChange={setApproval} width={170} options={[...APPROVALS]} />
+            <IBtn title={`Set ${approval} on the ticked / selected record(s)`} onClick={() => void approve()}>
+              <StampIcon />
+            </IBtn>
+          </>
+        )}
         <span style={{ borderLeft: '1px solid #c3c3c3', height: 20 }} />
         <IBtn title="Sort" onClick={() => setAsc(!asc)}>
           <SortIcon />
@@ -821,7 +1074,7 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
         <IBtn bare title="Previous" onClick={() => setPage(Math.max(0, pg - 1))}>
           <OrangeArrow dir="left" />
         </IBtn>
-        <Input value={`${pg * PAGE}-${pg * PAGE + PAGE}`} readOnly width={40} />
+        <Input value={showAll ? `0-${filtered.length}` : `${pg * PAGE}-${pg * PAGE + PAGE}`} readOnly width={40} />
         <IBtn bare title="Next" onClick={() => setPage(Math.min(pages - 1, pg + 1))}>
           <OrangeArrow dir="right" />
         </IBtn>
@@ -844,7 +1097,14 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
           }}
           selected={selected}
           onSelect={setSelected}
-          onOpen={(id) => setView(all.find((r) => r.id === id) ?? null)}
+          onOpen={(id) => {
+            const r = all.find((x) => x.id === id)
+            if (!r) return
+            // Double-click: the stock screens open straight on the edit page.
+            if (def.entry === 'medicine') setScreen({ kind: 'medicine', editId: r.productId })
+            else if (def.entry === 'grn' || def.entry === 'adjust') setScreen({ kind: def.entry, editId: Number(String(r.id).slice(1)) })
+            else setView(r)
+          }}
           fillWidth={false}
         />
         {def.hscroll && <HScroll thumb={def.hscroll} />}
@@ -882,10 +1142,18 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
         />
       )}
       {view && <ViewDialog def={def} row={view} onClose={() => setView(null)} />}
-      {otcOpen && def.source === 'otc' && <OtcBillDialog onClose={() => setOtcOpen(false)} />}
-      {refund !== undefined && <OtcReturnDialog sale={refund ?? undefined} onClose={() => setRefund(undefined)} />}
-      {edit && def.source === 'docs' && <DocDialog slug={slug} def={def} row={edit === 'new' ? undefined : edit} onClose={() => setEdit(null)} />}
-      {edit && def.source === 'party' && <PartyDialog row={edit === 'new' ? undefined : edit} onClose={() => setEdit(null)} />}
+      {findMed && (
+        <ProductLookup
+          title="Search Medicine to edit"
+          products={medicineProducts}
+          onClose={() => setFindMed(false)}
+          onPick={(p) => {
+            setFindMed(false)
+            setScreen({ kind: 'medicine', editId: p.id })
+          }}
+        />
+      )}
+      {edit && (def.source === 'docs' || def.source === 'medicine') && <DocDialog slug={slug} def={def} row={edit === 'new' ? undefined : edit} onClose={() => setEdit(null)} />}
       {edit && def.source === 'services' && <ServiceDialog row={edit === 'new' ? undefined : edit} onClose={() => setEdit(null)} />}
     </div>
   )
@@ -893,7 +1161,9 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
 
 /* ── View dialog ───────────────────────────────────────────────────────── */
 function ViewDialog({ def, row, onClose }: { def: ModuleDef; row: RawRow; onClose: () => void }) {
-  const lines = row.detail && 'lines' in row.detail ? row.detail.lines : []
+  const lines = row.detail && 'lines' in row.detail
+    ? row.detail.lines
+    : (row.docLines ?? []).map((l) => ({ name: l.name, qty: l.qty, unitPrice: l.rate, discount: Math.round(l.qty * l.rate) - l.total })) // shows Amount = the line total (incl. VAT when added on)
   return (
     <Dialog
       title={def.title}
@@ -912,6 +1182,7 @@ function ViewDialog({ def, row, onClose }: { def: ModuleDef; row: RawRow; onClos
           .map((c) => (
             <FragmentRow key={c.key} label={c.label} value={row.cells[c.key] ?? ''} />
           ))}
+        {row.cells.approval && <FragmentRow label="Approval" value={`${row.cells.approval}${row.cells.approvedBy ? ` by ${row.cells.approvedBy}` : ''}${row.cells.approvedOn ? ` on ${row.cells.approvedOn}` : ''}`} />}
         {row.cells.attachment && <FragmentRow label="Document" value={row.cells.attachmentName || 'attachment'} />}
       </div>
       {row.cells.attachment &&
@@ -951,357 +1222,6 @@ function FragmentRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-/* ── OTC Medicine Issue/Bill entry ─────────────────────────────────────── */
-const PAY_OPTIONS: Opt[] = [
-  { value: 'cash', label: 'CASH COLLECTION ACCOUNT' },
-  { value: 'mpesa', label: 'MPESA COLLECTION ACCOUNT' },
-  { value: 'card', label: 'CREDIT CARD COLLECTION ACCOUNT' },
-  { value: 'account', label: 'CREDIT ACCOUNT' },
-]
-
-interface OtcLine extends SaleLine {
-  key: string
-  product?: Product
-  qtyText: string
-  rateText: string
-  discText: string
-}
-
-function LineNum({ value, onChange, width = 60 }: { value: string; onChange: (v: string) => void; width?: number }) {
-  return (
-    <input
-      className="ma-input is-plain"
-      style={{ width, height: 19, padding: '0 4px', fontSize: 11 }}
-      value={value}
-      inputMode="decimal"
-      onChange={(e) => onChange(e.target.value)}
-    />
-  )
-}
-
-function OtcBillDialog({ onClose }: { onClose: () => void }) {
-  const { user } = useSession()
-  const toast = useToast()
-  const d = useMedDefaults()
-  const products = useLiveQuery(() => db.products.filter((p) => p.active).toArray(), [], [] as Product[])
-  const customers = useLiveQuery(() => db.customers.toArray(), [], [] as Customer[])
-  const [category, setCategory] = useState(d.patientCategory.toUpperCase())
-  const [pay, setPay] = useState('cash')
-  const [narration, setNarration] = useState('')
-  const [lines, setLines] = useState<OtcLine[]>([])
-  const [pickItem, setPickItem] = useState(false)
-  const [pickCat, setPickCat] = useState(false)
-  const [saving, setSaving] = useState(false)
-
-  const labelOf = (p: Product) => `${p.name}${p.sku ? ` [${p.sku}]` : ''}`
-  const addLine = (name: string) => {
-    const p = products.find((x) => labelOf(x).toLowerCase() === name.toLowerCase())
-    if (!p) return toast('Pick a medicine from the list', 'error')
-    if (lines.some((l) => l.product?.id === p.id)) {
-      toast(`${p.name} is already on the bill — edit its quantity`, 'error')
-      return
-    }
-    setLines((ls) => [
-      ...ls,
-      {
-        key: String(Date.now()) + String(ls.length),
-        product: p,
-        name: p.name,
-        sku: p.sku,
-        qty: 1,
-        unitPrice: p.price,
-        unitCost: p.cost,
-        discount: 0,
-        taxable: p.taxable,
-        qtyText: '1',
-        rateText: (p.price / 100).toFixed(2),
-        discText: '0',
-      },
-    ])
-  }
-  const setText = (key: string, field: 'qty' | 'rate' | 'disc', text: string) =>
-    setLines((ls) =>
-      ls.map((l) => {
-        if (l.key !== key) return l
-        const upd: OtcLine = { ...l, [field === 'qty' ? 'qtyText' : field === 'rate' ? 'rateText' : 'discText']: text }
-        upd.qty = Math.max(0, Number(upd.qtyText) || 0)
-        upd.unitPrice = Math.max(0, toCents(upd.rateText))
-        upd.discount = Math.max(0, toCents(upd.discText))
-        return upd
-      }),
-    )
-
-  const lineAmount = (l: OtcLine) => Math.max(0, l.qty * l.unitPrice - l.discount)
-  const total = lines.reduce((s, l) => s + lineAmount(l), 0)
-
-  const save = async () => {
-    if (!user || saving) return
-    if (!lines.length) return toast('Add at least one medicine to the bill', 'error')
-    if (lines.some((l) => l.qty <= 0)) return toast('Every line needs a quantity above zero', 'error')
-    if (pay === 'account' && category.trim().toUpperCase() === d.patientCategory.toUpperCase())
-      return toast('For a CREDIT ACCOUNT bill, type or pick the customer who is buying', 'error')
-    setSaving(true)
-    try {
-      let customerId: number | undefined
-      const cat = category.trim().toUpperCase()
-      if (cat && cat !== d.patientCategory.toUpperCase()) {
-        const existing = customers.find((c) => c.name.toUpperCase() === cat)
-        customerId = existing?.id ?? ((await db.customers.add({ name: cat, balance: 0, creditLimit: 0, createdAt: Date.now() })) as number)
-      }
-      const saleLines: SaleLine[] = lines.map(({ key: _k, qtyText: _q, rateText: _r, discText: _c, ...l }) => ({ ...l }))
-      const sale = await completeSale({
-        lines: saleLines,
-        discount: 0,
-        payments: [{ method: pay as Payment['method'], amount: total }],
-        customerId,
-        userId: user.id ?? 0,
-        note: narration.trim() || undefined,
-      })
-      toast(`Bill ${billNo(sale, d.billPrefix)} issued`)
-      onClose()
-    } catch (e) {
-      toast(e instanceof Error ? e.message : String(e), 'error')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Dialog
-      title="OTC Medicine Issue/Bill - New"
-      onClose={onClose}
-      width={690}
-      footer={
-        <>
-          <Btn onClick={() => void save()} disabled={saving || !lines.length}>
-            Save &amp; Issue Bill
-          </Btn>
-          <Btn onClick={onClose}>cancel</Btn>
-        </>
-      }
-    >
-      <div className="ma-form" style={{ gridTemplateColumns: '130px 1fr' }}>
-        <FieldRow label="Bill No.">
-          <Input value="(auto)" readOnly width={140} />
-        </FieldRow>
-        <FieldRow label="Date">
-          <Input value={dmy(Date.now())} readOnly width={140} />
-        </FieldRow>
-        <FieldRow label="Patient Category" req>
-          <span style={{ display: 'inline-flex' }}>
-            <Input value={category} onChange={(v) => setCategory(v.toUpperCase())} width={220} />
-            <button type="button" className="ma-lookup" onClick={() => setPickCat(true)} title="Customer lookup">
-              <MagnifierIcon size={13} />
-            </button>
-          </span>
-        </FieldRow>
-        <FieldRow label="Narration">
-          <Input value={narration} onChange={setNarration} width={220} />
-        </FieldRow>
-        <FieldRow label="User Name">
-          <Input value={user?.name.toUpperCase() ?? ''} readOnly width={220} />
-        </FieldRow>
-        <FieldRow label="Payable By" req>
-          <Select value={pay} onChange={setPay} options={PAY_OPTIONS} width={250} />
-        </FieldRow>
-        <FieldRow label="Bill Amount">
-          <Input value={amt(total)} readOnly width={140} />
-        </FieldRow>
-      </div>
-
-      <div style={{ marginTop: 10 }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
-          <Btn round onClick={() => setPickItem(true)}>
-            + Add medicine
-          </Btn>
-          <span style={{ fontSize: 11, color: '#666' }}>Double-click a row to remove it. Stock is deducted when the bill is saved.</span>
-        </div>
-        <Grid
-          compact
-          height={Math.min(320, Math.max(60, 26 + lines.length * 23 + 23))}
-          cols={[
-            { key: 'name', label: 'Medicine / Item', width: 240 },
-            { key: 'qty', label: 'Qty', width: 70 },
-            { key: 'rate', label: 'Rate', width: 90 },
-            { key: 'disc', label: 'Discount', width: 90 },
-            { key: 'amount', label: 'Amount', width: 90, align: 'right' },
-          ]}
-          rows={lines.map((l) => ({
-            id: l.key,
-            cells: {
-              name: l.name + (l.sku ? ` [${l.sku}]` : ''),
-              qty: <LineNum value={l.qtyText} onChange={(n) => setText(l.key, 'qty', n)} />,
-              rate: <LineNum value={l.rateText} width={80} onChange={(n) => setText(l.key, 'rate', n)} />,
-              disc: <LineNum value={l.discText} width={80} onChange={(n) => setText(l.key, 'disc', n)} />,
-              amount: amt(lineAmount(l)),
-            },
-          }))}
-          onOpen={(id) => setLines((ls) => ls.filter((l) => l.key !== id))}
-        />
-      </div>
-
-      {pickItem && (
-        <PickList
-          title="Medicine"
-          options={[...products].sort((a, b) => a.name.localeCompare(b.name)).map(labelOf)}
-          onClose={() => setPickItem(false)}
-          onPick={(v) => {
-            addLine(v)
-            setPickItem(false)
-          }}
-        />
-      )}
-      {pickCat && (
-        <PickList
-          title="Patient / Customer"
-          options={customers.map((c) => c.name.toUpperCase())}
-          onClose={() => setPickCat(false)}
-          onPick={(v) => {
-            setCategory(v)
-            setPickCat(false)
-          }}
-        />
-      )}
-    </Dialog>
-  )
-}
-
-/* ── OTC Medicine Isse Return ──────────────────────────────────────────── */
-function OtcReturnDialog({ sale, onClose }: { sale?: Sale; onClose: () => void }) {
-  const { user } = useSession()
-  const toast = useToast()
-  const d = useMedDefaults()
-  const [orig, setOrig] = useState<Sale | undefined>(sale)
-  const [q, setQ] = useState('')
-  const [qty, setQty] = useState<Record<number, string>>({})
-  const [restock, setRestock] = useState(true)
-  const [method, setMethod] = useState('cash')
-  const [reason, setReason] = useState('')
-  const [saving, setSaving] = useState(false)
-  const sales = useLiveQuery(async () => {
-    const all = await db.sales.filter((s) => !s.refundOf && s.status !== 'voided').toArray()
-    return all.sort((a, b) => b.createdAt - a.createdAt).slice(0, 50)
-  }, [], [] as Sale[])
-  const shown = sales
-
-  const lineReturnAmount = (i: number, l: SaleLine) => {
-    const n = chosenQty(i, l)
-    return n * l.unitPrice - Math.round((l.discount * n) / Math.max(1, l.qty))
-  }
-  const chosenQty = (i: number, l: SaleLine) => Math.min(Math.max(0, Number(qty[i]) || 0), l.qty - (l.refundedQty ?? 0))
-  const amount = orig ? orig.lines.reduce((t, l, i) => t + lineReturnAmount(i, l), 0) : 0
-
-  const save = async () => {
-    if (!user || !orig || saving) return
-    const qtyByLine: Record<number, number> = {}
-    let any = false
-    orig.lines.forEach((l, i) => {
-      const n = chosenQty(i, l)
-      if (n > 0) {
-        qtyByLine[i] = n
-        any = true
-      }
-    })
-    if (!any) return toast('Enter the quantity to return', 'error')
-    setSaving(true)
-    try {
-      const refund = await refundSale(orig.id!, { qtyByLine, restock, method: method as Payment['method'], userId: user.id ?? 0, reason: reason.trim() || undefined })
-      toast(`Return ${refund.receiptNo} (${amt(-refund.total)}) recorded`)
-      onClose()
-    } catch (e) {
-      toast(e instanceof Error ? e.message : String(e), 'error')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Dialog title={orig ? `OTC Medicine Isse Return - ${billNo(orig, d.billPrefix)}` : 'OTC Medicine Isse Return - New Bill'} onClose={onClose} width={690}>
-      {!orig ? (
-        <>
-          <div style={{ marginBottom: 4 }}>
-            <SearchBar value={q} onChange={setQ} width={330} autoFocus />
-          </div>
-          <Grid
-            compact
-            height={300}
-            cols={[
-              { key: 'billNo', label: 'Bill No.', width: 150 },
-              { key: 'date', label: 'Date', width: 100 },
-              { key: 'amount', label: 'Bill Amount', width: 110, align: 'right' },
-              { key: 'narration', label: 'First medicine on the bill', width: 240 },
-            ]}
-            rows={shown
-              .filter((s) => !q.trim() || billNo(s, d.billPrefix).toLowerCase().includes(q.toLowerCase()) || s.lines.some((l) => l.name.toLowerCase().includes(q.toLowerCase())))
-              .map((s) => ({
-                id: s.id!,
-                cells: { billNo: billNo(s, d.billPrefix), date: dmy(s.createdAt), amount: amt(s.total), narration: s.lines[0]?.name ?? '' },
-              }))}
-            onOpen={(id) => setOrig(shown.find((s) => s.id === id))}
-          />
-          <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>Double-click a bill to start its return.</div>
-        </>
-      ) : (
-        <>
-          <div className="ma-form" style={{ gridTemplateColumns: '130px 1fr' }}>
-            <FieldRow label="Bill No.">
-              <Input value={billNo(orig, d.billPrefix)} readOnly width={200} />
-            </FieldRow>
-            <FieldRow label="Date">
-              <Input value={dmy(orig.createdAt)} readOnly width={140} />
-            </FieldRow>
-          </div>
-          <Grid
-            compact
-            height={Math.min(300, 26 + orig.lines.length * 23 + 23)}
-            cols={[
-              { key: 'name', label: 'Medicine / Item', width: 250 },
-              { key: 'avail', label: 'Available', width: 70, align: 'right' },
-              { key: 'ret', label: 'Return', width: 80 },
-              { key: 'amount', label: 'Amount', width: 100, align: 'right' },
-            ]}
-            rows={orig.lines.map((l, i) => {
-              const avail = l.qty - (l.refundedQty ?? 0)
-              return {
-                id: i,
-                cells: {
-                  name: l.name + (l.sku ? ` [${l.sku}]` : ''),
-                  avail: String(avail),
-                  ret: avail > 0 ? <LineNum value={qty[i] ?? ''} onChange={(v) => setQty({ ...qty, [i]: v })} /> : '—',
-                  amount: avail > 0 ? amt(lineReturnAmount(i, l)) : '—',
-                },
-              }
-            })}
-          />
-          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-            <Check checked={restock} onChange={setRestock}>
-              Put returned stock back
-            </Check>
-          </div>
-          <div className="ma-form" style={{ gridTemplateColumns: '130px 1fr', marginTop: 6 }}>
-            <FieldRow label="Return To">
-              <Select value={method} onChange={setMethod} options={PAY_OPTIONS} width={250} />
-            </FieldRow>
-            <FieldRow label="Reason">
-              <Input value={reason} onChange={setReason} width={280} />
-            </FieldRow>
-            <FieldRow label="Refund Amount">
-              <Input value={amt(amount)} readOnly width={140} />
-            </FieldRow>
-          </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <Btn onClick={() => void save()} disabled={saving || amount <= 0}>
-              Save
-            </Btn>
-            <Btn onClick={() => setOrig(undefined)}>Back</Btn>
-            <Btn onClick={onClose}>cancel</Btn>
-          </div>
-        </>
-      )}
-    </Dialog>
-  )
-}
-
 /* ── Whole-sale document entry ─────────────────────────────────────────── */
 const PICKED_NEW = '(new party) '
 
@@ -1310,19 +1230,32 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
   const toast = useToast()
   const d = useMedDefaults()
   const parties = useLiveQuery(async () => [...(await db.customers.toArray()), ...(await db.suppliers.toArray())].map((p) => p.name.toUpperCase()), [], [] as string[])
-  const cats = useLiveQuery(() => db.categories.toArray(), [], [] as { id: number; name: string }[])
   const fields = def.fields ?? []
-  const [vals, setVals] = useState<Record<string, string>>(() => {
-    if (row) return { ...row.cells }
+  const register = useDocs(slug)
+  // A Medicine row is a product; its Medicine-form record (uom, pack size…) may or may not exist yet.
+  const productId = row?.productId
+  const docId = productId !== undefined ? row?.docId : row ? Number(String(row.id).slice(1)) : undefined
+  const blank = (last: Record<string, string>) => {
     const v: Record<string, string> = {}
     for (const f of fields) {
       if (f.kind === 'date') v[f.key] = dmy(Date.now())
-      else if (f.kind === 'user') v[f.key] = user?.name.toUpperCase() ?? ''
+      else if (f.kind === 'user' || f.key === 'receivedBy') v[f.key] = user?.name.toUpperCase() ?? ''
       else if (f.kind === 'location') v[f.key] = d.location
-      else v[f.key] = ''
+      else v[f.key] = REPEAT_FIELDS.has(f.key) ? last[f.key] ?? '' : ''
     }
     return v
-  })
+  }
+  const [vals, setVals] = useState<Record<string, string>>(() => (row ? { ...row.cells } : blank({})))
+  const [typed, setTyped] = useState(false)
+  // Usual values (expense account, status…) come from the newest record once the register has loaded.
+  const lastId = register[0]?.id
+  useEffect(() => {
+    if (!row && !typed && lastId !== undefined) setVals(blank(register[0].values))
+  }, [lastId, d.location]) // eslint-disable-line react-hooks/exhaustive-deps
+  const setField = (key: string, v: string) => {
+    setTyped(true)
+    setVals((cur) => ({ ...cur, [key]: v }))
+  }
   const [pick, setPick] = useState<string | null>(null)
   const [pickExtra, setPickExtra] = useState('') // current text of the party field being picked
   // One scanned document per entry (supplier invoice, receipt…), kept as a data URL.
@@ -1346,40 +1279,10 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
     setFile({ name: f.name, data })
   }
 
-  // The Medicine master is where a chemist's inventory starts: a new product is
-  // added to stock at its cost/retail prices; edits refresh the prices.
-  const upsertMedicine = async (values: Record<string, string>) => {
-    const name = values.name.trim()
-    if (!name) return
-    const cost = toCents(values.cost || '0')
-    const price = toCents(values.retail || values.whole || '0')
-    const cat = cats?.find((c) => c.name.toUpperCase() === values.group.toUpperCase())
-    const existingP = await db.products.filter((p) => p.name.toUpperCase() === name.toUpperCase()).first()
-    if (existingP) await db.products.update(existingP.id!, { cost, price, categoryId: cat?.id, updatedAt: Date.now() })
-    else {
-      await db.products.add({
-        sku: values.docNo,
-        name,
-        categoryId: cat?.id,
-        fitment: [],
-        cost,
-        price,
-        stock: 0,
-        reorderLevel: 0,
-        taxable: true,
-        serialized: false,
-        trackStock: !/^N/i.test((values.type || 'S').trim()),
-        active: true,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      })
-    }
-  }
-
   const save = async () => {
     if (required && !vals[required]?.trim()) return toast(`${label(required)} is required`, 'error')
     const values = { ...vals }
-    if (!row && fields.some((f) => f.kind === 'docno')) values.docNo = await nextDocNo(def.prefix ?? 'DOC')
+    if (!values.docNo?.trim() && fields.some((f) => f.kind === 'docno')) values.docNo = await nextDocNo(def.prefix ?? 'DOC')
     for (const f of fields) if (f.kind === 'money' && values[f.key]) values[f.key] = (parseFloat(values[f.key]) || 0).toFixed(2)
     if (file) {
       values.attachment = file.data
@@ -1388,8 +1291,7 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
       delete values.attachment
       delete values.attachmentName
     }
-    await saveDoc(slug, values, row ? Number(String(row.id).slice(1)) : undefined)
-    if (slug === 'medicine') await upsertMedicine(values)
+    await saveDoc(slug, values, docId, user?.id)
     toast(row ? 'Record updated' : 'Record saved')
     onClose()
   }
@@ -1414,10 +1316,10 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
       footer={
         <>
           <Btn onClick={save}>Save</Btn>
-          {row && (
+          {docId !== undefined && productId === undefined && (
             <Btn
               onClick={async () => {
-                await deleteDocs(slug, [Number(String(row.id).slice(1))])
+                await deleteDocs(slug, [docId])
                 toast('Record deleted')
                 onClose()
               }}
@@ -1432,22 +1334,15 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
       <div className="ma-form">
         {fields.map((f) => (
           <FieldRow key={f.key} label={label(f.key)} req={f.key === required}>
-            {slug === 'medicine' && f.key === 'name' ? (
-              <MedicineNameInput
-                value={vals[f.key] ?? ''}
-                onChange={(name, group) => setVals({ ...vals, [f.key]: name, group: group ?? vals.group })}
-              />
-            ) : slug === 'medicine' && f.key === 'group' ? (
-              <Select plain value={vals.group} onChange={(v) => setVals({ ...vals, group: v })} options={cats.map((c) => c.name)} width={200} />
-            ) : f.kind === 'location' ? (
-              <Select plain value={vals[f.key]} onChange={(v) => setVals({ ...vals, [f.key]: v })} options={d.locations} width={200} />
+            {f.kind === 'location' ? (
+              <Select plain value={vals[f.key]} onChange={(v) => setField(f.key, v)} options={d.locations} width={200} />
             ) : f.kind === 'docno' ? (
               <Input value={vals[f.key] || '(auto)'} readOnly width={200} />
             ) : f.kind === 'user' ? (
               <Input value={vals[f.key]} readOnly width={200} />
             ) : f.kind === 'party' ? (
               <span style={{ display: 'inline-flex' }}>
-                <Input value={vals[f.key]} onChange={(v) => setVals({ ...vals, [f.key]: v })} width={200} />
+                <Input value={vals[f.key]} onChange={(v) => setField(f.key, v)} width={200} placeholder={hintFor(f)} />
                 <button
                   type="button"
                   className="ma-lookup"
@@ -1461,7 +1356,7 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
                 </button>
               </span>
             ) : (
-              <Input value={vals[f.key]} onChange={(v) => setVals({ ...vals, [f.key]: v })} width={200} />
+              <Input value={vals[f.key]} onChange={(v) => setField(f.key, v)} width={200} placeholder={hintFor(f)} />
             )}
           </FieldRow>
         ))}
@@ -1505,7 +1400,7 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
           onClose={() => setPick(null)}
           onPick={(v) => {
             if (v.startsWith(PICKED_NEW)) void saveParty(pick, v.slice(PICKED_NEW.length))
-            else setVals({ ...vals, [pick]: v })
+            else setField(pick, v)
             setPick(null)
           }}
         />
@@ -1523,80 +1418,6 @@ function FieldRow({ label, req, children }: { label: string; req?: boolean; chil
       </label>
       <span>{children}</span>
     </>
-  )
-}
-
-/* ── Party Master entry (writes the real customer / supplier tables) ───── */
-function PartyDialog({ row, onClose }: { row?: RawRow; onClose: () => void }) {
-  const toast = useToast()
-  const isSup = row ? String(row.id).startsWith('sup') : false
-  const id = row ? Number(String(row.id).replace(/\D/g, '')) : undefined
-  const existing = useLiveQuery(async () => (id === undefined ? undefined : isSup ? db.suppliers.get(id) : db.customers.get(id)), [id, isSup])
-  const [type, setType] = useState(isSup ? 'SUPPLIERS' : 'CUSTOMER')
-  const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
-  const [email, setEmail] = useState('')
-  const [address, setAddress] = useState('')
-  const [limit, setLimit] = useState('0')
-  const [loaded, setLoaded] = useState(false)
-  if (existing && !loaded) {
-    setName(existing.name)
-    setPhone(existing.phone ?? '')
-    setEmail(existing.email ?? '')
-    setAddress(existing.notes ?? '')
-    if (!isSup) setLimit(String((existing as Customer).creditLimit / 100))
-    setLoaded(true)
-  }
-
-  const save = async () => {
-    if (!name.trim()) return toast('Facilty Name is required', 'error')
-    const base = { name: name.trim(), phone: phone.trim() || undefined, email: email.trim() || undefined, notes: address.trim() || undefined }
-    if (type === 'SUPPLIERS') {
-      if (row && isSup) await db.suppliers.update(id!, base)
-      else await db.suppliers.add(base)
-    } else {
-      const creditLimit = Math.round((parseFloat(limit) || 0) * 100)
-      if (row && !isSup) await db.customers.update(id!, { ...base, creditLimit })
-      else await db.customers.add({ ...base, balance: 0, creditLimit, createdAt: Date.now() })
-    }
-    toast('Party saved')
-    onClose()
-  }
-  return (
-    <Dialog
-      title={`Party Master - ${row ? 'Edit' : 'New'}`}
-      onClose={onClose}
-      width={460}
-      footer={
-        <>
-          <Btn onClick={save}>Save</Btn>
-          <Btn onClick={onClose}>cancel</Btn>
-        </>
-      }
-    >
-      <div className="ma-form">
-        <FieldRow label="Facilty Name" req>
-          <Input value={name} onChange={setName} width={220} autoFocus />
-        </FieldRow>
-        <FieldRow label="Type">
-          <Select value={type} onChange={setType} options={['CUSTOMER', 'SUPPLIERS']} width={220} />
-        </FieldRow>
-        <FieldRow label="Address">
-          <Input value={address} onChange={setAddress} width={220} />
-        </FieldRow>
-        <FieldRow label="Telephone">
-          <Input value={phone} onChange={setPhone} width={220} />
-        </FieldRow>
-        <FieldRow label="Email">
-          <Input value={email} onChange={setEmail} width={220} />
-        </FieldRow>
-        {type === 'CUSTOMER' && (
-          <FieldRow label="Credit Limit">
-            <Input value={limit} onChange={setLimit} width={220} />
-          </FieldRow>
-        )}
-      </div>
-    </Dialog>
   )
 }
 

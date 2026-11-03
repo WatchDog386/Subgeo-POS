@@ -34,16 +34,25 @@ export async function saveStaff(input: StaffInput, actor?: User | null): Promise
   const users = await db.users.toArray()
   const existing = input.id !== undefined ? users.find((u) => u.id === input.id) : undefined
   if (input.id !== undefined && !existing) throw new Error('That user no longer exists')
-  if (users.some((u) => u.username === username && u.id !== input.id)) throw new Error(`User name "${username}" is already taken`)
   const password = input.password ?? ''
-  // PURCHASE-dashboard accounts may have no password at all.
-  const passwordless = !existing && !password && input.role === 'purchase'
-  if (!existing && !password && !passwordless) throw new Error('Set a password for the new user')
+  // Cashiers and managers of different chemists may share a user name (e.g. "subgeo");
+  // their passwords tell them apart, so each must be different.
+  const sameName = users.filter((u) => u.username === username && u.id !== input.id)
+  if (sameName.length) {
+    const sharable = (r: Role) => r === 'cashier' || r === 'manager'
+    if (!sharable(input.role) || sameName.some((u) => !sharable(u.role))) throw new Error(`User name "${username}" is already taken`)
+    if (sameName.some((u) => u.branchId === input.branchId)) throw new Error(`"${username}" already has an account at this chemist — use another user name`)
+    const pw = password || undefined
+    if (pw && sameName.some((u) => hashPassword(u.salt, pw) === u.passHash))
+      throw new Error(`Another "${username}" account already uses that password — give each chemist its own password`)
+    if (!pw && !existing) throw new Error('Set a password for the new user')
+  }
+  if (!existing && !password) throw new Error('Set a password for the new user')
   if (password && password.length < PASSWORD_MIN) throw new Error(`Password must be at least ${PASSWORD_MIN} characters`)
 
   let branchId: number | undefined
   if (input.role !== 'owner') {
-    if (!input.branchId) throw new Error('Pick the chemist (CHEM number) this user works in')
+    if (!input.branchId) throw new Error('Pick the chemist (SUBGEO number) this user works in')
     const b = await db.branches.get(input.branchId)
     if (!b) throw new Error('That chemist does not exist')
     branchId = b.id
@@ -51,13 +60,13 @@ export async function saveStaff(input: StaffInput, actor?: User | null): Promise
   const owners = users.filter((u) => u.role === 'owner' && u.active && u.id !== input.id)
   if (owners.length === 0 && (input.role !== 'owner' || !input.active)) throw new Error('Keep at least one active admin')
 
-  const salt = password || passwordless ? newSalt() : existing!.salt
+  const salt = password ? newSalt() : existing!.salt
   const rec: User = {
     ...(existing ?? {}),
     name,
     username,
     salt,
-    passHash: password ? hashPassword(salt, password) : passwordless ? hashPassword(salt, '') : existing!.passHash,
+    passHash: password ? hashPassword(salt, password) : existing!.passHash,
     role: input.role,
     branchId,
     active: input.active,

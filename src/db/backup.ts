@@ -1,11 +1,12 @@
+import { LEGACY_DOCS_PREFIX, LEGACY_TASKS_KEY, convertLegacyDocs, convertLegacyTasks } from './legacyDemo'
 import { BRANCH_TABLES, GLOBAL_KV_KEYS, GLOBAL_TABLES, db, isLocalKvKey, stripMeta, type KV } from './db'
 
 /** Everything of the open chemist plus the company-wide lists, as a JSON-able object. */
-export async function exportBackup(): Promise<{ version: 2; exportedAt: number; data: Record<string, unknown[]> }> {
+export async function exportBackup(): Promise<{ version: 3; exportedAt: number; data: Record<string, unknown[]> }> {
   const data: Record<string, unknown[]> = {}
   for (const name of [...GLOBAL_TABLES, ...BRANCH_TABLES]) data[name] = (await db.table(name).toArray()).map((r) => stripMeta(r as object))
   data.kv = (await db.kv.toArray()).filter((r) => !isLocalKvKey(r.key)).map((r) => stripMeta(r))
-  return { version: 2, exportedAt: Date.now(), data }
+  return { version: 3, exportedAt: Date.now(), data }
 }
 
 const isBranchKv = (r: KV) => !isLocalKvKey(r.key) && !GLOBAL_KV_KEYS.has(r.key)
@@ -24,10 +25,16 @@ export async function restoreBackup(data: Record<string, unknown[]>, opts: { inc
     }
     const kv = (await db.kv.toArray()).filter(isBranchKv)
     await db.kv.bulkDelete(kv.map((r) => r.key))
-    const incomingKv = ((data.kv ?? []) as KV[]).filter((r) => r && typeof r.key === 'string' && !isLocalKvKey(r.key))
+    // Backups made before v4 kept documents and tasks as kv lists: convert them.
+    const legacy = ((data.kv ?? []) as KV[]).filter((r) => r && typeof r.key === 'string' && (r.key.startsWith(LEGACY_DOCS_PREFIX) || r.key === LEGACY_TASKS_KEY))
+    for (const r of legacy) {
+      if (r.key === LEGACY_TASKS_KEY) await db.tasks.bulkPut(convertLegacyTasks(r.value) as never[])
+      else await db.docs.bulkPut(convertLegacyDocs(r.key, r.value))
+    }
+    const incomingKv = ((data.kv ?? []) as KV[]).filter((r) => r && typeof r.key === 'string' && !isLocalKvKey(r.key) && !legacy.includes(r))
     await db.kv.bulkPut(incomingKv.filter((r) => opts.includeCompanyLists || !GLOBAL_KV_KEYS.has(r.key)).map((r) => stripMeta(r)))
     if (opts.includeCompanyLists) {
-      for (const name of ['branches', 'categories', 'suppliers']) {
+      for (const name of ['branches', 'categories', 'suppliers', 'messages']) {
         if (Array.isArray(data[name])) await db.table(name).bulkPut(data[name].map((r) => stripMeta(r as object)))
       }
       // Pre-2.0 backups hold PIN-only staff; those can't sign in any more and are skipped.
