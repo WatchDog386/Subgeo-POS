@@ -6,7 +6,14 @@
 export const GLOBAL_TABLES = ['branches', 'users', 'categories', 'suppliers'] as const
 /** Tables that belong to one chemist. */
 export const BRANCH_TABLES = ['products', 'customers', 'sales', 'parked', 'movements', 'purchaseOrders', 'shifts', 'jobs', 'logs'] as const
-export const SYNCED_TABLES: readonly string[] = [...GLOBAL_TABLES, ...BRANCH_TABLES, 'kv']
+export const SYNCED_TABLES: readonly string[] = [...GLOBAL_TABLES, ...BRANCH_TABLES, 'medicineNames', 'kv']
+
+/** Tables that existed at schema v3. The v3 upgrade loop must not touch tables
+ * added later (medicineNames doesn't exist in a v3 database). */
+export const V3_TABLES: readonly string[] = [
+  'users', 'branches', 'categories', 'suppliers', 'products', 'customers', 'sales', 'parked',
+  'movements', 'purchaseOrders', 'shifts', 'jobs', 'logs', 'kv', 'outbox',
+] as const
 
 /** Fields that are counters: merged by adding deltas instead of overwriting. */
 export const COUNTER_FIELDS: Record<string, string[]> = { products: ['stock'], customers: ['balance'] }

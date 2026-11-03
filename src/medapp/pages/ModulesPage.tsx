@@ -5,6 +5,7 @@ import { db } from '../../db/db'
 import type { Customer, Payment, Product, Sale, SaleLine, ServiceJob, Supplier } from '../../db/types'
 import { completeSale, refundSale } from '../../db/sales'
 import { toCents } from '../../lib/money'
+import { MedicineNameInput } from '../../components/MedicineNameInput'
 import { useSession } from '../../session'
 import { useToast } from '../../components/ui'
 import { downloadCsv } from '../../lib/csv'
@@ -1309,6 +1310,7 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
   const toast = useToast()
   const d = useMedDefaults()
   const parties = useLiveQuery(async () => [...(await db.customers.toArray()), ...(await db.suppliers.toArray())].map((p) => p.name.toUpperCase()), [], [] as string[])
+  const cats = useLiveQuery(() => db.categories.toArray(), [], [] as { id: number; name: string }[])
   const fields = def.fields ?? []
   const [vals, setVals] = useState<Record<string, string>>(() => {
     if (row) return { ...row.cells }
@@ -1351,12 +1353,14 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
     if (!name) return
     const cost = toCents(values.cost || '0')
     const price = toCents(values.retail || values.whole || '0')
+    const cat = cats?.find((c) => c.name.toUpperCase() === values.group.toUpperCase())
     const existingP = await db.products.filter((p) => p.name.toUpperCase() === name.toUpperCase()).first()
-    if (existingP) await db.products.update(existingP.id!, { cost, price, updatedAt: Date.now() })
+    if (existingP) await db.products.update(existingP.id!, { cost, price, categoryId: cat?.id, updatedAt: Date.now() })
     else {
       await db.products.add({
         sku: values.docNo,
         name,
+        categoryId: cat?.id,
         fitment: [],
         cost,
         price,
@@ -1428,7 +1432,14 @@ function DocDialog({ slug, def, row, onClose }: { slug: string; def: ModuleDef; 
       <div className="ma-form">
         {fields.map((f) => (
           <FieldRow key={f.key} label={label(f.key)} req={f.key === required}>
-            {f.kind === 'location' ? (
+            {slug === 'medicine' && f.key === 'name' ? (
+              <MedicineNameInput
+                value={vals[f.key] ?? ''}
+                onChange={(name, group) => setVals({ ...vals, [f.key]: name, group: group ?? vals.group })}
+              />
+            ) : slug === 'medicine' && f.key === 'group' ? (
+              <Select plain value={vals.group} onChange={(v) => setVals({ ...vals, group: v })} options={cats.map((c) => c.name)} width={200} />
+            ) : f.kind === 'location' ? (
               <Select plain value={vals[f.key]} onChange={(v) => setVals({ ...vals, [f.key]: v })} options={d.locations} width={200} />
             ) : f.kind === 'docno' ? (
               <Input value={vals[f.key] || '(auto)'} readOnly width={200} />

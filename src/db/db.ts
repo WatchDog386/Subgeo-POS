@@ -4,6 +4,7 @@ import type {
   Category,
   Customer,
   LogEntry,
+  MedicineNameRec,
   ParkedSale,
   Product,
   PurchaseOrder,
@@ -14,7 +15,7 @@ import type {
   Supplier,
   User,
 } from './types'
-import { BRANCH_TABLES, COUNTER_FIELDS, GLOBAL_KV_KEYS, GLOBAL_TABLES, SYNCED_TABLES, isLocalKvKey, isMetaField, isSeqKvKey } from './syncSchema'
+import { BRANCH_TABLES, COUNTER_FIELDS, GLOBAL_KV_KEYS, GLOBAL_TABLES, SYNCED_TABLES, V3_TABLES, isLocalKvKey, isMetaField, isSeqKvKey } from './syncSchema'
 
 export interface KV {
   key: string
@@ -95,6 +96,7 @@ export class PosDB extends Dexie {
   categories!: EntityTable<Category, 'id'>
   suppliers!: EntityTable<Supplier, 'id'>
   products!: EntityTable<Product, 'id'>
+  medicineNames!: EntityTable<MedicineNameRec, 'id'>
   customers!: EntityTable<Customer, 'id'>
   sales!: EntityTable<Sale, 'id'>
   parked!: EntityTable<ParkedSale, 'id'>
@@ -153,9 +155,10 @@ export class PosDB extends Dexie {
         // (admin keeps id 1 and the CHEM1 cashier id 2, so old sales still resolve).
         await tx.table('users').clear()
         // Everything already on this till is queued for upload to the server.
+        // Only tables that existed at v3: a later table (medicineNames, v4)
+        // does not exist yet and must not be touched here.
         const now = Date.now()
-        for (const name of SYNCED_TABLES) {
-          if (name === 'users' || name === 'branches') continue
+        for (const name of V3_TABLES) {
           await tx
             .table(name)
             .toCollection()
@@ -167,6 +170,10 @@ export class PosDB extends Dexie {
             })
         }
       })
+    // v4: the company-wide medicine name / group list used for type-ahead.
+    this.version(4).stores({
+      medicineNames: '++id, name, group, source, active, _dirty',
+    })
 
     for (const name of SYNCED_TABLES) this.installHooks(name)
   }

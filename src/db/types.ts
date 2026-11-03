@@ -41,6 +41,19 @@ export interface Category {
   color: string
 }
 
+/** Standard / admin-added medicine name used for type-ahead suggestions. Synced company-wide (scope 0). */
+export interface MedicineNameRec {
+  id?: number
+  name: string
+  /** Product group the name belongs to (matches a category name). Empty = ungrouped. */
+  group: string
+  /** 'standard' = from the bundled price list; 'admin' = keyed in by a user. */
+  source: 'standard' | 'admin'
+  active: boolean
+  createdAt?: number
+  updatedAt?: number
+}
+
 export interface Supplier {
   id?: number
   name: string

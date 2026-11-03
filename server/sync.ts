@@ -7,7 +7,8 @@ import { sql } from './db'
 import { hashPassword } from '../src/lib/sha256'
 import { SEED_BRANCH, SEED_PURCHASE, SEED_USERS, chemCode } from '../src/db/seedData'
 import { COUNTER_FIELDS, GLOBAL_KV_KEYS, GLOBAL_TABLES, SYNCED_TABLES, isLocalKvKey, isSeqKvKey } from '../src/db/syncSchema'
-import type { Branch, Product, Role, User } from '../src/db/types'
+import { MEDICINE_GROUPS, MEDICINE_LIST } from '../src/db/medicineList'
+import type { Branch, MedicineNameRec, Product, Role, User } from '../src/db/types'
 
 type Rec = Record<string, unknown>
 type Row = { tbl: string; scope: number; id: string; data: string | null; deleted: number; ts: number; seq: number }
@@ -101,6 +102,27 @@ export function ensureSeeds(): void {
       writeRow('branches', 0, SEED_BRANCH.id, SEED_BRANCH as unknown as Rec, 0, null)
     }
   })()
+  seedStandardMedicineData()
+}
+
+/** Seed the standard medicine groups (categories) and standard medicine names
+ * once per company, skipping any name or group that already exists. */
+function seedStandardMedicineData(): void {
+  sql.transaction(() => {
+    const now = Date.now()
+    const existingCats = new Set(listTable<{ name: string }>('categories', 0).map((c) => c.name.toUpperCase()))
+    for (const g of MEDICINE_GROUPS) {
+      if (existingCats.has(g.toUpperCase())) continue
+      writeRow('categories', 0, newServerId(), { name: g, color: '#64748b' }, now, null)
+      existingCats.add(g.toUpperCase())
+    }
+    const known = new Set(listTable<MedicineNameRec>('medicineNames', 0).map((n) => n.name.toUpperCase()))
+    for (const m of MEDICINE_LIST) {
+      if (known.has(m.name.toUpperCase())) continue
+      writeRow('medicineNames', 0, newServerId(), { ...m, source: 'standard', active: true, createdAt: now, updatedAt: now }, now, null)
+      known.add(m.name.toUpperCase())
+    }
+  })()
 }
 
 /* ── Auth ─────────────────────────────────────────────────────────────────── */
@@ -174,7 +196,7 @@ function denyReason(user: AuthedUser, tbl: string, scope: number, id: string | n
   if (user.role === 'owner') return undefined
 
   if (scope !== 0) return scope === user.branchId ? undefined : 'Not your chemist'
-  if (tbl === 'categories' || tbl === 'suppliers') return undefined
+  if (tbl === 'categories' || tbl === 'suppliers' || tbl === 'medicineNames') return undefined
   if (tbl === 'kv') return user.role === 'manager' ? undefined : 'Only the admin or a manager can change shared settings'
   if (tbl === 'users') {
     if (String(id) !== String(user.id) || !incoming || !existing) return 'Only the admin can manage staff'

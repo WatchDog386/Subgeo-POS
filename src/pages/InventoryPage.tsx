@@ -5,6 +5,7 @@ import { useSearchParams } from 'react-router-dom'
 import { Download, FileText, History, Package, Pencil, Plus, Printer, Search, SlidersHorizontal, Tag, Trash2, Upload } from 'lucide-react'
 import { db } from '../db/db'
 import { useSettings } from '../db/settings'
+import { MEDICINE_LIST } from '../db/medicineList'
 import { adjustStock } from '../db/sales'
 import type { Product } from '../db/types'
 import { money, toCents } from '../lib/money'
@@ -13,6 +14,7 @@ import { parsePdf } from '../lib/pdf'
 import { printBarcodeLabel } from '../lib/printReceipt'
 import { useSession } from '../session'
 import { Badge, Empty, ListPanel, Modal, PageHeader, errorText, useToast } from '../components/ui'
+import { MedicineNameInput } from '../components/MedicineNameInput'
 import { quotationImportSummary, quotationProductSkus } from '../db/quotationProducts'
 
 const CSV_HEADER = ['sku', 'name', 'barcode', 'regNumber', 'category', 'brand', 'cost', 'price', 'stock', 'reorderLevel', 'location', 'taxable', 'serialized', 'trackStock']
@@ -426,6 +428,11 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
   const [cost, setCost] = useState(String((p.cost ?? 0) / 100))
   const [price, setPrice] = useState(String((p.price ?? 0) / 100))
   const [newCat, setNewCat] = useState('')
+  const knownGroups = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const m of MEDICINE_LIST) map.set(m.name.toLowerCase(), m.group)
+    return map
+  }, [])
   const imageRef = useRef<HTMLInputElement>(null)
   const set = <K extends keyof Product>(k: K, v: Product[K]) => setP((x) => ({ ...x, [k]: v }))
   const isNew = p.id === undefined
@@ -475,6 +482,21 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
       } as Product
       if (record.id === undefined) delete record.id
       await db.products.put(record)
+      // Remember a brand-new name so it shows in type-ahead next time.
+      const entered = p.name.trim()
+      if (entered && !MEDICINE_LIST.some((m) => m.name.toLowerCase() === entered.toLowerCase())) {
+        const have = await db.medicineNames.where('name').equalsIgnoreCase(entered).first()
+        if (!have) {
+          await db.medicineNames.add({
+            name: entered,
+            group: p.categoryId ? (categories.find((c) => c.id === p.categoryId)?.name ?? '') : '',
+            source: 'admin',
+            active: true,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          })
+        }
+      }
       toast(isNew ? 'Medicine added' : 'Medicine updated')
       onClose()
     } catch (e) {
@@ -512,7 +534,18 @@ function ProductForm({ initial, onClose }: { initial: Partial<Product>; onClose:
         <div className="grid gap-3 md:grid-cols-3">
           <div className="md:col-span-2">
             <label className="label">Name *</label>
-            <input className="input" value={p.name ?? ''} onChange={(e) => set('name', e.target.value)} autoFocus />
+            <MedicineNameInput
+              value={p.name ?? ''}
+              placeholder="Type the medicine name…"
+              onChange={(name, group) => {
+                set('name', name)
+                const g = group ?? knownGroups.get(name.toLowerCase())
+                if (g) {
+                  const cat = categories.find((c) => c.name === g)
+                  set('categoryId', cat?.id)
+                }
+              }}
+            />
           </div>
           <div>
             <label className="label">Code (SKU)</label>
