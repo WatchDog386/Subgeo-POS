@@ -218,6 +218,130 @@ export function DateField({
   )
 }
 
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
+
+/** Mini month calendar that picks one day (dd/mm/yyyy) — used to filter the
+ * daily sales report by any specific day. */
+export function CalendarPicker({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (v: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const boxRef = useRef<HTMLSpanElement>(null)
+  const ts = parseDmy(value)
+  const [view, setView] = useState(() => {
+    const d = ts !== undefined ? new Date(ts) : new Date()
+    return new Date(d.getFullYear(), d.getMonth(), 1)
+  })
+
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent) => {
+      if (!boxRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+
+  const sel = ts !== undefined ? new Date(ts) : undefined
+  const first = new Date(view.getFullYear(), view.getMonth(), 1)
+  const lead = (first.getDay() + 6) % 7 // Monday-first offset
+  const days = new Date(view.getFullYear(), view.getMonth() + 1, 0).getDate()
+  const cells = [...Array(lead).fill(0), ...Array.from({ length: days }, (_, i) => i + 1)]
+  const shift = (n: number) => setView(new Date(view.getFullYear(), view.getMonth() + n, 1))
+  const pick = (day: number) => {
+    onChange(dmy(new Date(view.getFullYear(), view.getMonth(), day), '/'))
+    setOpen(false)
+  }
+
+  return (
+    <span ref={boxRef} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, position: 'relative' }}>
+      <button
+        type="button"
+        className="ma-btn"
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px' }}
+        title="Pick a day"
+        onClick={() => setOpen(!open)}
+      >
+        <CalendarIcon />
+        {value ? dmy(ts) : 'Select day'}
+      </button>
+      {open && (
+        <span
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            zIndex: 30,
+            marginTop: 4,
+            background: '#fff',
+            border: '1px solid #c3c3c3',
+            boxShadow: '0 6px 18px rgba(0,0,0,.18)',
+            padding: 8,
+            userSelect: 'none',
+          }}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, gap: 6 }}>
+            <button type="button" className="ma-btn" style={{ padding: '0 6px' }} onClick={() => shift(-1)} title="Previous month">
+              ‹
+            </button>
+            <b style={{ fontSize: 12 }}>
+              {MONTHS[view.getMonth()]} {view.getFullYear()}
+            </b>
+            <button type="button" className="ma-btn" style={{ padding: '0 6px' }} onClick={() => shift(1)} title="Next month">
+              ›
+            </button>
+          </span>
+          <span style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 24px)', textAlign: 'center' }}>
+            {WEEKDAYS.map((w) => (
+              <span key={w} style={{ fontSize: 10, fontWeight: 700, color: '#666', lineHeight: '18px' }}>
+                {w}
+              </span>
+            ))}
+            {cells.map((d, i) =>
+              d === 0 ? (
+                <span key={i} />
+              ) : (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => pick(d)}
+                  style={{
+                    fontSize: 11,
+                    lineHeight: '20px',
+                    height: 20,
+                    borderRadius: 11,
+                    marginBottom: 1,
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontWeight: sel && sel.getFullYear() === view.getFullYear() && sel.getMonth() === view.getMonth() && sel.getDate() === d ? 700 : 400,
+                    background: sel && sel.getFullYear() === view.getFullYear() && sel.getMonth() === view.getMonth() && sel.getDate() === d ? '#c8102e' : 'transparent',
+                    color: sel && sel.getFullYear() === view.getFullYear() && sel.getMonth() === view.getMonth() && sel.getDate() === d ? '#fff' : '#222',
+                  }}
+                  onMouseEnter={(e) => {
+                    const isSel = sel && sel.getFullYear() === view.getFullYear() && sel.getMonth() === view.getMonth() && sel.getDate() === d
+                    if (!isSel) e.currentTarget.style.background = '#eee'
+                  }}
+                  onMouseLeave={(e) => {
+                    const isSel = sel && sel.getFullYear() === view.getFullYear() && sel.getMonth() === view.getMonth() && sel.getDate() === d
+                    e.currentTarget.style.background = isSel ? '#c8102e' : 'transparent'
+                  }}
+                >
+                  {d}
+                </button>
+              ),
+            )}
+          </span>
+        </span>
+      )}
+    </span>
+  )
+}
+
 /** Text field with the orange lookup magnifier; opens a pick list. */
 export function LookupField({
   value,

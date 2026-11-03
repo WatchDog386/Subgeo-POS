@@ -8,13 +8,15 @@ import { downloadCsv } from '../../lib/csv'
 import { amt, billNo, dmy, getMedDefaults, inRange, monthStartDmy, paidBy, todayDmy } from '../data'
 import { ADMIN_REPORT_TREE } from '../nav-admin'
 import { MagnifierIcon, SearchLens, ZoomGlass } from '../icons'
-import { Btn, DateField, Grid, IBtn, Rows, SearchBar, Select, type Col } from '../ui'
+import { Btn, CalendarPicker, DateField, Grid, IBtn, Rows, SearchBar, Select, type Col } from '../ui'
 
 type Result = { cols: Col[]; rows: Record<string, string>[] }
 interface ReportDef {
   name: string
   selectDefault: string
   datesPrefilled: boolean
+  /** Show the day calendar: the report runs on that one day (from = to = day). */
+  dayFilter?: boolean
   selWidth: number
   initialCols: Col[]
   run: (from: string, to: string, sel: string) => Promise<Result>
@@ -157,6 +159,7 @@ const ADMIN_REPORTS: Record<string, ReportDef> = {
     name: 'DAILY SALES REPORT',
     selectDefault: 'SELECT',
     datesPrefilled: false,
+    dayFilter: true,
     selWidth: 65,
     initialCols: [C('date', 'Date', 105), C('doc', 'Doc No', 110), C('client', 'Client Name', 215), C('cost', 'TOT COST', 115, 'right'), C('amount', 'Amount', 100, 'right'), C('profit', 'TOT PROFIT', 400, 'right')],
     async run(from, to) {
@@ -287,6 +290,7 @@ function AdminReportViewer({ slug, def }: { slug: string; def: ReportDef }) {
   const toast = useToast()
   const [from, setFrom] = useState(def.datesPrefilled ? monthStartDmy() : '')
   const [to, setTo] = useState(def.datesPrefilled ? todayDmy() : '')
+  const [day, setDay] = useState(def.dayFilter ? todayDmy() : '')
   const [sel, setSel] = useState(def.selectDefault)
   const [q, setQ] = useState('')
   const [result, setResult] = useState<Result | null>(null)
@@ -298,11 +302,19 @@ function AdminReportViewer({ slug, def }: { slug: string; def: ReportDef }) {
 
   const view = async () => {
     try {
-      setResult(await def.run(from, to, sel))
+      // Day-filtered reports (Daily Sales) run on the picked day alone.
+      const runFrom = def.dayFilter ? day : from
+      const runTo = def.dayFilter ? day : to
+      setResult(await def.run(runFrom, runTo, sel))
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), 'error')
     }
   }
+  // The daily sales report refreshes on its own whenever another day is picked.
+  useEffect(() => {
+    if (def.dayFilter) void view()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug, day])
   const cols = result?.cols ?? def.initialCols
   const rows = (result?.rows ?? []).filter((r) => !q.trim() || Object.values(r).some((v) => v.toLowerCase().includes(q.trim().toLowerCase())))
   const exportNow = () => {
@@ -330,7 +342,9 @@ function AdminReportViewer({ slug, def }: { slug: string; def: ReportDef }) {
             <ZoomGlass />
           </IBtn>
           <Select value={sel} onChange={setSel} options={selOptions} width={def.selWidth} plain={slug === 'account-statement'} />
-          {def.datesPrefilled && (
+          {def.dayFilter ? (
+            <CalendarPicker value={day} onChange={setDay} />
+          ) : def.datesPrefilled && (
             <>
               <DateField value={from} onChange={setFrom} />
               <DateField value={to} onChange={setTo} />
