@@ -310,9 +310,9 @@ body,
 #dashboard-print { display: none; }
 @media print {
   @page { margin: 0; }
-  body * { visibility: hidden; }
-  #print-root, #print-root * { visibility: visible; }
-  #print-root { display: block; position: absolute; left: 0; top: 0; }
+  body.ma-printing * { visibility: hidden; }
+  body.ma-printing #print-root, body.ma-printing #print-root * { visibility: visible; }
+  body.ma-printing #print-root { display: block; position: absolute; left: 0; top: 0; }
   #dashboard-print, #dashboard-print * { visibility: visible; }
   #dashboard-print {
     display: block;

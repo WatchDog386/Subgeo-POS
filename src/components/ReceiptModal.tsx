@@ -35,10 +35,16 @@ export default function ReceiptModal({
     setPrinting(true)
     try {
       const sent = await printReceipt(sale, settings, { copy })
-      if (!sent) window.print()
+      if (!sent) {
+        document.body.classList.add('ma-printing')
+        window.print()
+        document.body.classList.remove('ma-printing')
+      }
     } catch (e) {
       toast(`${errorText(e)} — using browser print`, 'error')
+      document.body.classList.add('ma-printing')
       window.print()
+      document.body.classList.remove('ma-printing')
     } finally {
       setPrinting(false)
     }
