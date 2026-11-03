@@ -167,8 +167,12 @@ const ADMIN_REPORTS: Record<string, ReportDef> = {
       const customers = await db.customers.toArray()
       const cName = new Map(customers.map((c) => [c.id!, c.name.toUpperCase()]))
       const sales = (await db.sales.orderBy('createdAt').toArray()).filter((s) => !s.refundOf && inRange(s.createdAt, from, to))
+      let tCost = 0, tAmount = 0, tProfit = 0
       const rows = sales.map((s) => {
         const cost = s.lines.reduce((t, l) => t + l.unitCost * l.qty, 0)
+        tCost += cost
+        tAmount += s.total
+        tProfit += s.total - cost
         return {
           date: dmy(s.createdAt),
           doc: billNo(s, d.billPrefix),
@@ -178,6 +182,7 @@ const ADMIN_REPORTS: Record<string, ReportDef> = {
           profit: amt(s.total - cost),
         }
       })
+      if (rows.length) rows.push({ date: 'TOTAL', doc: '', client: '', cost: amt(tCost), amount: amt(tAmount), profit: amt(tProfit) })
       return {
         cols: [C('date', 'Date', 105), C('doc', 'Doc No', 110), C('client', 'Client Name', 215), C('cost', 'TOT COST', 115, 'right'), C('amount', 'Amount', 100, 'right'), C('profit', 'TOT PROFIT', 400, 'right')],
         rows,
