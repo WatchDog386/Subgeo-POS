@@ -11,7 +11,7 @@ import { logActivity } from '../../db/logs'
 import type { DocLine, DocRecord, Product, Supplier } from '../../db/types'
 import { toCents } from '../../lib/money'
 import { invoiceDate, type ParsedInvoice } from '../../lib/invoiceParse'
-import { parseCsv } from '../../lib/csv'
+import * as XLSX from 'xlsx'
 import { useSession } from '../../session'
 import { useToast } from '../../components/ui'
 import { amt, dmy, getKv, nextDocNo, setKv } from '../data'
@@ -43,7 +43,7 @@ export type ImportLine = {
   convert: boolean
 }
 
-/** One line from a chemist's exported stock report (CSV). */
+/** One line from a chemist's exported stock report (XLS/XLSX). */
 export type StockReportLine = {
   key: number
   include: boolean
@@ -84,11 +84,14 @@ function colIdx(headers: string[], ...names: string[]): number {
   return -1
 }
 
-/** Parse a stock report CSV into StockReportLine[] with flexible column detection. */
-export function parseStockReportCsv(text: string): StockReportLine[] {
-  const rows = parseCsv(text)
+/** Parse a stock report XLS/XLSX into StockReportLine[] with flexible column detection. */
+export function parseStockReportXls(data: string): StockReportLine[] {
+  const workbook = XLSX.read(data, { type: 'binary' })
+  const sheet = workbook.Sheets[workbook.SheetNames[0]]
+  if (!sheet) return []
+  const rows = XLSX.utils.sheet_to_json<any>(sheet, { header: 1 })
   if (rows.length < 2) return []
-  const headers = rows[0]
+  const headers = rows[0] as string[]
   const iName = colIdx(headers, 'PRODUCT NAME', 'NAME', 'ITEM', 'MEDICINE', 'PRODUCT')
   const iCode = colIdx(headers, 'PRODUCT CODE', 'CODE', 'SKU', 'ITEM CODE', 'BARCODE')
   const iUom = colIdx(headers, 'UOM', 'UNIT', 'UNIT OF MEASURE')
@@ -100,12 +103,12 @@ export function parseStockReportCsv(text: string): StockReportLine[] {
   const iWhole = colIdx(headers, 'WHOLE', 'WHOLE SALE', 'WHOLESALE', 'TRADE PRICE')
   const iBest = colIdx(headers, 'BEST PRICE', 'BEST', 'MIN PRICE', 'MINIMUM PRICE')
 
-  if (iName < 0) throw new Error('CSV must have a "Product Name" column')
+  if (iName < 0) throw new Error('Excel sheet must have a "Product Name" column')
 
   const out: StockReportLine[] = []
   for (let r = 1; r < rows.length; r++) {
-    const row = rows[r]
-    const get = (i: number) => (i >= 0 && i < row.length ? (row[i] ?? '').trim() : '')
+    const row = rows[r] as any[]
+    const get = (i: number) => (i >= 0 && i < row.length ? String(row[i] ?? '').trim() : '')
     const name = get(iName)
     if (!name) continue
     out.push({
@@ -445,7 +448,7 @@ export async function receiveInvoice(input: {
 
 const MARKUP_KEY = 'medapp:import-markup'
 
-/** Pick the PDF or CSV, read it, then show the review. */
+/** Pick the PDF or XLS/XLSX, read it, then show the review. */
 export function useInvoiceUpload(onDone?: () => void) {
   const toast = useToast()
   const input = useRef<HTMLInputElement | null>(null)
@@ -454,26 +457,32 @@ export function useInvoiceUpload(onDone?: () => void) {
   const pick = () => input.current?.click()
   const onFile = async (f: File) => {
     const isPdf = /\.pdf$/i.test(f.name) || f.type === 'application/pdf'
-    const isCsv = /\.csv$/i.test(f.name) || f.type === 'text/csv'
-    if (!isPdf && !isCsv) return toast('Choose a supplier invoice PDF or a stock report CSV file', 'error')
+    const isXls = /\.(xls|xlsx)$/i.test(f.name) || f.type.includes('spreadsheet') || f.type.includes('excel')
+    if (!isPdf && !isXls) return toast('Choose a supplier invoice PDF or a stock report Excel (XLS/XLSX) file', 'error')
     if (f.size > 10 * 1024 * 1024) return toast('File is too big (max 10 MB)', 'error')
     setBusy(true)
     try {
-      const data = await new Promise<string>((res, rej) => {
-        const r = new FileReader()
-        r.onload = () => res(r.result as string)
-        r.onerror = () => rej(r.error)
-        r.readAsDataURL(f)
-      })
       if (isPdf) {
         const { readInvoicePdf } = await import('../../lib/pdf')
         const inv = await readInvoicePdf(f)
         if (!inv.lines.length) throw new Error('No item lines found. Is it a scanned photo? Only PDFs with selectable text can be read.')
+        const data = await new Promise<string>((res, rej) => {
+          const r = new FileReader()
+          r.onload = () => res(r.result as string)
+          r.onerror = () => rej(r.error)
+          r.readAsDataURL(f)
+        })
         setReview({ file: { name: f.name, data }, inv })
       } else {
-        const text = await f.text()
-        const stock = parseStockReportCsv(text)
-        if (!stock.length) throw new Error('No usable rows found. The CSV needs a "Product Name" column at minimum.')
+        const buffer = await new Promise<ArrayBuffer>((res, rej) => {
+          const r = new FileReader()
+          r.onload = () => res(r.result as ArrayBuffer)
+          r.onerror = () => rej(r.error)
+          r.readAsArrayBuffer(f)
+        })
+        const data = String.fromCharCode(...new Uint8Array(buffer))
+        const stock = parseStockReportXls(data)
+        if (!stock.length) throw new Error('No usable rows found. The Excel sheet needs a "Product Name" column at minimum.')
         setReview({ file: { name: f.name, data }, stock })
       }
     } catch (e) {
@@ -487,7 +496,7 @@ export function useInvoiceUpload(onDone?: () => void) {
       <input
         ref={input}
         type="file"
-        accept="application/pdf,.pdf,text/csv,.csv"
+        accept="application/pdf,.pdf,.xls,.xlsx"
         style={{ display: 'none' }}
         onChange={(e) => {
           const f = e.target.files?.[0]
@@ -879,7 +888,7 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
   )
 }
 
-/** Review and receive a stock report CSV imported from another chemist. */
+/** Review and receive a stock report Excel imported from another chemist. */
 function StockReportReview({ stock, file, onClose, onDone }: { stock: StockReportLine[]; file: { name: string; data: string }; onClose: () => void; onDone: () => void }) {
   const toast = useToast()
   const { user } = useSession()

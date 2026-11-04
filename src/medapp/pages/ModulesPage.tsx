@@ -1029,8 +1029,8 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
             <Btn onClick={upload.pick} disabled={upload.busy} title="Read a supplier invoice / proforma / sales order PDF and receive all its lines into stock">
               {upload.busy ? 'Reading PDF…' : 'Upload Supplier Invoice (PDF)'}
             </Btn>
-            <Btn onClick={upload.pick} disabled={upload.busy} title="Upload a stock report CSV exported from another chemist and receive its lines into stock">
-              {upload.busy ? 'Reading CSV…' : 'Upload Stock Report (CSV)'}
+            <Btn onClick={upload.pick} disabled={upload.busy} title="Upload a stock report XLS/XLSX exported from another chemist and receive its lines into stock">
+              {upload.busy ? 'Reading CSV…' : 'Upload Stock Report (XLS/XLSX)'}
             </Btn>
           </span>
         )}
