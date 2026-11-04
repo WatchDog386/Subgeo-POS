@@ -971,6 +971,7 @@ const PAY_FIELDS = [
   ['mpesa', 'MPESA'],
   ['card', 'CREDIT CARD'],
   ['cheque', 'CHEQUE'],
+  ['paybill', 'PAYBILL'],
 ] as const
 type PayKey = (typeof PAY_FIELDS)[number][0]
 
@@ -1004,8 +1005,8 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: OtcMode; fromSale?
   const [tab, setTab] = useState<'pay' | 'detail' | 'patient'>(isReturn ? 'pay' : 'detail')
   const blank = (): OLine => ({ key: `${Date.now()}-${Math.random()}`, name: '', form: '', instruction: '', qty: isService ? '1' : '0.0', cost: '', price: '', disc: '0.0', batch: '', expiry: '', taxable: !isService })
   const [lines, setLines] = useState<OLine[]>([blank()])
-  const [pay, setPay] = useState<Record<PayKey, string>>({ cash: '0.0', mpesa: '0.0', card: '0.0', cheque: '0.0' })
-  const [refs, setRefs] = useState({ status: '', mpesa: '', card: '', cheque: '' })
+  const [pay, setPay] = useState<Record<PayKey, string>>({ cash: '0.0', mpesa: '0.0', card: '0.0', cheque: '0.0', paybill: '0.0' })
+  const [refs, setRefs] = useState({ status: '', mpesa: '', card: '', cheque: '', paybill: '' })
   const emptyPatient = () => ({ location: d.location, category: d.patientCategory.toUpperCase(), payable: PAYABLE_BY[0].label, pharma: '0.00', narration: '', name: '', age: '', phone: '' })
   const [patient, setPatient] = useState(emptyPatient)
   const [number, setNumber] = useState('')
@@ -1031,8 +1032,8 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: OtcMode; fromSale?
 
   const reset = () => {
     setLines([blank()])
-    setPay({ cash: '0.0', mpesa: '0.0', card: '0.0', cheque: '0.0' })
-    setRefs({ status: '', mpesa: '', card: '', cheque: '' })
+    setPay({ cash: '0.0', mpesa: '0.0', card: '0.0', cheque: '0.0', paybill: '0.0' })
+    setRefs({ status: '', mpesa: '', card: '', cheque: '', paybill: '' })
     setPatient(emptyPatient())
     setAll(false)
   }
@@ -1092,7 +1093,7 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: OtcMode; fromSale?
   const pharmaDisc = Math.round((gross * pharmaPct) / 100)
   const bill = gross - pharmaDisc
   const paid = Object.fromEntries(PAY_FIELDS.map(([k]) => [k, toCents(pay[k] || '0')])) as Record<PayKey, number>
-  const received = paid.cash + paid.mpesa + paid.card + paid.cheque
+  const received = paid.cash + paid.mpesa + paid.card + paid.cheque + paid.paybill
   const change = Math.max(0, received - bill)
   const setLine = (key: string, patch: Partial<OLine>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)))
   const addRow = () => {
@@ -1197,7 +1198,7 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: OtcMode; fromSale?
     const entered = { ...paid }
     const mpesaRef = refs.mpesa.trim().toUpperCase()
     if (received === 0 && payableMethod !== 'account') entered[payableMethod as PayKey] = bill
-    const got = entered.cash + entered.mpesa + entered.card + entered.cheque
+    const got = entered.cash + entered.mpesa + entered.card + entered.cheque + entered.paybill
     if (entered.mpesa > 0 && !mpesaRef) {
       setTab('pay')
       throw new Error(`${isService ? 'PAYMENT' : 'PAYMENT DETAILS'}: type the MPESA Number (confirmation code from the SMS)`)
@@ -1205,6 +1206,10 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: OtcMode; fromSale?
     if (entered.cheque > 0 && !refs.cheque.trim()) {
       setTab('pay')
       throw new Error('Type the CHEQUE NO')
+    }
+    if (!isReturn && payableMethod !== 'account' && entered.cash === 0 && entered.paybill === 0) {
+      setTab('pay')
+      throw new Error('PAYMENT DETAILS: enter CASH and PAYBILL amounts')
     }
     if (entered.mpesa + entered.card + entered.cheque > bill) throw new Error('Only cash can be more than the Bill Amount (the change is given in cash)')
     const owing = Math.max(0, bill - got)
@@ -1221,6 +1226,7 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: OtcMode; fromSale?
     if (entered.mpesa > 0) payments.push({ method: 'mpesa', amount: entered.mpesa, reference: mpesaRef })
     if (entered.card > 0) payments.push({ method: 'card', amount: entered.card, reference: refs.card.trim() || undefined })
     if (entered.cheque > 0) payments.push({ method: 'cheque', amount: entered.cheque, reference: refs.cheque.trim() })
+    if (entered.paybill > 0) payments.push({ method: 'paybill', amount: entered.paybill, reference: refs.paybill.trim() || undefined })
     if (owing > 0) payments.push({ method: 'account', amount: owing })
     const saleLines: SaleLine[] = filled.map(({ l, c }) => ({
       productId: l.productId,
@@ -1356,6 +1362,8 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: OtcMode; fromSale?
             <Cell value={refs.card} onChange={(v) => setRefs({ ...refs, card: v })} width={100} placeholder="Card approval no." label="CREDIT NO" />
             <span style={payLabelStyle} className="ma-label">CHEQUE NO</span>
             <Cell value={refs.cheque} onChange={(v) => setRefs({ ...refs, cheque: v })} width={100} placeholder="Cheque number" label="CHEQUE NO" />
+            <span style={payLabelStyle} className="ma-label">PAYBILL NO</span>
+            <Cell value={refs.paybill} onChange={(v) => setRefs({ ...refs, paybill: v.toUpperCase() })} width={100} placeholder="PayBill no." label="PAYBILL NO" />
             <span style={payLabelStyle} className="ma-label">TOTAL RECEIVED</span>
             <Cell value={c2(summary.received)} width={75} right readOnly label="TOTAL RECEIVED" />
             <span style={payLabelStyle} className="ma-label">Bill Amount</span>

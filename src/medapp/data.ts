@@ -161,7 +161,7 @@ export function payableBy(sale: Sale, customers: Map<number, Customer>): string 
   }
   return ACCOUNTS[method] ?? 'CASH COLLECTION ACCOUNT'
 }
-export function paidBy(sale: Sale | undefined, method: 'cash' | 'mpesa' | 'card' | 'cheque' | 'account'): number {
+export function paidBy(sale: Sale | undefined, method: 'cash' | 'mpesa' | 'paybill' | 'card' | 'cheque' | 'account'): number {
   if (!sale) return 0
   return sale.payments.filter((p) => p.method === method).reduce((s, p) => s + p.amount, 0) - (method === 'cash' ? sale.change : 0)
 }

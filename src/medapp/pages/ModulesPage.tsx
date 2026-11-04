@@ -171,6 +171,7 @@ const DEFS: Record<string, ModuleDef> = {
       C('amount', 'Bill Amount', 75, 'right'),
       C('cash', 'CASH', 75, 'right'),
       C('mpesa', 'MPESA', 75, 'right'),
+      C('paybill', 'PAYBILL', 75, 'right'),
       C('credit', 'CREDIT', 75, 'right'),
       C('cheque', 'CHEQUE', 75, 'right'),
       C('card', 'CARD', 75, 'right'),
@@ -707,7 +708,7 @@ function useRows(slug: string, def: ModuleDef): RawRow[] {
         return jobs.map((j) => {
           const sale = j.saleId !== undefined ? saleMap.get(j.saleId) : undefined
           const total = sale?.total ?? j.labour + j.lines.reduce((s, l) => s + l.qty * l.unitPrice - l.discount, 0)
-          const paid = (m: 'cash' | 'mpesa' | 'card' | 'cheque' | 'account') => (sale ? amt(paidBy(sale, m)) : '0.00')
+          const paid = (m: 'cash' | 'mpesa' | 'paybill' | 'card' | 'cheque' | 'account') => (sale ? amt(paidBy(sale, m)) : '0.00')
           return {
             id: `j${j.id}`,
             ts: j.createdAt,
@@ -721,6 +722,7 @@ function useRows(slug: string, def: ModuleDef): RawRow[] {
               amount: amt(total),
               cash: paid('cash'),
               mpesa: paid('mpesa'),
+              paybill: paid('paybill'),
               credit: paid('account'),
               cheque: paid('cheque'),
               card: paid('card'),
@@ -973,8 +975,13 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
       }
       case 'print':
       case 'fax':
-      case 'printAll':
+      case 'printAll': {
+        if (slug === 'service-bill') {
+          const missing = pageRows.filter((r) => !r.cells.cash || r.cells.cash === '0.00' || !r.cells.paybill || r.cells.paybill === '0.00')
+          if (missing.length > 0) return toast('Print blocked: every row must have CASH and PAYBILL amounts entered', 'error')
+        }
         return window.print()
+      }
       case 'scanner':
         return viewDoc()
       case 'excel':
@@ -1021,6 +1028,9 @@ function ModuleList({ slug, def }: { slug: string; def: ModuleDef }) {
           <span style={{ marginLeft: 24 }}>
             <Btn onClick={upload.pick} disabled={upload.busy} title="Read a supplier invoice / proforma / sales order PDF and receive all its lines into stock">
               {upload.busy ? 'Reading PDF…' : 'Upload Supplier Invoice (PDF)'}
+            </Btn>
+            <Btn onClick={upload.pick} disabled={upload.busy} title="Upload a stock report CSV exported from another chemist and receive its lines into stock">
+              {upload.busy ? 'Reading CSV…' : 'Upload Stock Report (CSV)'}
             </Btn>
           </span>
         )}

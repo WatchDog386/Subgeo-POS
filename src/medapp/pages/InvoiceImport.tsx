@@ -11,6 +11,7 @@ import { logActivity } from '../../db/logs'
 import type { DocLine, DocRecord, Product, Supplier } from '../../db/types'
 import { toCents } from '../../lib/money'
 import { invoiceDate, type ParsedInvoice } from '../../lib/invoiceParse'
+import { parseCsv } from '../../lib/csv'
 import { useSession } from '../../session'
 import { useToast } from '../../components/ui'
 import { amt, dmy, getKv, nextDocNo, setKv } from '../data'
@@ -42,7 +43,208 @@ export type ImportLine = {
   convert: boolean
 }
 
+/** One line from a chemist's exported stock report (CSV). */
+export type StockReportLine = {
+  key: number
+  include: boolean
+  /** Item code on the report (may be blank). */
+  code: string
+  /** Product name (required). */
+  name: string
+  /** Unit of measure (may be blank). */
+  uom: string
+  /** Stock on hand before this transfer (may be blank). */
+  opening: string
+  /** Qty received from the other chemist (added to stock). */
+  received: string
+  /** Qty issued (informational). */
+  issued: string
+  /** Closing stock (informational, or used to set stock when received is blank). */
+  closing: string
+  /** Retail selling price per unit. */
+  retail: string
+  /** Whole-sale selling price per unit. */
+  whole: string
+  /** Best Price (lowest it may be sold for). */
+  best: string
+  /** Matched medicine; undefined = create a new one. */
+  productId?: number
+}
+
 const norm = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim()
+
+/** Find the column index by trying several likely header names (case-insensitive). */
+function colIdx(headers: string[], ...names: string[]): number {
+  const upper = headers.map((h) => h.trim().toUpperCase())
+  for (const name of names) {
+    const n = name.trim().toUpperCase()
+    const i = upper.findIndex((h) => h === n || h.includes(n))
+    if (i >= 0) return i
+  }
+  return -1
+}
+
+/** Parse a stock report CSV into StockReportLine[] with flexible column detection. */
+export function parseStockReportCsv(text: string): StockReportLine[] {
+  const rows = parseCsv(text)
+  if (rows.length < 2) return []
+  const headers = rows[0]
+  const iName = colIdx(headers, 'PRODUCT NAME', 'NAME', 'ITEM', 'MEDICINE', 'PRODUCT')
+  const iCode = colIdx(headers, 'PRODUCT CODE', 'CODE', 'SKU', 'ITEM CODE', 'BARCODE')
+  const iUom = colIdx(headers, 'UOM', 'UNIT', 'UNIT OF MEASURE')
+  const iOpening = colIdx(headers, 'OPENING STOCK', 'OPENING', 'OPEN STOCK')
+  const iReceived = colIdx(headers, 'RECEIVED', 'RECEIPT', 'IN', 'STOCK IN')
+  const iIssued = colIdx(headers, 'ISSUED', 'ISSUE', 'OUT', 'STOCK OUT')
+  const iClosing = colIdx(headers, 'CLOSING STOCK', 'CLOSING', 'CLOSE STOCK', 'BALANCE')
+  const iRetail = colIdx(headers, 'RETAIL', 'RETAIL SALE', 'SELLING PRICE', 'SALE PRICE', 'PRICE')
+  const iWhole = colIdx(headers, 'WHOLE', 'WHOLE SALE', 'WHOLESALE', 'TRADE PRICE')
+  const iBest = colIdx(headers, 'BEST PRICE', 'BEST', 'MIN PRICE', 'MINIMUM PRICE')
+
+  if (iName < 0) throw new Error('CSV must have a "Product Name" column')
+
+  const out: StockReportLine[] = []
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r]
+    const get = (i: number) => (i >= 0 && i < row.length ? (row[i] ?? '').trim() : '')
+    const name = get(iName)
+    if (!name) continue
+    out.push({
+      key: r,
+      include: true,
+      code: iCode >= 0 ? get(iCode) : '',
+      name: name.toUpperCase(),
+      uom: iUom >= 0 ? get(iUom) : '',
+      opening: iOpening >= 0 ? get(iOpening) : '',
+      received: iReceived >= 0 ? get(iReceived) : '',
+      issued: iIssued >= 0 ? get(iIssued) : '',
+      closing: iClosing >= 0 ? get(iClosing) : '',
+      retail: iRetail >= 0 ? get(iRetail) : '',
+      whole: iWhole >= 0 ? get(iWhole) : '',
+      best: iBest >= 0 ? get(iBest) : '',
+    })
+  }
+  return out
+}
+
+/** Receive the checked stock-report lines into stock and file one MRN. */
+export async function receiveStockReport(input: {
+  lines: {
+    code?: string
+    name: string
+    uom: string
+    qty: number
+    costCents: number
+    priceCents?: number
+    wholeCents?: number
+    bestCents?: number
+    productId?: number
+    taxable: boolean
+  }[]
+  vendor: string
+  invoiceNo: string
+  invoiceDate?: string
+  totalCents: number
+  expense: string
+  receivedBy: string
+  userId?: number
+}): Promise<{ docNo: string; added: number; updated: number; docId: number }> {
+  if (!input.lines.length) throw new Error('No lines to receive')
+  if (!input.vendor.trim()) throw new Error('Type or pick the Vendor Name')
+  return db.transaction('rw', [db.products, db.movements, db.suppliers, db.docs, db.kv], async () => {
+    const vendor = input.vendor.trim().toUpperCase()
+    let supplier: Supplier | undefined = (await db.suppliers.toArray()).find((s) => s.name.toUpperCase() === vendor)
+    if (!supplier) {
+      const id = (await db.suppliers.add({ name: vendor, notes: 'Added from a stock report import' })) as number
+      supplier = await db.suppliers.get(id)
+    }
+    const docNo = await nextDocNo('MRN')
+    const now = Date.now()
+    let added = 0
+    let updated = 0
+    const docLines: DocLine[] = []
+    for (const l of input.lines) {
+      if (l.qty <= 0) throw new Error(`${l.name}: quantity must be above 0`)
+      let p = l.productId !== undefined ? await db.products.get(l.productId) : undefined
+      if (p) {
+        await db.products.update(p.id!, {
+          stock: p.stock + l.qty,
+          cost: l.costCents,
+          supplierId: p.supplierId ?? supplier?.id,
+          ...(l.priceCents && l.priceCents > 0 ? { price: l.priceCents } : {}),
+          ...(l.bestCents && l.bestCents > 0 ? { minPrice: l.bestCents } : {}),
+          updatedAt: now,
+        })
+        p = await db.products.get(p.id!)
+        updated++
+      } else {
+        if (!l.priceCents || l.priceCents <= 0) throw new Error(`${l.name}: set a selling price (Retail) for this new medicine`)
+        let sku = (l.code ?? '').trim().toUpperCase()
+        if (!sku || (await db.products.where('sku').equals(sku).first())) sku = `${sku || 'MED'}-${now.toString(36).toUpperCase()}-${added}`
+        const id = (await db.products.add({
+          sku,
+          name: l.name.trim().toUpperCase(),
+          barcode: sku,
+          fitment: [],
+          cost: l.costCents,
+          price: l.priceCents,
+          minPrice: l.bestCents && l.bestCents > 0 ? l.bestCents : undefined,
+          stock: l.qty,
+          reorderLevel: 0,
+          supplierId: supplier?.id,
+          taxable: l.taxable,
+          serialized: false,
+          trackStock: true,
+          active: true,
+          createdAt: now,
+          updatedAt: now,
+        } as Product)) as number
+        p = await db.products.get(id)
+        added++
+      }
+      await db.movements.add({ productId: p!.id!, change: l.qty, reason: 'receive', reference: docNo, note: `Stock report import ${input.invoiceNo}`.trim(), userId: input.userId, at: now })
+      docLines.push({
+        productId: p!.id,
+        name: p!.name,
+        sku: p!.sku,
+        qty: l.qty,
+        cost: l.costCents,
+        rate: p!.price,
+        vatPct: 0,
+        vat: 0,
+        discount: 0,
+        total: Math.round(l.qty * l.costCents),
+        best: l.bestCents && l.bestCents > 0 ? l.bestCents : undefined,
+      })
+      // Remember the medicine-form details (UOM, whole sale price) from the report.
+      const docs = await db.docs.where('slug').equals('medicine').toArray()
+      const code = p!.sku.trim().toUpperCase()
+      const doc = docs.find((d) => (d.values.docNo ?? '').trim().toUpperCase() === code) ?? docs.find((d) => (d.values.name ?? '').trim().toUpperCase() === p!.name.trim().toUpperCase())
+      const values: Record<string, string> = {
+        ...(doc?.values ?? { docNo: p!.sku, name: p!.name.toUpperCase(), type: 'S' }),
+        uom: l.uom.trim().toUpperCase(),
+        whole: l.wholeCents !== undefined ? (l.wholeCents / 100).toFixed(2) : '',
+        cost: (l.costCents / 100).toFixed(2),
+        retail: (p!.price / 100).toFixed(2),
+      }
+      if (doc) await db.docs.update(doc.id, { values, updatedAt: now })
+      else await db.docs.add({ slug: 'medicine', docNo: p!.sku, values, createdAt: now, updatedAt: now, createdBy: input.userId } as unknown as DocRecord)
+    }
+    const values: Record<string, string> = {
+      docNo,
+      mrnDate: dmy(now),
+      invoice: input.invoiceNo.trim(),
+      vendorName: vendor,
+      total: (input.totalCents / 100).toFixed(2),
+      expense: input.expense.trim().toUpperCase(),
+      receivedBy: input.receivedBy.toUpperCase(),
+      status: 'GOOD RECEIVED',
+      phoneNo: supplier?.contactPhone || supplier?.phone || '',
+      ...(input.invoiceDate ? { invoiceDate: input.invoiceDate } : {}),
+    }
+    const docId = (await db.docs.add({ slug: 'pur-grn-direct-invoice', docNo, values, lines: docLines, createdAt: now, updatedAt: now, createdBy: input.userId } as DocRecord)) as number
+    return { docNo, added, updated, docId }
+  })
+}
 
 /** Medicine already in stock for an invoice line: same item code, else same name. */
 export function matchProduct(products: Product[], code: string | undefined, name: string): Product | undefined {
@@ -243,28 +445,37 @@ export async function receiveInvoice(input: {
 
 const MARKUP_KEY = 'medapp:import-markup'
 
-/** Pick the PDF, read it, then show the review. */
+/** Pick the PDF or CSV, read it, then show the review. */
 export function useInvoiceUpload(onDone?: () => void) {
   const toast = useToast()
   const input = useRef<HTMLInputElement | null>(null)
   const [busy, setBusy] = useState(false)
-  const [review, setReview] = useState<{ file: { name: string; data: string }; inv: ParsedInvoice } | null>(null)
+  const [review, setReview] = useState<{ file: { name: string; data: string }; inv: ParsedInvoice } | { file: { name: string; data: string }; stock: StockReportLine[] } | null>(null)
   const pick = () => input.current?.click()
   const onFile = async (f: File) => {
-    if (!/\.pdf$/i.test(f.name) && f.type !== 'application/pdf') return toast('Choose the supplier invoice as a PDF file', 'error')
-    if (f.size > 10 * 1024 * 1024) return toast('PDF is too big (max 10 MB)', 'error')
+    const isPdf = /\.pdf$/i.test(f.name) || f.type === 'application/pdf'
+    const isCsv = /\.csv$/i.test(f.name) || f.type === 'text/csv'
+    if (!isPdf && !isCsv) return toast('Choose a supplier invoice PDF or a stock report CSV file', 'error')
+    if (f.size > 10 * 1024 * 1024) return toast('File is too big (max 10 MB)', 'error')
     setBusy(true)
     try {
-      const { readInvoicePdf } = await import('../../lib/pdf')
-      const inv = await readInvoicePdf(f)
-      if (!inv.lines.length) throw new Error('No item lines found. Is it a scanned photo? Only PDFs with selectable text can be read.')
       const data = await new Promise<string>((res, rej) => {
         const r = new FileReader()
         r.onload = () => res(r.result as string)
         r.onerror = () => rej(r.error)
         r.readAsDataURL(f)
       })
-      setReview({ file: { name: f.name, data }, inv })
+      if (isPdf) {
+        const { readInvoicePdf } = await import('../../lib/pdf')
+        const inv = await readInvoicePdf(f)
+        if (!inv.lines.length) throw new Error('No item lines found. Is it a scanned photo? Only PDFs with selectable text can be read.')
+        setReview({ file: { name: f.name, data }, inv })
+      } else {
+        const text = await f.text()
+        const stock = parseStockReportCsv(text)
+        if (!stock.length) throw new Error('No usable rows found. The CSV needs a "Product Name" column at minimum.')
+        setReview({ file: { name: f.name, data }, stock })
+      }
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), 'error')
     } finally {
@@ -276,7 +487,7 @@ export function useInvoiceUpload(onDone?: () => void) {
       <input
         ref={input}
         type="file"
-        accept="application/pdf,.pdf"
+        accept="application/pdf,.pdf,text/csv,.csv"
         style={{ display: 'none' }}
         onChange={(e) => {
           const f = e.target.files?.[0]
@@ -284,9 +495,20 @@ export function useInvoiceUpload(onDone?: () => void) {
           e.target.value = ''
         }}
       />
-      {review && (
+      {review && 'inv' in review && (
         <InvoiceReview
           inv={review.inv}
+          file={review.file}
+          onClose={() => setReview(null)}
+          onDone={() => {
+            setReview(null)
+            onDone?.()
+          }}
+        />
+      )}
+      {review && !('inv' in review) && (
+        <StockReportReview
+          stock={review.stock}
           file={review.file}
           onClose={() => setReview(null)}
           onDone={() => {
@@ -651,6 +873,237 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
         </Btn>
         <span className="ma-label ma-note" style={{ fontSize: 10 }}>
           Files one Pur/GRN (Direct Invoice) with this PDF attached; stock goes up by each line&apos;s Units and the cost price becomes its Cost of 1.
+        </span>
+      </div>
+    </Dialog>
+  )
+}
+
+/** Review and receive a stock report CSV imported from another chemist. */
+function StockReportReview({ stock, file, onClose, onDone }: { stock: StockReportLine[]; file: { name: string; data: string }; onClose: () => void; onDone: () => void }) {
+  const toast = useToast()
+  const { user } = useSession()
+  const loaded = useLiveQuery(() => db.products.toArray(), [])
+  const suppliers = useLiveQuery(() => db.suppliers.toArray(), [], [] as Supplier[])
+  const lastExpense = useLiveQuery(async () => (await db.docs.where('slug').equals('pur-grn-direct-invoice').toArray()).sort((a, b) => b.createdAt - a.createdAt)[0]?.values.expense ?? '', [], '')
+  const products = loaded ?? []
+  const byId = useMemo(() => new Map(products.map((p) => [p.id!, p])), [products])
+  const [vendor, setVendor] = useState('')
+  const [invoiceNo, setInvoiceNo] = useState('')
+  const [expense, setExpense] = useState<string>()
+  const [q, setQ] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [lines, setLines] = useState<StockReportLine[] | null>(null)
+  const expenseV = expense ?? lastExpense
+
+  if (lines === null && loaded) {
+    setLines(
+      stock.map((l) => {
+        const p = matchProduct(products, l.code, l.name)
+        return { ...l, productId: p?.id }
+      }),
+    )
+  }
+  const list = lines ?? []
+  const set = (key: number, patch: Partial<StockReportLine>) => setLines((ls) => (ls ?? []).map((l) => (l.key === key ? { ...l, ...patch } : l)))
+  const chosen = list.filter((l) => l.include)
+  const AMOUNT = /^\d+(\.\d{0,2})?$/
+
+  const receive = async () => {
+    if (saving || !user) return
+    if (!chosen.length) return toast('Tick at least one line to receive', 'error')
+    for (const l of chosen) {
+      const received = Number(l.received || l.closing || '0')
+      if (!(received > 0)) return toast(`${l.name}: enter Received or Closing Stock above 0`, 'error')
+      if (l.retail.trim() && (!AMOUNT.test(l.retail.trim()) || toCents(l.retail) <= 0)) return toast(`${l.name}: Retail Price must be an amount above 0`, 'error')
+      if (l.whole.trim() && (!AMOUNT.test(l.whole.trim()) || toCents(l.whole) <= 0)) return toast(`${l.name}: Whole Price must be an amount above 0`, 'error')
+      if (l.best.trim() && (!AMOUNT.test(l.best.trim()) || toCents(l.best) <= 0)) return toast(`${l.name}: Best Price must be an amount above 0`, 'error')
+      if (l.productId === undefined && toCents(l.retail || '0') <= 0) return toast(`${l.name} is new: type its Retail Price`, 'error')
+    }
+    const dup = (await db.docs.where('slug').equals('pur-grn-direct-invoice').toArray()).find(
+      (d) => invoiceNo.trim() && d.values.invoice === invoiceNo.trim() && (d.values.vendorName ?? '').toUpperCase() === vendor.trim().toUpperCase(),
+    )
+    if (dup && !confirm(`${vendor} invoice ${invoiceNo} was already received as ${dup.values.docNo}. Receive it again (stock will be added twice)?`)) return
+    setSaving(true)
+    try {
+      const r = await receiveStockReport({
+        lines: chosen.map((l) => {
+          const qty = Number(l.received || l.closing || '0')
+          const cost = toCents(l.retail || '0') // no cost column on stock report: treat retail as cost basis when no cost is known
+          return {
+            code: l.code || undefined,
+            name: l.name,
+            uom: l.uom,
+            qty,
+            costCents: cost,
+            priceCents: l.productId === undefined ? toCents(l.retail) : l.retail.trim() ? toCents(l.retail) : undefined,
+            wholeCents: l.whole.trim() ? toCents(l.whole) : undefined,
+            bestCents: l.best.trim() ? toCents(l.best) : undefined,
+            productId: l.productId,
+            taxable: false,
+          }
+        }),
+        vendor: vendor || 'OTHER CHEMIST',
+        invoiceNo,
+        totalCents: chosen.reduce((s, l) => s + Number(l.received || l.closing || '0') * toCents(l.retail || '0'), 0),
+        expense: expenseV,
+        receivedBy: user.name,
+        userId: user.id,
+      })
+      await logActivity('stock', `Stock report received (${r.docNo})`, { detail: `${vendor} ${invoiceNo}: ${r.updated} topped up, ${r.added} new`, userId: user.id, userName: user.name })
+      toast(`${r.docNo}: ${r.updated + r.added} medicine(s) received — ${r.updated} topped up, ${r.added} new`)
+      onDone()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const th: React.CSSProperties = { position: 'sticky', top: 0, zIndex: 1, background: '#e9e9e9', fontSize: 11, textAlign: 'left', padding: '4px 4px', borderBottom: '1px solid #bbb', whiteSpace: 'nowrap' }
+  const td: React.CSSProperties = { fontSize: 11, padding: '2px 4px', borderBottom: '1px solid #eee', whiteSpace: 'nowrap' }
+  const small = (w: number, right = true): React.CSSProperties => ({ width: w, height: 19, fontSize: 11, textAlign: right ? 'right' : 'left', padding: '0 3px' })
+  const shown = list.filter((l) => !q.trim() || `${l.code} ${l.name}`.toUpperCase().includes(q.trim().toUpperCase()))
+  return (
+    <Dialog title={`Upload Stock Report — ${file.name}`} onClose={onClose} width={1400}>
+      <div style={{ display: 'flex', gap: 18, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Btn onClick={onClose} title="Back to Pur/GRN (Direct Invoice) without receiving">
+          ◀ Back
+        </Btn>
+        <label className="ma-label">
+          Vendor / Other Chemist{' '}
+          <input className="ma-input" style={{ width: 230 }} value={vendor} list="ma-sr-vendors" onChange={(e) => setVendor(e.target.value.toUpperCase())} placeholder="Supplier / chemist name" aria-label="Vendor Name" />
+        </label>
+        <label className="ma-label">
+          Doc / Ref No <Input value={invoiceNo} onChange={setInvoiceNo} width={120} placeholder="Reference no." />
+        </label>
+        <label className="ma-label">
+          Expense A/c <Input value={expenseV} onChange={setExpense} width={170} placeholder="e.g. PURCHASES MEDICINE" />
+        </label>
+        <datalist id="ma-sr-vendors">
+          {suppliers.map((s) => (
+            <option key={s.id} value={s.name.toUpperCase()} />
+          ))}
+        </datalist>
+      </div>
+      <div style={{ display: 'flex', gap: 18, alignItems: 'center', margin: '8px 0', fontSize: 11, flexWrap: 'wrap' }}>
+        <span>
+          <b>{list.length}</b> lines read from {file.name}
+        </span>
+        <span style={{ marginLeft: 'auto' }}>
+          Receiving <b>{chosen.length}</b> line(s)
+        </span>
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4, flexWrap: 'wrap' }}>
+        <Input value={q} onChange={setQ} width={260} placeholder="Find a line by code or name" />
+        <Check checked={list.length > 0 && list.every((l) => l.include)} onChange={(v) => setLines((ls) => (ls ?? []).map((l) => ({ ...l, include: v })))} dark>
+          All
+        </Check>
+        <span className="ma-label ma-note" style={{ fontSize: 10 }}>
+          Qty received is added to stock. For new medicines the Retail Price is required. Whole Price and Best Price are stored on the medicine form. UOM is saved with the medicine.
+        </span>
+      </div>
+      <div style={{ height: 400, overflow: 'auto', border: '1px solid #c3c3c3', background: '#fff' }}>
+        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+          <thead>
+            <tr>
+              <th style={th} />
+              <th style={th}>Item Code</th>
+              <th style={th}>Product Name</th>
+              <th style={th}>UOM</th>
+              <th style={th}>Opening</th>
+              <th style={th}>Received</th>
+              <th style={th}>Issued</th>
+              <th style={th}>Closing</th>
+              <th style={th}>Retail Price</th>
+              <th style={th}>Whole Price</th>
+              <th style={th}>Best Price</th>
+              <th style={th}>Match Medicine</th>
+              <th style={th}>In Stock</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((l) => {
+              const p = l.productId !== undefined ? byId.get(l.productId) : undefined
+              const dim = l.include ? undefined : '#999'
+              return (
+                <tr key={l.key} style={{ background: l.include ? undefined : '#f3f3f3', color: dim }}>
+                  <td style={td}>
+                    <input type="checkbox" checked={l.include} onChange={(e) => set(l.key, { include: e.target.checked })} aria-label={`Receive ${l.name}`} />
+                  </td>
+                  <td style={td}>{l.code}</td>
+                  <td style={{ ...td, whiteSpace: 'normal', maxWidth: 200 }}>{l.name}</td>
+                  <td style={td}>
+                    <input className="ma-input" style={small(50, false)} value={l.uom} onChange={(e) => set(l.key, { uom: e.target.value.toUpperCase() })} placeholder="ML, MG, TABS" aria-label={`UOM ${l.name}`} />
+                  </td>
+                  <td style={td}>{l.opening}</td>
+                  <td style={td}>
+                    <input className="ma-input" style={small(50)} value={l.received} onChange={(e) => set(l.key, { received: e.target.value })} placeholder="Qty received" aria-label={`Received ${l.name}`} />
+                  </td>
+                  <td style={td}>{l.issued}</td>
+                  <td style={td}>{l.closing}</td>
+                  <td style={td}>
+                    <input
+                      className="ma-input"
+                      style={{ ...small(62), ...(l.retail.trim() && !AMOUNT.test(l.retail.trim()) ? { color: '#c00' } : {}) }}
+                      value={l.retail}
+                      onChange={(e) => set(l.key, { retail: e.target.value })}
+                      placeholder="0.00"
+                      aria-label={`Retail Price ${l.name}`} />
+                  </td>
+                  <td style={td}>
+                    <input
+                      className="ma-input"
+                      style={{ ...small(62), ...(l.whole.trim() && !AMOUNT.test(l.whole.trim()) ? { color: '#c00' } : {}) }}
+                      value={l.whole}
+                      onChange={(e) => set(l.key, { whole: e.target.value })}
+                      placeholder="0.00"
+                      aria-label={`Whole Price ${l.name}`} />
+                  </td>
+                  <td style={td}>
+                    <input
+                      className="ma-input"
+                      style={{ ...small(62), ...(l.best.trim() && !AMOUNT.test(l.best.trim()) ? { color: '#c00' } : {}) }}
+                      value={l.best}
+                      onChange={(e) => set(l.key, { best: e.target.value })}
+                      placeholder="lowest"
+                      aria-label={`Best Price ${l.name}`} />
+                  </td>
+                  <td style={td}>
+                    <input
+                      className="ma-input"
+                      style={{ ...small(170, false), color: p ? '#1b5e20' : '#e65100', fontWeight: 'bold' }}
+                      list="ma-sr-products"
+                      value={p ? p.name : 'NEW MEDICINE'}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => {
+                        const v = e.target.value.trim().toUpperCase()
+                        const m = products.find((x) => x.name.toUpperCase() === v)
+                        if (m) set(l.key, { productId: m.id })
+                        else if (!v || v === 'NEW MEDICINE') set(l.key, { productId: undefined })
+                      }}
+                      aria-label={`Medicine match ${l.name}`} />
+                  </td>
+                  <td style={td}>{p ? String(p.stock) : '—'}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+        <datalist id="ma-sr-products">
+          <option value="NEW MEDICINE" />
+          {products.map((p) => (
+            <option key={p.id} value={p.name.toUpperCase()} />
+          ))}
+        </datalist>
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10, flexWrap: 'wrap' }}>
+        <Btn onClick={onClose}>◀ Back</Btn>
+        <Btn onClick={() => void receive()} disabled={saving || !loaded || !chosen.length}>
+          {saving ? 'Receiving…' : !loaded ? 'Matching…' : `Receive ${chosen.length} line(s) into stock`}
+        </Btn>
+        <span className="ma-label ma-note" style={{ fontSize: 10 }}>
+          Files one Pur/GRN (Direct Invoice); stock goes up by each line's Received qty and prices are saved on the medicine.
         </span>
       </div>
     </Dialog>

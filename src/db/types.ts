@@ -135,7 +135,7 @@ export interface Customer {
   createdAt: number
 }
 
-export type PaymentMethod = 'cash' | 'mpesa' | 'card' | 'cheque' | 'account'
+export type PaymentMethod = 'cash' | 'mpesa' | 'paybill' | 'card' | 'cheque' | 'account'
 
 export interface Payment {
   method: PaymentMethod
