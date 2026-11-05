@@ -757,8 +757,6 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
               <th style={th} title="Price of one pack on the invoice">Pack Cost</th>
               <th style={th}>Amount</th>
               <th style={th} title="Cost of one selling unit = Pack Cost ÷ units in a pack">Cost of 1</th>
-              <th style={th}>Medicine in stock</th>
-              <th style={th}>In stock</th>
               <th style={th} title="Selling price of one unit (blank = keep the current one)">Selling Price</th>
               <th style={th} title="Lowest price one unit may be sold for (KES)">Best Price</th>
               <th style={th}>VAT</th>
@@ -774,7 +772,6 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
               const cb = currentBest(l)
               const bestN = l.best.trim() ? Number(l.best) : cb !== undefined ? cb / 100 : undefined
               const f = factorOf(l)
-              const legacy = !!p && l.from !== 'medicine' && per > 1
               const dim = l.include ? undefined : '#999'
               return (
                 <tr key={l.key} style={{ background: l.include ? undefined : '#f3f3f3', color: dim }}>
@@ -818,35 +815,6 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
                   <td style={{ ...td, textAlign: 'right' }}>{((Number(l.qty) || 0) * (Number(l.cost) || 0)).toFixed(2)}</td>
                   <td style={{ ...td, textAlign: 'right', fontWeight: 'bold' }} title={`Cost of one ${l.sellBy === 1 ? 'piece' : `unit of ${l.sellBy} pcs`}`}>
                     {u.error ? '—' : unitCostKes.toFixed(2)}
-                  </td>
-                  <td style={td}>
-                    <input
-                      className="ma-input"
-                      style={{ ...small(190, false), color: p ? '#1b5e20' : '#e65100', fontWeight: 'bold' }}
-                      list="ma-imp-products"
-                      value={p ? p.name : 'NEW MEDICINE'}
-                      onFocus={(e) => e.target.select()}
-                      onChange={(e) => {
-                        const v = e.target.value.trim().toUpperCase()
-                        const m = products.find((x) => x.name.toUpperCase() === v)
-                        if (m) {
-                          const pk = packFor(m, l.name)
-                          set(l.key, { productId: m.id, vat: m.taxable, best: '', ...pk, convert: pk.from !== 'medicine' && looksPerPack(m, Number(pk.perPack), Number(l.cost) || 0) })
-                        }
-                        else if (!v || v === 'NEW MEDICINE') set(l.key, { productId: undefined })
-                      }}
-                      aria-label={`Medicine in stock for ${l.name}`}
-                      title={p ? `Adds to ${p.name} (${p.sku})` : 'Will be created as a new medicine. Type an existing name to match it instead.'}
-                    />
-                  </td>
-                  <td style={{ ...td, textAlign: 'right', color: p?.maxStock !== undefined && p.stock * f + u.units > p.maxStock ? '#c00' : undefined }} title={p?.maxStock !== undefined ? `Max level ${p.maxStock}` : undefined}>
-                    {p ? (f > 1 ? `${p.stock} → ${p.stock * f}` : p.stock) : '—'}
-                    {p?.maxStock !== undefined && p.stock * f + u.units > p.maxStock ? ' ⚠' : ''}
-                    {legacy && (
-                      <label style={{ display: 'block', fontSize: 10, color: '#8a5a00', whiteSpace: 'nowrap' }} title={`This medicine was counted per pack before. Ticked: its ${p!.stock} in stock become ${p!.stock * (per / l.sellBy)} units, and its prices are divided by ${per / l.sellBy}.`}>
-                        <input type="checkbox" checked={l.convert} onChange={(e) => set(l.key, { convert: e.target.checked })} aria-label={`Convert old stock ${l.name}`} /> convert old stock
-                      </label>
-                    )}
                   </td>
                   <td style={td}>
                     <input
