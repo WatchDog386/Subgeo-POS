@@ -400,6 +400,7 @@ function TransferStock({ branches, onDone }: { branches: Branch[]; onDone: () =>
   const [busy, setBusy] = useState(false)
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [vendorId, setVendorId] = useState<string | undefined>()
+  const [mode, setMode] = useState<'all' | 'partial'>('partial')
 
   useEffect(() => {
     let cancelled = false
@@ -429,16 +430,21 @@ function TransferStock({ branches, onDone }: { branches: Branch[]; onDone: () =>
     }
   }, [from, toast])
 
-  const items = Object.entries(qty)
-    .map(([id, v]) => ({ productId: Number(id), qty: parseInt(v, 10) || 0 }))
-    .filter((i) => i.qty > 0)
   const shown = products
     .filter((p) => vendorId === undefined || p.supplierId === Number(vendorId))
     .filter((p) => matches(q, p.name, p.sku, p.barcode))
 
+  const items =
+    mode === 'all'
+      ? shown.filter((p) => p.stock > 0).map((p) => ({ productId: p.id, qty: p.stock }))
+      : Object.entries(qty)
+          .map(([id, v]) => ({ productId: Number(id), qty: parseInt(v, 10) || 0 }))
+          .filter((i) => i.qty > 0)
+
   const run = async () => {
     if (!from || !to || from === to) return toast('Pick two different chemists', 'error')
-    if (items.length === 0) return toast('Enter a quantity for at least one medicine', 'error')
+    if (items.length === 0)
+      return toast(mode === 'all' ? 'No medicines in stock to transfer' : 'Enter a quantity for at least one medicine', 'error')
     for (const i of items) {
       const p = products.find((x) => x.id === i.productId)
       if (p && i.qty > p.stock) return toast(`${p.name}: only ${p.stock} in stock`, 'error')
@@ -474,6 +480,29 @@ function TransferStock({ branches, onDone }: { branches: Branch[]; onDone: () =>
         <span className="ma-label ma-bold-label">To</span>
         <Select value={to} onChange={setTo} options={[{ value: '', label: 'SELECT' }, ...opts]} width={170} />
       </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
+        <span className="ma-label ma-bold-label">Mode</span>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', userSelect: 'none' }}>
+          <input
+            type="radio"
+            name="transferMode"
+            value="partial"
+            checked={mode === 'partial'}
+            onChange={() => setMode('partial')}
+          />
+          Partial
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', userSelect: 'none' }}>
+          <input
+            type="radio"
+            name="transferMode"
+            value="all"
+            checked={mode === 'all'}
+            onChange={() => setMode('all')}
+          />
+          All
+        </label>
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', margin: '8px 0 3px' }}>
         <SearchBar value={q} onChange={setQ} width={260} />
         <span style={{ marginLeft: 'auto' }}>
@@ -493,9 +522,11 @@ function TransferStock({ branches, onDone }: { branches: Branch[]; onDone: () =>
                 className="ma-input"
                 style={{ width: 70, height: 20 }}
                 inputMode="numeric"
-                value={qty[p.id] ?? ''}
+                value={mode === 'all' ? String(p.stock) : qty[p.id] ?? ''}
                 onChange={(e) => setQty({ ...qty, [p.id]: e.target.value.replace(/\D/g, '') })}
                 onClick={(e) => e.stopPropagation()}
+                disabled={mode === 'all'}
+                readOnly={mode === 'all'}
               />
             ),
           },
