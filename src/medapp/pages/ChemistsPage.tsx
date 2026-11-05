@@ -4,7 +4,7 @@ import { db } from '../../db/db'
 import { logActivity } from '../../db/logs'
 import { HQ_NUMBER, chemCode } from '../../db/seedData'
 import { api, syncNow, useSyncState } from '../../db/sync'
-import type { Branch, Product } from '../../db/types'
+import type { Branch, Product, Supplier } from '../../db/types'
 import { useSession } from '../../session'
 import { useToast } from '../../components/ui'
 import { amt, dmy } from '../data'
@@ -398,10 +398,27 @@ function TransferStock({ branches, onDone }: { branches: Branch[]; onDone: () =>
   const [q, setQ] = useState('')
   const [qty, setQty] = useState<Record<number, string>>({})
   const [busy, setBusy] = useState(false)
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [vendorId, setVendorId] = useState<string | undefined>()
+
+  useEffect(() => {
+    let cancelled = false
+    api<Supplier[]>('/admin/suppliers')
+      .then((list) => !cancelled && setSuppliers(list))
+      .catch((e) => toast(e instanceof Error ? e.message : String(e), 'error'))
+    return () => {
+      cancelled = true
+    }
+  }, [toast])
+
+  useEffect(() => {
+    setQty({})
+  }, [vendorId])
 
   useEffect(() => {
     setQty({})
     setProducts([])
+    setVendorId(undefined)
     if (!from) return
     let cancelled = false
     api<(Product & { id: number })[]>(`/admin/products?branch=${from}`)
@@ -415,7 +432,9 @@ function TransferStock({ branches, onDone }: { branches: Branch[]; onDone: () =>
   const items = Object.entries(qty)
     .map(([id, v]) => ({ productId: Number(id), qty: parseInt(v, 10) || 0 }))
     .filter((i) => i.qty > 0)
-  const shown = products.filter((p) => matches(q, p.name, p.sku, p.barcode))
+  const shown = products
+    .filter((p) => vendorId === undefined || p.supplierId === Number(vendorId))
+    .filter((p) => matches(q, p.name, p.sku, p.barcode))
 
   const run = async () => {
     if (!from || !to || from === to) return toast('Pick two different chemists', 'error')
@@ -445,6 +464,13 @@ function TransferStock({ branches, onDone }: { branches: Branch[]; onDone: () =>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <span className="ma-label ma-bold-label">From</span>
         <Select value={from} onChange={setFrom} options={[{ value: '', label: 'SELECT' }, ...opts]} width={170} />
+        <span className="ma-label ma-bold-label">Vendor</span>
+        <Select
+          value={vendorId ?? ''}
+          onChange={setVendorId}
+          options={[{ value: '', label: 'ALL' }, ...suppliers.map((s) => ({ value: String(s.id), label: s.name }))]}
+          width={200}
+        />
         <span className="ma-label ma-bold-label">To</span>
         <Select value={to} onChange={setTo} options={[{ value: '', label: 'SELECT' }, ...opts]} width={170} />
       </div>

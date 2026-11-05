@@ -8,7 +8,7 @@ import { hashPassword } from '../src/lib/sha256'
 import { HQ_NUMBER, SEED_BRANCH, SEED_PURCHASE, SEED_USERS, chemCode } from '../src/db/seedData'
 import { COUNTER_FIELDS, GLOBAL_KV_KEYS, GLOBAL_TABLES, SYNCED_TABLES, hasAdminRights, isLocalKvKey, isSeqKvKey } from '../src/db/syncSchema'
 import { MEDICINE_GROUPS, MEDICINE_LIST } from '../src/db/medicineList'
-import type { Branch, MedicineNameRec, Product, Role, StaffMessage, User } from '../src/db/types'
+import type { Branch, MedicineNameRec, Product, Role, StaffMessage, Supplier, User } from '../src/db/types'
 import { LEGACY_DOCS_PREFIX, LEGACY_TASKS_KEY, convertLegacyDocs, convertLegacyTasks } from '../src/db/legacyDemo'
 import { ensureRelational, project } from './relational'
 
@@ -509,6 +509,11 @@ syncRouter.get('/admin/products', requireAuth, requireOwner, (req, res) => {
     return
   }
   res.json(listTable<Product>('products', branchId).sort((a, b) => a.name.localeCompare(b.name)))
+})
+
+/** All suppliers (global list) for filtering what stock to transfer. */
+syncRouter.get('/admin/suppliers', requireAuth, requireOwner, (_req, res) => {
+  res.json(listTable<Supplier>('suppliers', 0).sort((a, b) => a.name.localeCompare(b.name)))
 })
 
 /** Copy the medicine list of one chemist into another (zero stock; existing SKUs are skipped). */
