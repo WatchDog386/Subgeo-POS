@@ -1,7 +1,9 @@
 // Supplier invoice PDF import (Pur/GRN Direct Invoice → Upload Supplier Invoice).
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Dexie from 'dexie'
+import * as XLSX from 'xlsx'
 import { invoiceDate, parseInvoiceText, type TextItem } from '../lib/invoiceParse'
+import { parseStockReportXls } from '../medapp/pages/InvoiceImport'
 
 const T = (x: number, y: number, str: string): TextItem => ({ x, y, str })
 
@@ -69,10 +71,81 @@ describe('reading the invoice', () => {
     expect(parseInvoiceText([p]).lines.map((l) => l.name)).toEqual(['Real item'])
   })
 
+  it('reads the Subgeo stock-invoice layout: Disc % / Tax % columns and label rows', () => {
+    const p: TextItem[] = [
+      T(236, 823, 'SALES INVOICE'),
+      T(30, 800, 'CASH WHOLESALE 6'),
+      T(30, 714, 'Account'),
+      T(150, 714, 'Date'),
+      T(240, 714, 'Order No'),
+      T(340, 714, 'Delivery Note'),
+      T(450, 714, 'Our Reference'),
+      T(30, 694, 'CASH WHOLESALE 6'),
+      T(150, 694, '03/11/2026'),
+      T(450, 694, 'NBINV65905'),
+      T(30, 674, 'Item Code'),
+      T(100, 674, 'Item Description'),
+      T(351, 674, 'Units'),
+      T(389, 674, 'Price (In)'),
+      T(442, 674, 'Disc %'),
+      T(483, 674, 'Tax %'),
+      T(523, 674, 'Total (Incl)'),
+    ]
+    let y = 650
+    for (const [code, name, qty, price, amount, tax] of [
+      ['WH1523', "AMLODIPINE 5MG 30'S", '1.00', '40.00', '40.00', '0'],
+      ['W102', "Amoxiclav 625mg 10's", '3.00', '110.00', '330.00', '0'],
+      ['WHR5609', 'REMIDIN MOUTHWASH 100ML', '2.00', '250.00', '500.00', '16'],
+    ]) {
+      p.push(T(30, y, code), T(100, y, name), T(355, y, qty), T(404, y, price), T(503, y, tax), T(545, y, amount))
+      y -= 20
+    }
+    p.push(T(400, 300, 'Total (Excl)'), T(526, 300, '28,752.27'), T(400, 288, 'Tax'), T(538, 288, '151.73'), T(400, 276, 'Total (Incl)'), T(526, 276, '28,904.00'))
+    const inv = parseInvoiceText([p])
+    expect(inv.supplier).toBe('CASH WHOLESALE 6')
+    expect(inv.docNo).toBe('NBINV65905')
+    expect(inv.date).toBe('03/11/2026')
+    expect(inv.lines).toEqual([
+      { code: 'WH1523', name: "AMLODIPINE 5MG 30'S", qty: 1, unitPrice: 40, amount: 40, page: 1 },
+      { code: 'W102', name: "Amoxiclav 625mg 10's", qty: 3, unitPrice: 110, amount: 330, page: 1 },
+      { code: 'WHR5609', name: 'REMIDIN MOUTHWASH 100ML', qty: 2, unitPrice: 250, amount: 500, page: 1 },
+    ])
+    expect(inv.linesTotal).toBe(870)
+    expect(inv.vat).toBe(151.73)
+    expect(inv.total).toBe(28904)
+    expect(inv.subtotal).toBeUndefined()
+  })
+
   it('converts dd/mm/yy to the app date', () => {
     expect(invoiceDate('28/10/26')).toBe('28-10-2026')
     expect(invoiceDate('5.1.2027')).toBe('05-01-2027')
     expect(invoiceDate('soon')).toBeUndefined()
+  })
+})
+
+describe('stock report Excel import', () => {
+  it('finds the stock columns when a title and blank rows precede the headers', async () => {
+    const workbook = XLSX.utils.book_new()
+    const sheet = XLSX.utils.aoa_to_sheet([
+      ['Stock Report'],
+      [],
+      ['Product\nName', 'Product Code', 'UOM', 'Opening Stock', 'Received', 'Issued', 'Closing Stock'],
+      ['Brake Pad', 'BP-01', 'PCS', 12, 4, 2, 14],
+    ])
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Stock')
+    const binary = XLSX.write(workbook, { type: 'binary', bookType: 'xlsx' })
+
+    expect(parseStockReportXls(binary)).toMatchObject([
+      {
+        code: 'BP-01',
+        name: 'BRAKE PAD',
+        uom: 'PCS',
+        opening: '12',
+        received: '4',
+        issued: '2',
+        closing: '14',
+      },
+    ])
   })
 })
 
