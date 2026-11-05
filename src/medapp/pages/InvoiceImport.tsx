@@ -74,10 +74,10 @@ export type StockReportLine = {
 const norm = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim()
 
 /** Find the column index by trying several likely header names (case-insensitive). */
-function colIdx(headers: string[], ...names: string[]): number {
-  const upper = headers.map((h) => h.trim().toUpperCase())
+function colIdx(headers: unknown[], ...names: string[]): number {
+  const upper = headers.map((h) => String(h ?? '').replace(/\uFEFF/g, '').replace(/[\r\n]+/g, ' ').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim())
   for (const name of names) {
-    const n = name.trim().toUpperCase()
+    const n = name.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim()
     const i = upper.findIndex((h) => h === n || h.includes(n))
     if (i >= 0) return i
   }
@@ -87,11 +87,21 @@ function colIdx(headers: string[], ...names: string[]): number {
 /** Parse a stock report XLS/XLSX into StockReportLine[] with flexible column detection. */
 export function parseStockReportXls(data: string): StockReportLine[] {
   const workbook = XLSX.read(data, { type: 'binary' })
-  const sheet = workbook.Sheets[workbook.SheetNames[0]]
-  if (!sheet) return []
-  const rows = XLSX.utils.sheet_to_json<any>(sheet, { header: 1 })
-  if (rows.length < 2) return []
-  const headers = rows[0] as string[]
+  let rows: unknown[][] = []
+  let headerRow = -1
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName]
+    if (!sheet) continue
+    const sheetRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1 })
+    const candidate = sheetRows.findIndex((row) => colIdx(row, 'PRODUCT NAME', 'NAME', 'ITEM', 'MEDICINE', 'PRODUCT') >= 0)
+    if (candidate >= 0) {
+      rows = sheetRows
+      headerRow = candidate
+      break
+    }
+  }
+  if (headerRow < 0 || rows.length <= headerRow + 1) return []
+  const headers = rows[headerRow]
   const iName = colIdx(headers, 'PRODUCT NAME', 'NAME', 'ITEM', 'MEDICINE', 'PRODUCT')
   const iCode = colIdx(headers, 'PRODUCT CODE', 'CODE', 'SKU', 'ITEM CODE', 'BARCODE')
   const iUom = colIdx(headers, 'UOM', 'UNIT', 'UNIT OF MEASURE')
@@ -106,8 +116,8 @@ export function parseStockReportXls(data: string): StockReportLine[] {
   if (iName < 0) throw new Error('Excel sheet must have a "Product Name" column')
 
   const out: StockReportLine[] = []
-  for (let r = 1; r < rows.length; r++) {
-    const row = rows[r] as any[]
+  for (let r = headerRow + 1; r < rows.length; r++) {
+    const row = rows[r]
     const get = (i: number) => (i >= 0 && i < row.length ? String(row[i] ?? '').trim() : '')
     const name = get(iName)
     if (!name) continue
