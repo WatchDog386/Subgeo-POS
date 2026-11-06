@@ -85,7 +85,24 @@ Then, as admin, open *Utilities → Chemists (Branches)*, select each SUBGEO and
 ```bash
 cd ~/Subgeo-POS && bash deploy.sh
 ```
-Then check with `npm run db:status`: every migration should be `applied`. If tills don't show the update, press Ctrl+Shift+R on each one.
+`deploy.sh` deploys exactly what was pushed to `claude/epic-brahmagupta-itfscw`. It fetches it, saves any local edits to code files with `git stash` (they are not lost), checks it out, builds, migrates and restarts. The database (`data/`), `.env` and `backups/` are never touched. Afterwards `npm run db:status` should show every migration as `applied`. If tills don't show the update, press Ctrl+Shift+R on each one.
+
+## Moving stock between chemists
+
+As admin, open *Utilities → Chemists (Branches)* → **Transfer stock between chemists**:
+
+1. Pick **From** and **To**.
+2. Fill the quantities in one of these ways:
+   - **Fill whole stock:** every medicine with its whole quantity.
+   - Pick a **GRN / upload** (shown with its vendor, invoice, date, lines, units and total) and press **Fill from this GRN**. This fills exactly what it brought in. Tick *Also move … to the receiving chemist* to move the GRN record as well; this only works when all its lines are transferred.
+   - Type quantities by hand.
+3. Press **Transfer Stock** and confirm.
+
+Medicines are matched by code and name, because codes are numbered per chemist. One the receiving chemist lacks is created there with its prices. To check the result on the server:
+```bash
+cd ~/Subgeo-POS && npm run stock:status -- 12 10
+```
+This shows each chemist's medicines, units, stock value, GRNs and transfers. It changes nothing.
 
 ## Before go-live
 

@@ -18,7 +18,8 @@
     "db:reset": "tsx scripts/db-reset.ts",
     "db:rebuild": "tsx scripts/db-rebuild.ts",
     "setup:subgeo": "tsx scripts/setup-subgeo.ts",
-    "stock:reset": "tsx scripts/reset-stock.ts"
+    "stock:reset": "tsx scripts/reset-stock.ts",
+    "stock:status": "tsx scripts/stock-status.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

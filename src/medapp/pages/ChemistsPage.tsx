@@ -389,48 +389,95 @@ function CopyCatalogue({ branches, onDone }: { branches: Branch[]; onDone: () =>
 }
 
 /* ── Transfer stock between chemists ─────────────────────────────────────── */
+type Receipt = { id: number; slug: string; docNo: string; vendor: string; invoice: string; date: string; total: string; createdAt: number; lines: { productId?: number; name: string; qty: number }[]; units: number }
+
 function TransferStock({ branches, onDone }: { branches: Branch[]; onDone: () => void }) {
   const toast = useToast()
   const opts = branches.map((b) => ({ value: String(b.id), label: `${chemCode(b.number)} - ${b.name}` }))
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [products, setProducts] = useState<(Product & { id: number })[]>([])
+  const [receipts, setReceipts] = useState<Receipt[]>([])
+  const [grn, setGrn] = useState('')
+  const [moveGrn, setMoveGrn] = useState(true)
   const [q, setQ] = useState('')
   const [qty, setQty] = useState<Record<number, string>>({})
   const [busy, setBusy] = useState(false)
 
+  const load = async (branch: string) => {
+    const [list, docs] = await Promise.all([api<(Product & { id: number })[]>(`/admin/products?branch=${branch}`), api<Receipt[]>(`/admin/receipts?branch=${branch}`)])
+    setProducts(list.filter((p) => p.active && p.trackStock))
+    setReceipts(docs)
+  }
   useEffect(() => {
     setQty({})
     setProducts([])
+    setReceipts([])
+    setGrn('')
     if (!from) return
     let cancelled = false
-    api<(Product & { id: number })[]>(`/admin/products?branch=${from}`)
-      .then((list) => !cancelled && setProducts(list.filter((p) => p.active && p.trackStock)))
-      .catch((e) => toast(e instanceof Error ? e.message : String(e), 'error'))
+    load(from).catch((e) => !cancelled && toast(e instanceof Error ? e.message : String(e), 'error'))
     return () => {
       cancelled = true
     }
-  }, [from, toast])
+  }, [from, toast]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const items = Object.entries(qty)
     .map(([id, v]) => ({ productId: Number(id), qty: parseInt(v, 10) || 0 }))
     .filter((i) => i.qty > 0)
+  const units = items.reduce((n, i) => n + i.qty, 0)
   const shown = products.filter((p) => matches(q, p.name, p.sku, p.barcode))
+  const picked = receipts.find((r) => String(r.id) === grn)
+
+  /** Every medicine with stock: its whole quantity. */
+  const fillAll = () => {
+    const next: Record<number, string> = {}
+    for (const p of products) if (p.stock > 0) next[p.id] = String(p.stock)
+    setQty(next)
+    setGrn('')
+    toast(`${Object.keys(next).length} medicine(s) filled with their whole stock — check, then Transfer Stock`)
+  }
+  /** Exactly what one GRN / upload brought in (capped at what is still in stock). */
+  const fillFromGrn = () => {
+    if (!picked) return toast('Pick the GRN / upload first', 'error')
+    const next: Record<number, string> = {}
+    const short: string[] = []
+    for (const l of picked.lines) {
+      const p = products.find((x) => x.id === l.productId)
+      if (!p) {
+        short.push(`${l.name} (no longer in the list)`)
+        continue
+      }
+      const want = (Number(next[p.id]) || 0) + l.qty
+      const take = Math.min(want, p.stock)
+      if (take < want) short.push(`${p.name}: ${p.stock} left of ${want}`)
+      if (take > 0) next[p.id] = String(take)
+    }
+    setQty(next)
+    if (short.length) {
+      setMoveGrn(false)
+      toast(`Some of this GRN was already sold or moved — ${short.slice(0, 3).join('; ')}${short.length > 3 ? ` (+${short.length - 3} more)` : ''}. The GRN record will stay where it is.`, 'error')
+    } else toast(`${picked.lines.length} line(s) of ${picked.docNo} filled — check, then Transfer Stock`)
+  }
 
   const run = async () => {
     if (!from || !to || from === to) return toast('Pick two different chemists', 'error')
-    if (items.length === 0) return toast('Enter a quantity for at least one medicine', 'error')
+    if (items.length === 0) return toast('Enter a quantity for at least one medicine (or use Fill)', 'error')
     for (const i of items) {
       const p = products.find((x) => x.id === i.productId)
       if (p && i.qty > p.stock) return toast(`${p.name}: only ${p.stock} in stock`, 'error')
     }
+    const fromL = opts.find((o) => o.value === from)?.label
+    const toL = opts.find((o) => o.value === to)?.label
+    const moving = !!picked && moveGrn
+    if (!confirm(`Transfer ${units} unit(s) of ${items.length} medicine(s)\nfrom ${fromL}\nto ${toL}${moving ? `\n\nand move ${picked!.docNo} (${picked!.vendor}) to ${toL}` : ''}?`)) return
     setBusy(true)
     try {
-      const r = await api<{ reference: string }>('/admin/transfer', { method: 'POST', body: JSON.stringify({ from: Number(from), to: Number(to), items }) })
-      toast(`Transferred ${items.length} medicine(s) · ${r.reference}`)
+      const r = await api<{ reference: string }>('/admin/transfer', { method: 'POST', body: JSON.stringify({ from: Number(from), to: Number(to), items, moveDocId: moving ? picked!.id : undefined }) })
+      toast(`Transferred ${items.length} medicine(s), ${units} unit(s) · ${r.reference}`)
       setQty({})
-      const list = await api<(Product & { id: number })[]>(`/admin/products?branch=${from}`)
-      setProducts(list.filter((p) => p.active && p.trackStock))
+      setGrn('')
+      await load(from)
       await syncNow()
       onDone()
     } catch (e) {
@@ -441,13 +488,38 @@ function TransferStock({ branches, onDone }: { branches: Branch[]; onDone: () =>
   }
 
   return (
-    <Box title="Transfer stock between chemists" width={520}>
+    <Box title="Transfer stock between chemists" width={620}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <span className="ma-label ma-bold-label">From</span>
         <Select value={from} onChange={setFrom} options={[{ value: '', label: 'SELECT' }, ...opts]} width={170} />
         <span className="ma-label ma-bold-label">To</span>
-        <Select value={to} onChange={setTo} options={[{ value: '', label: 'SELECT' }, ...opts]} width={170} />
+        <Select value={to} onChange={setTo} options={[{ value: '', label: 'SELECT' }, ...opts.filter((o) => o.value !== from)]} width={170} />
       </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
+        <Btn onClick={fillAll} disabled={!products.length} title="Put every medicine's whole quantity in Transfer Qty">
+          Fill whole stock
+        </Btn>
+        <span className="ma-label">or a GRN / upload:</span>
+        <Select
+          value={grn}
+          onChange={setGrn}
+          width={300}
+          options={[{ value: '', label: receipts.length ? 'SELECT GRN' : from ? 'no GRNs at this chemist' : 'pick From first' }, ...receipts.map((r) => ({ value: String(r.id), label: `${r.docNo} · ${r.vendor || '—'}${r.invoice ? ` · inv ${r.invoice}` : ''} · ${r.date} · ${r.lines.length} lines / ${r.units} units${r.total ? ` · ${r.total}` : ''}` }))]}
+        />
+        <Btn onClick={fillFromGrn} disabled={!picked} title="Put exactly this GRN's quantities in Transfer Qty">
+          Fill from this GRN
+        </Btn>
+        <Btn onClick={() => (setQty({}), setGrn(''))} disabled={!items.length}>
+          Clear
+        </Btn>
+      </div>
+      {picked && (
+        <div style={{ marginTop: 4 }}>
+          <Check checked={moveGrn} onChange={setMoveGrn} dark title="The GRN record moves to the receiving chemist (all its lines must be transferred)">
+            Also move {picked.docNo} ({picked.vendor || 'GRN'}) to the receiving chemist
+          </Check>
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', margin: '8px 0 3px' }}>
         <SearchBar value={q} onChange={setQ} width={260} />
         <span style={{ marginLeft: 'auto' }}>
@@ -455,8 +527,8 @@ function TransferStock({ branches, onDone }: { branches: Branch[]; onDone: () =>
         </span>
       </div>
       <Grid
-        cols={[C('name', 'Medicine', 220), C('code', 'Code', 90), C('stock', 'In Stock', 60, 'right'), C('qty', 'Transfer Qty', 80)]}
-        rows={shown.slice(0, 300).map((p) => ({
+        cols={[C('name', 'Medicine', 250), C('code', 'Code', 100), C('stock', 'In Stock', 70, 'right'), C('qty', 'Transfer Qty', 90)]}
+        rows={shown.slice(0, 3000).map((p) => ({
           id: p.id,
           cells: {
             name: p.name,
@@ -465,8 +537,9 @@ function TransferStock({ branches, onDone }: { branches: Branch[]; onDone: () =>
             qty: (
               <input
                 className="ma-input"
-                style={{ width: 70, height: 20 }}
+                style={{ width: 76, height: 20, background: qty[p.id] ? '#fff8d6' : undefined }}
                 inputMode="numeric"
+                aria-label={`Transfer qty ${p.name}`}
                 value={qty[p.id] ?? ''}
                 onChange={(e) => setQty({ ...qty, [p.id]: e.target.value.replace(/\D/g, '') })}
                 onClick={(e) => e.stopPropagation()}
@@ -474,17 +547,20 @@ function TransferStock({ branches, onDone }: { branches: Branch[]; onDone: () =>
             ),
           },
         }))}
-        height={220}
+        height={260}
         compact
       />
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-        <span className="ma-label">{items.length} medicine(s) selected</span>
-        <Btn onClick={run} disabled={busy || items.length === 0}>
+        <span className="ma-label">
+          <b>{items.length}</b> medicine(s), <b>{units}</b> unit(s) selected
+        </span>
+        <Btn onClick={run} disabled={busy || items.length === 0 || !to}>
           {busy ? 'Transferring…' : 'Transfer Stock'}
         </Btn>
       </div>
       <div className="ma-label ma-note" style={{ marginTop: 6 }}>
-        Stock leaves the first chemist and arrives at the second at once; both stock ledgers show the transfer. A medicine the receiving chemist lacks is created there.
+        Stock leaves the first chemist and arrives at the second at once; both stock ledgers show the transfer. Medicines are matched by code and name (codes are numbered per chemist); one the receiving chemist lacks is created
+        there with its prices.
       </div>
     </Box>
   )

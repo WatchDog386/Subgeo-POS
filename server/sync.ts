@@ -514,12 +514,44 @@ syncRouter.post('/admin/copy-catalogue', requireAuth, requireOwner, (req, res) =
   res.json({ ok: true, added })
 })
 
-/** Move stock from one chemist to another. Creates the medicine at the receiving chemist if it has none with that SKU. */
+/** Stock-in records of a chemist (GRNs, uploaded invoices, Stock Adjust +): pick one to transfer exactly what it brought in. */
+export const STOCK_IN_SLUGS = ['pur-grn-direct-invoice', 'pur-inv-grn', 'stock-adjust-plus']
+syncRouter.get('/admin/receipts', requireAuth, requireOwner, (req, res) => {
+  const branchId = branchParam(req.query.branch)
+  if (!branchId) {
+    res.status(400).json({ error: 'branch is required' })
+    return
+  }
+  const docs = listTable<Rec>('docs', branchId).filter((d) => STOCK_IN_SLUGS.includes(String(d.slug)) && Array.isArray(d.lines) && (d.lines as unknown[]).length)
+  res.json(
+    docs
+      .map((d) => {
+        const v = (d.values ?? {}) as Record<string, string>
+        const lines = (d.lines as { productId?: number; name: string; qty: number }[]).map((l) => ({ productId: l.productId, name: l.name, qty: l.qty }))
+        return { id: d.id, slug: d.slug, docNo: v.docNo ?? d.docNo ?? '', vendor: v.vendorName ?? v.location ?? '', invoice: v.invoice ?? '', date: v.mrnDate ?? v.date ?? '', total: v.total ?? '', createdAt: d.createdAt, lines, units: lines.reduce((n, l) => n + (Number(l.qty) || 0), 0) }
+      })
+      .sort((a, b) => Number(b.createdAt) - Number(a.createdAt)),
+  )
+})
+
+const normName = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim()
+/**
+ * The receiving chemist's medicine for a transferred one. Codes are numbered
+ * per chemist (PRD00-3-26 can be a different medicine elsewhere), so the code
+ * only counts together with the name; then the name alone.
+ */
+function matchAtDestination(dest: (Product & { id: number })[], src: Product): (Product & { id: number }) | undefined {
+  const n = normName(src.name)
+  return dest.find((p) => p.sku.toUpperCase() === src.sku.toUpperCase() && normName(p.name) === n) ?? dest.find((p) => normName(p.name) === n)
+}
+
+/** Move stock from one chemist to another (matched by code + name, else name; created there if missing). Optionally moves the GRN it came from. */
 syncRouter.post('/admin/transfer', requireAuth, requireOwner, (req, res) => {
   const user = (req as AuthedRequest).user
   const from = branchParam(req.body?.from)
   const to = branchParam(req.body?.to)
   const items = Array.isArray(req.body?.items) ? (req.body.items as { productId: number; qty: number }[]) : []
+  const moveDocId = req.body?.moveDocId !== undefined && req.body?.moveDocId !== null ? Number(req.body.moveDocId) : undefined
   if (!from || !to || from === to || !parse(getRow('branches', 0, to))) {
     res.status(400).json({ error: 'Pick two different chemists' })
     return
@@ -533,6 +565,7 @@ syncRouter.post('/admin/transfer', requireAuth, requireOwner, (req, res) => {
   try {
     sql.transaction(() => {
       const dest = listTable<Product & { id: number }>('products', to)
+      const idAtDest = new Map<number, number>()
       for (const item of items) {
         const src = parse(getRow('products', from, item.productId)) as (Product & { id: number }) | undefined
         if (!src) throw new Error(`Medicine ${item.productId} not found at ${branchCode(from)}`)
@@ -540,17 +573,33 @@ syncRouter.post('/admin/transfer', requireAuth, requireOwner, (req, res) => {
         writeRow('products', from, src.id, { ...src, stock: src.stock - item.qty, updatedAt: now }, now, user.id)
         writeRow('movements', from, newServerId(), { productId: src.id, change: -item.qty, reason: 'transfer', reference: ref, note: `To ${branchCode(to)}`, userId: user.id, at: now }, now, user.id)
 
-        let target = dest.find((p) => p.sku.toUpperCase() === src.sku.toUpperCase())
+        let target = matchAtDestination(dest, src)
         if (target) {
           target = { ...target, stock: target.stock + item.qty, updatedAt: now }
+          dest[dest.findIndex((p) => p.id === target!.id)] = target
         } else {
-          target = { ...src, id: newServerId(), stock: item.qty, createdAt: now, updatedAt: now }
+          // New there: a code already used by another medicine gets the source chemist's suffix.
+          const clash = dest.some((p) => p.sku.toUpperCase() === src.sku.toUpperCase())
+          const sku = clash ? `${src.sku}-${branchCode(from)}` : src.sku
+          target = { ...src, id: newServerId(), sku, barcode: clash ? sku : src.barcode, stock: item.qty, createdAt: now, updatedAt: now }
           dest.push(target)
         }
+        idAtDest.set(src.id, target.id)
         writeRow('products', to, target.id, target as unknown as Rec, now, user.id)
         writeRow('movements', to, newServerId(), { productId: target.id, change: item.qty, reason: 'transfer', reference: ref, note: `From ${branchCode(from)}`, userId: user.id, at: now }, now, user.id)
       }
-      const detail = `${items.length} medicine(s) · ${ref}`
+      // The GRN / invoice that brought the stock in goes with it (its lines re-pointed to the receiving chemist's medicines).
+      if (moveDocId !== undefined && Number.isFinite(moveDocId)) {
+        const doc = parse(getRow('docs', from, moveDocId))
+        if (!doc || !STOCK_IN_SLUGS.includes(String(doc.slug))) throw new Error('That GRN is not at the sending chemist any more')
+        const missing = ((doc.lines ?? []) as Rec[]).filter((l) => l.productId !== undefined && !idAtDest.has(Number(l.productId)))
+        if (missing.length) throw new Error(`To move the GRN, transfer all of its lines (${missing.length} left out, e.g. ${String(missing[0].name)})`)
+        const lines = ((doc.lines ?? []) as Rec[]).map((l) => (l.productId !== undefined && idAtDest.has(Number(l.productId)) ? { ...l, productId: idAtDest.get(Number(l.productId)) } : l))
+        const values = { ...((doc.values ?? {}) as Rec), transferredFrom: branchCode(from), transferRef: ref }
+        writeRow('docs', to, moveDocId, { ...doc, lines, values, updatedAt: now }, now, user.id)
+        writeRow('docs', from, moveDocId, null, now, user.id)
+      }
+      const detail = `${items.length} medicine(s) · ${ref}${moveDocId !== undefined ? ' · GRN moved' : ''}`
       addLog(from, user, `Stock transferred to ${branchCode(to)}`, detail)
       addLog(to, user, `Stock received from ${branchCode(from)}`, detail)
     })()

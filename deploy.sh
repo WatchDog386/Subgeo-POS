@@ -4,8 +4,19 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-echo "==> git pull"
-git pull --ff-only
+# Always deploy exactly what was pushed to this branch (override with
+# DEPLOY_BRANCH=...). The database (data/), .env and backups/ are not tracked
+# by git, so they are never touched. Local edits to code files are stashed
+# (git stash list), never thrown away.
+BRANCH="${DEPLOY_BRANCH:-claude/epic-brahmagupta-itfscw}"
+echo "==> git: deploying origin/$BRANCH"
+git fetch origin "$BRANCH"
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "    local changes to code files found: saving them with git stash"
+  git stash push -m "deploy.sh $(date '+%Y-%m-%d %H:%M')"
+fi
+git checkout -B "$BRANCH" "origin/$BRANCH"
+echo "    now at: $(git log --oneline -1)"
 
 echo "==> npm install"
 npm install
