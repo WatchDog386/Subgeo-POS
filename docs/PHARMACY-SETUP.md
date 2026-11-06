@@ -319,6 +319,11 @@ no quantity (those aren't received). Type each line's **Pack Cost** from the
 supplier's invoice. A Pack Cost left at 0 keeps the medicine's current cost,
 and new medicines need a Selling Price. The order's item codes (001, 002 …)
 are row numbers, so lines are matched to your medicines by name.
+If a document's Qty column is really the **pieces in one pack** (e.g. 63
+written against Zinc means 63 tablets), press **Qty column is Pcs/Pack…** and
+confirm. For that document only, every line's Qty moves into Pcs/Pack and Qty
+becomes 1, so the Units are right. **↶ Undo Qty → Pcs/Pack** puts it back.
+Other uploads are not affected, and any line can still be changed by hand.
 
 Only PDFs with selectable text can be read, i.e. the ones a supplier's system
 produces. A scanned photo of a paper invoice has no text to read.

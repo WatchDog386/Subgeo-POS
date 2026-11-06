@@ -1,7 +1,7 @@
 // Autocorrecting medicine names read from uploaded (often handwritten) documents.
 import { describe, expect, it } from 'vitest'
 import { AUTO_MATCH, matchMedicine, medKey, packContents, wordSimilarity } from '../lib/medMatch'
-import { autocorrect, candidatesFrom, packSizeFrom, type CatalogueItem } from '../medapp/pages/InvoiceImport'
+import { autocorrect, candidatesFrom, packSizeFrom, qtyAsPieces, type CatalogueItem, type ImportLine } from '../medapp/pages/InvoiceImport'
 import type { Product } from '../db/types'
 
 // Names as they are in the price list.
@@ -95,5 +95,12 @@ describe('autocorrect against this chemist and the company list', () => {
     expect(d.use).toMatchObject({ sku: 'DEX4', price: 1500, minPrice: 1200, packSize: 100 })
     expect(autocorrect('CALPOL SUSPENSION (60ML)', cands).score).toBe(1)
     expect(autocorrect('SOMETHING ELSE', cands).use).toBeUndefined()
+  })
+})
+
+describe('Qty column is Pcs/Pack (one document)', () => {
+  it('moves each Qty into Pcs/Pack and makes it one pack, sold each', () => {
+    const l = { key: 1, include: true, code: '009', name: 'ZINC', read: 'ZINC', qty: '63', cost: '0', price: '', best: '', vat: false, perPack: '100', sellBy: 2, from: 'invoice', convert: true, fix: 'auto', options: [] } as ImportLine
+    expect(qtyAsPieces([l, { ...l, key: 2, qty: '' }])).toEqual([{ ...l, qty: '1', perPack: '63', sellBy: 1, from: 'typed', convert: false }, { ...l, key: 2, qty: '' }])
   })
 })

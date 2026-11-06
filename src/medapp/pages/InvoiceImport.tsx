@@ -52,6 +52,18 @@ export type ImportLine = {
   options: { name: string; score: number }[]
 }
 
+/**
+ * For one document only: its Qty column was really the pieces in a pack.
+ * Each line becomes 1 pack of that many pieces (sold each); Qty is set to 1.
+ */
+export function qtyAsPieces(lines: ImportLine[]): ImportLine[] {
+  return lines.map((l) => {
+    const n = Math.round(Number(l.qty))
+    if (!(n >= 1)) return l
+    return { ...l, perPack: String(n), qty: '1', sellBy: 1, from: 'typed', convert: false }
+  })
+}
+
 /** One medicine of the company's price list (every chemist): GET /admin/catalogue. */
 export type CatalogueItem = { name: string; sku: string; price: number; cost: number; minPrice: number | null; taxable: boolean; packSize: number | null; sellBy: number | null; chem?: string }
 /** A medicine a line can be corrected to: one in this chemist's stock, or one from the company list. */
@@ -373,6 +385,8 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
   const [markup, setMarkup] = useState<string>()
   const [q, setQ] = useState('')
   const [saving, setSaving] = useState(false)
+  /** This document's Qty column was moved into Pcs/Pack: the lines before, to undo it. */
+  const [beforeQtyMove, setBeforeQtyMove] = useState<ImportLine[] | null>(null)
   const [lines, setLines] = useState<ImportLine[] | null>(null)
   // The company's medicine / price list (all chemists) to autocorrect names; [] offline.
   const [catalogue, setCatalogue] = useState<CatalogueItem[] | null>(null)
@@ -607,7 +621,7 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
       {inv.unpriced > 0 && (
         <div className="ma-note" style={{ margin: '8px 0 0', padding: '6px 10px', border: '1px solid #e0c96a', background: '#fff8d6', fontSize: 11, lineHeight: 1.4 }}>
           <b>{inv.title ?? 'Order document'}:</b> {inv.unpriced === list.length ? 'it lists quantities only, no prices' : `${inv.unpriced} line(s) have no price`}. Type each line&apos;s <b>Pack Cost</b> from the supplier&apos;s invoice (Cost of 1 follows). A Pack Cost
-          left at 0 keeps the medicine&apos;s current cost. New medicines need a Selling Price. Item codes 001, 002… are row numbers: lines are matched to your medicines by name. Untick lines that did not arrive.
+          left at 0 keeps the medicine&apos;s current cost. New medicines need a Selling Price. Item codes 001, 002… are row numbers: lines are matched to your medicines by name. Untick lines that did not arrive. If this document&apos;s Qty column is really the pieces in a pack, press <b>Qty column is Pcs/Pack…</b> (this document only).
           {inv.skipped.length > 0 && (
             <div style={{ marginTop: 4, color: '#8a5a00' }}>
               <b>No quantity on the document, not received:</b> {inv.skipped.join(' · ')}
@@ -632,6 +646,30 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4, flexWrap: 'wrap' }}>
         <Input value={q} onChange={setQ} width={260} placeholder="Find a line by code or name" />
+        {beforeQtyMove ? (
+          <Btn
+            onClick={() => {
+              // Put Qty / Pcs/Pack back as read, keeping every other edit.
+              const old = new Map(beforeQtyMove.map((l) => [l.key, l]))
+              setLines((ls) => (ls ?? []).map((l) => { const o = old.get(l.key); return o ? { ...l, qty: o.qty, perPack: o.perPack, sellBy: o.sellBy, from: o.from, convert: o.convert } : l }))
+              setBeforeQtyMove(null)
+            }}
+            title="Undo: Qty and Pcs/Pack go back to how they were read"
+          >
+            ↶ Undo Qty → Pcs/Pack
+          </Btn>
+        ) : (
+          <Btn
+            onClick={() => {
+              if (!confirm(`On THIS document only, is the Qty column really the pieces in one pack?\n\nOK: every line's Qty (e.g. 63) moves into Pcs/Pack, and Qty becomes 1 — so 63 pieces go into stock, not 63 packs × Pcs/Pack.\n\nOther uploads are not affected. You can undo it, and still change any line afterwards.`)) return
+              setBeforeQtyMove(list)
+              setLines((ls) => qtyAsPieces(ls ?? []))
+            }}
+            title="Only for this document: its Qty column is the pieces in a pack"
+          >
+            Qty column is Pcs/Pack…
+          </Btn>
+        )}
         <Check checked={list.length > 0 && list.every((l) => l.include)} onChange={(v) => setLines((ls) => (ls ?? []).map((l) => ({ ...l, include: v })))} dark>
           All
         </Check>
