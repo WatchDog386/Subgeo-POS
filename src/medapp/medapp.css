@@ -2010,3 +2010,24 @@
     padding: 0 10px;
   }
 }
+
+/* Report rows: section head, sub total, grand total (set apart from the lines). */
+.ma-grid tbody tr.is-head td {
+  background: #e8eef6 !important;
+  color: #1b4f8a;
+  font-weight: bold;
+  letter-spacing: 0.3px;
+}
+.ma-grid tbody tr.is-sub td {
+  background: #eeeeee !important;
+  font-weight: bold;
+  border-top: 1px solid #888;
+  border-bottom: 1px solid #888;
+}
+.ma-grid tbody tr.is-total td {
+  background: #fff3c4 !important;
+  font-weight: bold;
+  font-size: 12px;
+  border-top: 2px solid #555;
+  border-bottom: 3px double #555;
+}

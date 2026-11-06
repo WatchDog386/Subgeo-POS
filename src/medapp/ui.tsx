@@ -446,7 +446,7 @@ export interface Col {
   width: number
   align?: 'right'
 }
-export type Row = { id: string | number; cells: Record<string, ReactNode> }
+export type Row = { id: string | number; cells: Record<string, ReactNode>; /** Report rows: a section head, a sub total or the grand total. */ rowKind?: 'head' | 'sub' | 'total' }
 
 export function Grid({
   cols,
@@ -525,7 +525,7 @@ export function Grid({
           {rows.map((r) => (
             <tr
               key={r.id}
-              className={`is-data${selected === r.id ? ' is-selected' : ''}`}
+              className={`is-data${selected === r.id ? ' is-selected' : ''}${r.rowKind ? ` is-${r.rowKind}` : ''}`}
               onClick={() => onSelect?.(r.id)}
               onDoubleClick={() => onOpen?.(r.id)}
               onTouchStart={() => (moved.current = false)}

@@ -4,13 +4,17 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
 import type { Customer, Sale } from '../../db/types'
 import { useToast } from '../../components/ui'
+import { cashCollection } from '../reports/cashCollection'
+import { filterReport, printReport, type ReportRow } from '../reports/reportPrint'
+import { useSession } from '../../session'
+import { chemCode } from '../../db/seedData'
 import { downloadCsv } from '../../lib/csv'
-import { amt, billNo, dmy, getMedDefaults, inRange, monthStartDmy, paidBy, todayDmy } from '../data'
+import { amt, billNo, dmy, getMedDefaults, inRange, monthStartDmy, todayDmy, useMedDefaults } from '../data'
 import { REPORT_TREE } from '../nav'
 import { FindIcon, SearchLens, ZoomGlass } from '../icons'
 import { Btn, DateField, Grid, IBtn, Rows, SearchBar, Select, type Col } from '../ui'
 
-type Result = { cols: Col[]; rows: Record<string, string>[] }
+type Result = { cols: Col[]; rows: ReportRow[] }
 interface ReportDef {
   name: string
   selectDefault: string
@@ -152,27 +156,9 @@ const REPORTS: Record<string, ReportDef> = {
     datesPrefilled: false,
     initialCols: [C('date', 'Date', 100), C('rec', 'Rec No', 100), C('cash', 'Cash', 100), C('mpesa', 'Mpesa', 100), C('card', 'Credit Card', 100), C('cheque', 'Cheque', 100), C('total', 'Total Rec Amt', 400)],
     async run(from, to) {
-      const d = await getMedDefaults()
-      const sales = (await db.sales.orderBy('createdAt').toArray()).filter((s) => inRange(s.createdAt, from, to))
-      const t = { cash: 0, mpesa: 0, card: 0, cheque: 0, total: 0 }
-      const rows = sales.map((s) => {
-        const cash = paidBy(s, 'cash')
-        const mpesa = paidBy(s, 'mpesa')
-        const card = paidBy(s, 'card')
-        const cheque = paidBy(s, 'cheque')
-        const total = cash + mpesa + card + cheque
-        t.cash += cash
-        t.mpesa += mpesa
-        t.card += card
-        t.cheque += cheque
-        t.total += total
-        return { date: dmy(s.createdAt), rec: billNo(s, d.billPrefix), cash: amt(cash), mpesa: amt(mpesa), card: amt(card), cheque: amt(cheque), total: amt(total) }
-      })
-      if (rows.length) rows.push({ date: 'TOTAL', rec: '', cash: amt(t.cash), mpesa: amt(t.mpesa), card: amt(t.card), cheque: amt(t.cheque), total: amt(t.total) })
-      return {
-        cols: [C('date', 'Date', 100), C('rec', 'Rec No', 150), C('cash', 'Cash', 100, 'right'), C('mpesa', 'Mpesa', 100, 'right'), C('card', 'Credit Card', 100, 'right'), C('cheque', 'Cheque', 100, 'right'), C('total', 'Total Rec Amt', 130, 'right')],
-        rows,
-      }
+      // OTC bills and debtors' receipts, each with its SUB TOTAL, then the GRAND TOTAL.
+      const r = await cashCollection(from, to)
+      return { cols: r.cols, rows: r.rows }
     },
   },
   'expiry-medicines': {
@@ -240,9 +226,24 @@ function ReportViewer({ slug, def }: { slug: string; def: ReportDef }) {
     }
   }
   const cols = result?.cols ?? def.initialCols
-  const rows = (result?.rows ?? []).filter((r) => !q.trim() || Object.values(r).some((v) => v.toLowerCase().includes(q.trim().toLowerCase())))
+  const rows = filterReport(result?.rows ?? [], q)
+  const md = useMedDefaults()
+  const { user, branch } = useSession()
+  // Print: the whole report as a sheet (every row, headings on each page, sub totals and totals set apart).
+  const printNow = () => {
+    if (!result) return toast('Press View first', 'error')
+    const ok = printReport({
+      company: `${md.companyName}${branch ? ` - ${chemCode(branch.number)}` : ''}`,
+      title: def.name,
+      period: from || to ? `From ${from || '…'} to ${to || '…'}` : 'All dates',
+      cols,
+      rows,
+      printedBy: user?.name.toUpperCase(),
+    })
+    if (!ok) toast('The browser blocked the print window — allow pop-ups for this site', 'error')
+  }
   const exportNow = () => {
-    if (fmt === 'ExportReportToPdfFile') return window.print()
+    if (fmt === 'ExportReportToPdfFile') return printNow()
     downloadCsv(label.replace(/[^a-z0-9]+/gi, '-'), cols.map((c) => c.label), rows.map((r) => cols.map((c) => r[c.key] ?? '')))
   }
   const selOptions = def.selectDefault === 'Date' ? ['Date', ...parties] : ['SELECT', 'ALL']
@@ -273,12 +274,12 @@ function ReportViewer({ slug, def }: { slug: string; def: ReportDef }) {
       <div style={{ display: 'flex', alignItems: 'center', marginTop: 4 }} ref={searchRef}>
         <SearchBar value={q} onChange={setQ} width={450} />
         <span style={{ marginLeft: 'auto', marginRight: 28 }}>
-          <Rows n={rows.length} />
+          <Rows n={rows.filter((r) => !r._kind).length} />
         </span>
       </div>
       <div style={{ marginTop: 3 }}>
         {cols.length ? (
-          <Grid cols={cols} rows={rows.map((r, i) => ({ id: i, cells: r }))} height={628} />
+          <Grid cols={cols} rows={rows.map((r, i) => ({ id: i, cells: r, rowKind: r._kind }))} height={628} />
         ) : (
           <div className="ma-grid" style={{ height: 628 }}>
             <div style={{ height: 34, background: 'linear-gradient(to bottom,#fbfbfb,#f0f0f0 45%,#dcdcdc)', borderBottom: '1px solid #c3c3c3' }} />
@@ -287,7 +288,7 @@ function ReportViewer({ slug, def }: { slug: string; def: ReportDef }) {
       </div>
       <div className="ma-noprint" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 13 }}>
         <Select value={fmt} onChange={setFmt} plain round width={152} options={['ExportReportToPdfFile', 'ExportReportToExcelFile', 'ExportReportToCsvFile']} />
-        <Btn onClick={() => window.print()}>Print</Btn>
+        <Btn onClick={printNow}>Print</Btn>
         <Btn onClick={exportNow}>Export</Btn>
       </div>
     </div>
