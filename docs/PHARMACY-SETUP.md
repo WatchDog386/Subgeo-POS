@@ -266,8 +266,7 @@ Instead of typing a delivery line by line, as the PURCHASE account:
    - **Size** shows what one pack holds, from the medicine's name: e.g. *100
      tabs*, *10 caps*, *60 ml*. Pcs/Pack is filled from it for tablets and
      capsules, and recorded on the medicine for next time. Check it before
-     receiving. On an order book, Qty × Pcs/Pack is the number of units that
-     go into stock.
+     receiving. On an order book Size is for information only: Qty is pieces.
    **Everything on a line can be edited** before receiving:
    - **Description:** type over the name. On a new medicine it becomes its
      name. On a medicine already in stock it renames that medicine (the line
@@ -319,11 +318,12 @@ no quantity (those aren't received). Type each line's **Pack Cost** from the
 supplier's invoice. A Pack Cost left at 0 keeps the medicine's current cost,
 and new medicines need a Selling Price. The order's item codes (001, 002 …)
 are row numbers, so lines are matched to your medicines by name.
-If a document's Qty column is really the **pieces in one pack** (e.g. 63
-written against Zinc means 63 tablets), press **Qty column is Pcs/Pack…** and
-confirm. For that document only, every line's Qty moves into Pcs/Pack and Qty
-becomes 1, so the Units are right. **↶ Undo Qty → Pcs/Pack** puts it back.
-Other uploads are not affected, and any line can still be changed by hand.
+On an order document the **Qty is pieces**: each line puts exactly its Qty
+into stock (63 against Zinc = 63 tablets). Nothing is multiplied, so there is
+no Pcs/Pack, Sell By or Units column, and a pack size in a medicine's name
+(e.g. `(100S)`) changes nothing. Only the medicine names are corrected. The
+cost typed is the **Cost of 1** piece. Supplier invoices priced in packs still
+use Pcs/Pack as above.
 
 Only PDFs with selectable text can be read, i.e. the ones a supplier's system
 produces. A scanned photo of a paper invoice has no text to read.

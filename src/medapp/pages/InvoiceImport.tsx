@@ -52,18 +52,6 @@ export type ImportLine = {
   options: { name: string; score: number }[]
 }
 
-/**
- * For one document only: its Qty column was really the pieces in a pack.
- * Each line becomes 1 pack of that many pieces (sold each); Qty is set to 1.
- */
-export function qtyAsPieces(lines: ImportLine[]): ImportLine[] {
-  return lines.map((l) => {
-    const n = Math.round(Number(l.qty))
-    if (!(n >= 1)) return l
-    return { ...l, perPack: String(n), qty: '1', sellBy: 1, from: 'typed', convert: false }
-  })
-}
-
 /** One medicine of the company's price list (every chemist): GET /admin/catalogue. */
 export type CatalogueItem = { name: string; sku: string; price: number; cost: number; minPrice: number | null; taxable: boolean; packSize: number | null; sellBy: number | null; chem?: string }
 /** A medicine a line can be corrected to: one in this chemist's stock, or one from the company list. */
@@ -277,12 +265,13 @@ export async function receiveInvoice(input: {
         best: l.bestCents && l.bestCents > 0 ? l.bestCents : undefined,
         ...(l.perPack && l.perPack > 1 ? { packs: l.packs, perPack: l.perPack, sellBy: l.sellBy ?? 1 } : {}),
       })
-      // Remember how this medicine comes and is sold (Medicine form: Pack Size).
-      if (l.perPack && l.perPack >= 1) {
+      // Keep the Medicine form record in step: name, cost, price, what a pack holds and,
+      // from a supplier invoice in packs, how it comes and is sold (Pack Size).
+      {
         const docs = await db.docs.where('slug').equals('medicine').toArray()
         const code = p!.sku.trim().toUpperCase()
         const doc = docs.find((d) => (d.values.docNo ?? '').trim().toUpperCase() === code) ?? docs.find((d) => (d.values.name ?? '').trim().toUpperCase() === p!.name.trim().toUpperCase())
-        const values: Record<string, string> = { ...(doc?.values ?? { docNo: p!.sku, name: p!.name.toUpperCase(), type: 'S' }), packSize: String(l.perPack), sellBy: String(l.sellBy ?? 1), cost: (unitCost / 100).toFixed(2), retail: (p!.price / 100).toFixed(2), name: p!.name.toUpperCase(), ...((l.contents?.trim() || packContents(p!.name).label) ? { contents: l.contents?.trim() || packContents(p!.name).label } : {}) }
+        const values: Record<string, string> = { ...(doc?.values ?? { docNo: p!.sku, name: p!.name.toUpperCase(), type: 'S' }), ...(l.perPack && l.perPack >= 1 ? { packSize: String(l.perPack), sellBy: String(l.sellBy ?? 1) } : {}), cost: (unitCost / 100).toFixed(2), retail: (p!.price / 100).toFixed(2), name: p!.name.toUpperCase(), ...((l.contents?.trim() || packContents(p!.name).label) ? { contents: l.contents?.trim() || packContents(p!.name).label } : {}) }
         if (doc) await db.docs.update(doc.id, { values, updatedAt: now })
         else await db.docs.add({ slug: 'medicine', docNo: p!.sku, values, createdAt: now, updatedAt: now, createdBy: input.userId } as unknown as DocRecord)
       }
@@ -385,8 +374,12 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
   const [markup, setMarkup] = useState<string>()
   const [q, setQ] = useState('')
   const [saving, setSaving] = useState(false)
-  /** This document's Qty column was moved into Pcs/Pack: the lines before, to undo it. */
-  const [beforeQtyMove, setBeforeQtyMove] = useState<ImportLine[] | null>(null)
+  /**
+   * Order documents (order book, stock count): the quantities are already
+   * pieces. Nothing is multiplied — no Pcs/Pack, Sell By or pack sizes from
+   * the names; only the names are corrected.
+   */
+  const pieces = inv.unpriced > 0
   const [lines, setLines] = useState<ImportLine[] | null>(null)
   // The company's medicine / price list (all chemists) to autocorrect names; [] offline.
   const [catalogue, setCatalogue] = useState<CatalogueItem[] | null>(null)
@@ -412,6 +405,7 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
     return per >= 1 && d?.values.sellBy ? { perPack: per, sellBy: Math.max(1, Math.round(Number(d.values.sellBy) || 1)) } : undefined
   }
   const packFor = (p: Product | undefined, ...names: string[]) => {
+    if (pieces) return { perPack: '1', sellBy: 1, from: 'none' as const }
     const r = remembered(p)
     if (r) return { perPack: String(r.perPack), sellBy: r.sellBy, from: 'medicine' as const }
     const n = names.map(packSizeFrom).find((x) => x > 1) ?? 1
@@ -424,7 +418,7 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
       const pk = packFor(p, p.name, l.read)
       return { productId: p.id, name: p.name.toUpperCase(), vat: p.taxable, price: '', best: '', ...pk, convert: pk.from !== 'medicine' && looksPerPack(p, Number(pk.perPack), l.cost) }
     }
-    const pk = c.packSize && c.packSize >= 1 ? { perPack: String(c.packSize), sellBy: c.sellBy && c.packSize % c.sellBy === 0 ? c.sellBy : 1, from: 'medicine' as const } : packFor(undefined, c.name, l.read)
+    const pk = !pieces && c.packSize && c.packSize >= 1 ? { perPack: String(c.packSize), sellBy: c.sellBy && c.packSize % c.sellBy === 0 ? c.sellBy : 1, from: 'medicine' as const } : packFor(undefined, c.name, l.read)
     return {
       productId: undefined,
       name: c.name,
@@ -561,9 +555,7 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
             bestCents: l.best.trim() ? toCents(l.best) : undefined,
             productId: l.productId,
             vat: l.vat,
-            packs: Number(l.qty) || 0,
-            perPack: Number(l.perPack),
-            sellBy: l.sellBy,
+            ...(pieces ? {} : { packs: Number(l.qty) || 0, perPack: Number(l.perPack), sellBy: l.sellBy }),
             packCostCents: toCents(l.cost || '0'),
             convertFactor: factorOf(l) > 1 ? factorOf(l) : undefined,
             contents: l.size?.trim() || undefined,
@@ -620,8 +612,8 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
       </div>
       {inv.unpriced > 0 && (
         <div className="ma-note" style={{ margin: '8px 0 0', padding: '6px 10px', border: '1px solid #e0c96a', background: '#fff8d6', fontSize: 11, lineHeight: 1.4 }}>
-          <b>{inv.title ?? 'Order document'}:</b> {inv.unpriced === list.length ? 'it lists quantities only, no prices' : `${inv.unpriced} line(s) have no price`}. Type each line&apos;s <b>Pack Cost</b> from the supplier&apos;s invoice (Cost of 1 follows). A Pack Cost
-          left at 0 keeps the medicine&apos;s current cost. New medicines need a Selling Price. Item codes 001, 002… are row numbers: lines are matched to your medicines by name. Untick lines that did not arrive. If this document&apos;s Qty column is really the pieces in a pack, press <b>Qty column is Pcs/Pack…</b> (this document only).
+          <b>{inv.title ?? 'Order document'}:</b> {inv.unpriced === list.length ? 'it lists quantities only, no prices' : `${inv.unpriced} line(s) have no price`}. Type each line&apos;s <b>Cost of 1</b> piece if you have it. A cost
+          left at 0 keeps the medicine&apos;s current cost. New medicines need a Selling Price. Item codes 001, 002… are row numbers: lines are matched to your medicines by name. Untick lines that did not arrive. <b>Qty is pieces:</b> each line puts exactly its Qty into stock — nothing is multiplied by a pack size. Only the medicine names are corrected.
           {inv.skipped.length > 0 && (
             <div style={{ marginTop: 4, color: '#8a5a00' }}>
               <b>No quantity on the document, not received:</b> {inv.skipped.join(' · ')}
@@ -646,36 +638,20 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4, flexWrap: 'wrap' }}>
         <Input value={q} onChange={setQ} width={260} placeholder="Find a line by code or name" />
-        {beforeQtyMove ? (
-          <Btn
-            onClick={() => {
-              // Put Qty / Pcs/Pack back as read, keeping every other edit.
-              const old = new Map(beforeQtyMove.map((l) => [l.key, l]))
-              setLines((ls) => (ls ?? []).map((l) => { const o = old.get(l.key); return o ? { ...l, qty: o.qty, perPack: o.perPack, sellBy: o.sellBy, from: o.from, convert: o.convert } : l }))
-              setBeforeQtyMove(null)
-            }}
-            title="Undo: Qty and Pcs/Pack go back to how they were read"
-          >
-            ↶ Undo Qty → Pcs/Pack
-          </Btn>
-        ) : (
-          <Btn
-            onClick={() => {
-              if (!confirm(`On THIS document only, is the Qty column really the pieces in one pack?\n\nOK: every line's Qty (e.g. 63) moves into Pcs/Pack, and Qty becomes 1 — so 63 pieces go into stock, not 63 packs × Pcs/Pack.\n\nOther uploads are not affected. You can undo it, and still change any line afterwards.`)) return
-              setBeforeQtyMove(list)
-              setLines((ls) => qtyAsPieces(ls ?? []))
-            }}
-            title="Only for this document: its Qty column is the pieces in a pack"
-          >
-            Qty column is Pcs/Pack…
-          </Btn>
-        )}
         <Check checked={list.length > 0 && list.every((l) => l.include)} onChange={(v) => setLines((ls) => (ls ?? []).map((l) => ({ ...l, include: v })))} dark>
           All
         </Check>
         <span className="ma-label ma-note" style={{ fontSize: 10 }}>
+          {pieces ? (
+            <>
+              <b>Qty</b> is pieces: exactly that many go into stock. Selling Price and <b>Best Price</b> (the lowest it may be sold for, KES) are per piece.
+            </>
+          ) : (
+            <>
           Qty and Pack Cost are as on the invoice (packs / boxes). Check <b>Pcs/Pack</b> (read from the description where it says e.g. 100S, 10X10) and choose <b>Sell By</b>: each, a pair, or the whole pack. Stock goes up by <b>Units</b>; <b>Cost of 1</b> = Pack Cost ÷ units in a pack. Selling
           Price and <b>Best Price</b> (the lowest it may be sold for, KES) are per unit.
+            </>
+          )}
         </span>
       </div>
       <div style={{ height: 380, overflow: 'auto', border: '1px solid #c3c3c3', background: '#fff' }}>
@@ -686,13 +662,21 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
               <th style={th}>Item Code</th>
               <th style={th} title="Corrected to the medicine list; what the document said is shown under it">Description (corrected)</th>
               <th style={th} title="What one pack holds: tablets / capsules / pieces, or ml for a syrup">Size</th>
-              <th style={th} title="Packs / boxes on the invoice">Qty</th>
-              <th style={th} title="Pieces in one pack">Pcs/Pack</th>
-              <th style={th} title="How it is sold: one piece, a pair, … or the whole pack">Sell By</th>
-              <th style={th} title="Units put in stock = Qty × Pcs/Pack ÷ Sell By">Units</th>
-              <th style={th} title="Price of one pack on the invoice">Pack Cost</th>
+              <th style={th} title={pieces ? 'Pieces going into stock, as on the document' : 'Packs / boxes on the invoice'}>{pieces ? 'Qty (pcs)' : 'Qty'}</th>
+              {!pieces && (
+                <>
+                  <th style={th} title="Pieces in one pack">Pcs/Pack</th>
+                  <th style={th} title="How it is sold: one piece, a pair, … or the whole pack">Sell By</th>
+                  <th style={th} title="Units put in stock = Qty × Pcs/Pack ÷ Sell By">Units</th>
+                </>
+              )}
+              <th style={th} title={pieces ? 'Cost of one piece' : 'Price of one pack on the invoice'}>{pieces ? 'Cost of 1' : 'Pack Cost'}</th>
               <th style={th}>Amount</th>
-              <th style={th} title="Cost of one selling unit = Pack Cost ÷ units in a pack">Cost of 1</th>
+              {!pieces && (
+                <th style={th} title="Cost of one selling unit = Pack Cost ÷ units in a pack">
+                  Cost of 1
+                </th>
+              )}
               <th style={th}>Medicine in stock</th>
               <th style={th}>In stock</th>
               <th style={th} title="Selling price of one unit (blank = keep the current one)">Selling Price</th>
@@ -782,7 +766,7 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
                         const v = e.target.value
                         const pc = packContents(v.replace(/\bTAB\b/i, 'TABS'))
                         // "30 tabs" / "100 caps": that many pieces in a pack.
-                        set(l.key, { size: v, ...(pc.pieces ? { perPack: String(pc.pieces), from: 'typed' as const, sellBy: pc.pieces % l.sellBy === 0 ? l.sellBy : 1 } : {}) })
+                        set(l.key, { size: v, ...(pc.pieces && !pieces ? { perPack: String(pc.pieces), from: 'typed' as const, sellBy: pc.pieces % l.sellBy === 0 ? l.sellBy : 1 } : {}) })
                       }}
                       aria-label={`Size ${l.name}`}
                       title="What one pack holds: e.g. 100 tabs, 10 caps, 60 ml (typing pieces sets Pcs/Pack)"
@@ -791,6 +775,8 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
                   <td style={td}>
                     <input className="ma-input" style={small(40)} value={l.qty} onChange={(e) => set(l.key, { qty: e.target.value })} aria-label={`Qty ${l.name}`} />
                   </td>
+                  {!pieces && (
+                    <>
                   <td style={td}>
                     <input
                       className="ma-input"
@@ -817,6 +803,8 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
                   <td style={{ ...td, textAlign: 'right', fontWeight: 'bold', color: u.error ? '#c00' : dim }} title={u.error ?? `${l.qty} × ${per} pcs ÷ ${l.sellBy}`}>
                     {u.error ? '✖' : u.units}
                   </td>
+                    </>
+                  )}
                   <td style={td}>
                     <input className="ma-input" style={small(58)} value={l.cost} onChange={(e) => set(l.key, { cost: e.target.value })} aria-label={`Cost ${l.name}`} />
                   </td>
@@ -832,6 +820,7 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
                       title="Amount for the line (Qty × Pack Cost) — typing it sets the Pack Cost"
                     />
                   </td>
+                  {!pieces && (
                   <td style={td}>
                     <CalcInput
                       width={58}
@@ -845,6 +834,7 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
                       title={`Cost of one ${l.sellBy === 1 ? 'piece' : `unit of ${l.sellBy} pcs`} — typing it sets the Pack Cost`}
                     />
                   </td>
+                  )}
                   <td style={td}>
                     <input
                       className="ma-input"
