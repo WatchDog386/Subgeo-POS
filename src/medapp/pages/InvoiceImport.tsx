@@ -4,13 +4,15 @@
 // lets the buyer check it, then receives it in one go: stock up, cost
 // updated, new medicines created, and one MRN document filed with the PDF
 // attached and every line (synced to the server like any document).
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
 import { logActivity } from '../../db/logs'
 import type { DocLine, DocRecord, Product, Supplier } from '../../db/types'
 import { toCents } from '../../lib/money'
 import { invoiceDate, type ParsedInvoice } from '../../lib/invoiceParse'
+import { matchMedicine, medKey, packContents, type MedKey } from '../../lib/medMatch'
+import { api } from '../../db/sync'
 import { useSession } from '../../session'
 import { useToast } from '../../components/ui'
 import { amt, dmy, getKv, nextDocNo, setKv } from '../data'
@@ -40,6 +42,41 @@ export type ImportLine = {
    * turn its old stock into units and its prices into per-unit prices first.
    */
   convert: boolean
+  /** The description exactly as read from the document (name = the corrected one). */
+  read: string
+  /** How the name was found: exact, autocorrected, picked by the buyer, or still unsure / none. */
+  fix: 'exact' | 'auto' | 'picked' | 'ask' | 'none'
+  /** Close medicines from the company list, best first (for "Did you mean"). */
+  options: { name: string; score: number }[]
+}
+
+/** One medicine of the company's price list (every chemist): GET /admin/catalogue. */
+export type CatalogueItem = { name: string; sku: string; price: number; cost: number; minPrice: number | null; taxable: boolean; packSize: number | null; sellBy: number | null; chem?: string }
+/** A medicine a line can be corrected to: one in this chemist's stock, or one from the company list. */
+export type MedCandidate = { name: string; sku: string; productId?: number; price?: number; minPrice?: number; taxable: boolean; packSize?: number; sellBy?: number; chem?: string }
+
+/** This chemist's medicines first, then the company list's others (same name = same medicine). */
+export function candidatesFrom(products: Product[], catalogue: CatalogueItem[]): MedCandidate[] {
+  const out: MedCandidate[] = products.filter((p) => p.active !== false && !/^SRV-/i.test(p.sku)).map((p) => ({ name: p.name.toUpperCase(), sku: p.sku, productId: p.id, taxable: p.taxable }))
+  const have = new Set(out.map((c) => norm(c.name)))
+  for (const c of catalogue) {
+    if (have.has(norm(c.name))) continue
+    have.add(norm(c.name))
+    out.push({ name: c.name.toUpperCase(), sku: c.sku, price: c.price || undefined, minPrice: c.minPrice ?? undefined, taxable: c.taxable, packSize: c.packSize ?? undefined, sellBy: c.sellBy ?? undefined, chem: c.chem })
+  }
+  return out
+}
+
+/**
+ * Autocorrect one name read from a document (often handwritten, misspelt)
+ * against the medicine list: the medicine to use when sure, and the close
+ * ones to offer either way.
+ */
+export function autocorrect(read: string, cands: MedCandidate[], keys?: Map<MedCandidate, MedKey>): { use?: MedCandidate; score?: number; options: { item: MedCandidate; score: number }[] } {
+  const exact = cands.find((c) => norm(c.name) === norm(read))
+  if (exact) return { use: exact, score: 1, options: [{ item: exact, score: 1 }] }
+  const m = matchMedicine(read, cands, (c) => c.name, keys)
+  return { use: m.auto?.item, score: m.auto?.score, options: m.best }
 }
 
 const norm = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim()
@@ -66,7 +103,7 @@ export function matchProduct(products: Product[], code: string | undefined, name
 export function packSizeFrom(name: string): number {
   const t = ` ${name.toUpperCase()} `
   const ok = (n: number) => Number.isInteger(n) && n > 1 && n <= 5000
-  const mult = t.match(/\b(\d{1,3})\s*[X×]\s*(\d{1,3})\b(?!\s*(?:ML|MG|G|GM|L|MCG|IU|%))/)
+  const mult = t.match(/\b(\d{1,3})\s*[X×]\s*(\d{1,3})(?:\s*'?S)?\b(?!\s*(?:ML|MG|G|GM|L|MCG|IU|%))/)
   if (mult && ok(Number(mult[1]) * Number(mult[2]))) return Number(mult[1]) * Number(mult[2])
   const packOf = t.match(/PACK\s+OF\s+(\d{1,4})\b/)
   if (packOf && ok(Number(packOf[1]))) return Number(packOf[1])
@@ -226,7 +263,7 @@ export async function receiveInvoice(input: {
         const docs = await db.docs.where('slug').equals('medicine').toArray()
         const code = p!.sku.trim().toUpperCase()
         const doc = docs.find((d) => (d.values.docNo ?? '').trim().toUpperCase() === code) ?? docs.find((d) => (d.values.name ?? '').trim().toUpperCase() === p!.name.trim().toUpperCase())
-        const values: Record<string, string> = { ...(doc?.values ?? { docNo: p!.sku, name: p!.name.toUpperCase(), type: 'S' }), packSize: String(l.perPack), sellBy: String(l.sellBy ?? 1), cost: (unitCost / 100).toFixed(2), retail: (p!.price / 100).toFixed(2) }
+        const values: Record<string, string> = { ...(doc?.values ?? { docNo: p!.sku, name: p!.name.toUpperCase(), type: 'S' }), packSize: String(l.perPack), sellBy: String(l.sellBy ?? 1), cost: (unitCost / 100).toFixed(2), retail: (p!.price / 100).toFixed(2), ...(packContents(p!.name).label ? { contents: packContents(p!.name).label } : {}) }
         if (doc) await db.docs.update(doc.id, { values, updatedAt: now })
         else await db.docs.add({ slug: 'medicine', docNo: p!.sku, values, createdAt: now, updatedAt: now, createdBy: input.userId } as unknown as DocRecord)
       }
@@ -330,6 +367,19 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
   const [q, setQ] = useState('')
   const [saving, setSaving] = useState(false)
   const [lines, setLines] = useState<ImportLine[] | null>(null)
+  // The company's medicine / price list (all chemists) to autocorrect names; [] offline.
+  const [catalogue, setCatalogue] = useState<CatalogueItem[] | null>(null)
+  useEffect(() => {
+    let live = true
+    api<CatalogueItem[]>('/admin/catalogue', { timeoutMs: 8000 })
+      .then((c) => live && setCatalogue(Array.isArray(c) ? c : []))
+      .catch(() => live && setCatalogue([]))
+    return () => {
+      live = false
+    }
+  }, [])
+  const cands = useMemo(() => (loaded && catalogue ? candidatesFrom(loaded, catalogue) : []), [loaded, catalogue])
+  const candKeys = useMemo(() => new Map(cands.map((c) => [c, medKey(c.name)])), [cands])
   const markupV = markup ?? savedMarkup
   const expenseV = expense ?? lastExpense
 
@@ -340,24 +390,54 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
     const per = Math.round(Number(d?.values.packSize) || 0)
     return per >= 1 && d?.values.sellBy ? { perPack: per, sellBy: Math.max(1, Math.round(Number(d.values.sellBy) || 1)) } : undefined
   }
-  const packFor = (p: Product | undefined, name: string) => {
+  const packFor = (p: Product | undefined, ...names: string[]) => {
     const r = remembered(p)
     if (r) return { perPack: String(r.perPack), sellBy: r.sellBy, from: 'medicine' as const }
-    const n = packSizeFrom(name)
+    const n = names.map(packSizeFrom).find((x) => x > 1) ?? 1
     return { perPack: String(n), sellBy: 1, from: n > 1 ? ('invoice' as const) : ('none' as const) }
+  }
+  /** Line fields for a medicine picked from the list (in stock here, or new from the company list). */
+  const fromCand = (c: MedCandidate, l: { code: string; read: string; cost: number }): Partial<ImportLine> => {
+    const p = c.productId !== undefined ? products.find((x) => x.id === c.productId) : undefined
+    if (p) {
+      const pk = packFor(p, p.name, l.read)
+      return { productId: p.id, name: p.name.toUpperCase(), vat: p.taxable, price: '', best: '', ...pk, convert: pk.from !== 'medicine' && looksPerPack(p, Number(pk.perPack), l.cost) }
+    }
+    const pk = c.packSize && c.packSize >= 1 ? { perPack: String(c.packSize), sellBy: c.sellBy && c.packSize % c.sellBy === 0 ? c.sellBy : 1, from: 'medicine' as const } : packFor(undefined, c.name, l.read)
+    return {
+      productId: undefined,
+      name: c.name,
+      // Order books number their rows (001, 002…): use the code the medicine has in the price list.
+      code: !l.code.trim() || isRowNumber(l.code) ? c.sku : l.code,
+      price: c.price ? (c.price / 100).toFixed(2) : '',
+      best: c.minPrice ? (c.minPrice / 100).toFixed(2) : '',
+      vat: c.taxable,
+      ...pk,
+      convert: false,
+    }
   }
 
   /** Old per-pack medicine: convert by default only when its price still looks like a pack price. */
-  const looksPerPack = (p: Product | undefined, perPack: number, packCostKes: number) => !!p && perPack > 1 && p.price >= 0.6 * Math.round(packCostKes * 100)
+  // No pack cost (an order book): nothing to compare with, so leave it unticked.
+  const looksPerPack = (p: Product | undefined, perPack: number, packCostKes: number) => !!p && perPack > 1 && packCostKes > 0 && p.price >= 0.6 * Math.round(packCostKes * 100)
 
   // Match once the medicines (and their pack sizes) have loaded.
-  if (lines === null && loaded && medDocs) {
+  if (lines === null && loaded && medDocs && catalogue) {
     setLines(
       inv.lines.map((l, i) => {
+        const read = l.name.toUpperCase().replace(/\s+/g, ' ').trim()
+        const base = { key: i, include: true, code: l.code ?? '', name: read, read, qty: String(l.qty), cost: l.unitPrice.toFixed(2), price: '', best: '', convert: false }
+        // Same item code or exactly the same name: no correction needed.
         const p = matchProduct(products, l.code, l.name)
-        const pk = packFor(p, l.name)
-        const conv = pk.from !== 'medicine' && looksPerPack(p, Number(pk.perPack), l.unitPrice)
-        return { key: i, include: true, code: l.code ?? '', name: l.name.toUpperCase(), qty: String(l.qty), cost: l.unitPrice.toFixed(2), productId: p?.id, price: '', best: '', vat: p?.taxable ?? false, ...pk, convert: conv }
+        if (p) {
+          const pk = packFor(p, l.name)
+          return { ...base, productId: p.id, name: p.name.toUpperCase(), vat: p.taxable, ...pk, convert: pk.from !== 'medicine' && looksPerPack(p, Number(pk.perPack), l.unitPrice), fix: 'exact' as const, options: [] }
+        }
+        // Misspelt / handwritten: the closest medicine of this chemist or of the company list.
+        const ac = autocorrect(read, cands, candKeys)
+        const options = ac.options.map((o) => ({ name: o.item.name, score: o.score }))
+        if (ac.use) return { ...base, vat: false, ...packFor(undefined, read), ...fromCand(ac.use, { code: base.code, read, cost: l.unitPrice }), fix: norm(ac.use.name) === norm(read) ? ('exact' as const) : ('auto' as const), options } as ImportLine
+        return { ...base, productId: undefined, vat: false, ...packFor(undefined, read), fix: options.length ? ('ask' as const) : ('none' as const), options }
       }),
     )
   }
@@ -383,6 +463,17 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
     const p = l.productId !== undefined ? byId.get(l.productId) : undefined
     return p?.minPrice ? Math.round(p.minPrice / factorOf(l)) : undefined
   }
+  /** The buyer picks a medicine for a line by name (a suggestion, or any in the list); '' = keep it as read, new. */
+  const pick = (l: ImportLine, name: string) => {
+    const v = name.trim().toUpperCase()
+    if (!v || v === 'NEW MEDICINE' || v === l.read) {
+      return set(l.key, { productId: undefined, name: l.read, price: '', best: '', convert: false, ...packFor(undefined, l.read), fix: 'none' })
+    }
+    const c = cands.find((x) => x.name === v)
+    if (c) set(l.key, { ...fromCand(c, { code: l.code, read: l.read, cost: Number(l.cost) || 0 }), fix: 'picked' })
+  }
+  const corrected = list.filter((l) => l.fix === 'auto').length
+  const unsure = list.filter((l) => l.fix === 'ask' && l.include).length
   const chosen = list.filter((l) => l.include)
   const linesSum = chosen.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.cost) || 0), 0)
   const newCount = chosen.filter((l) => l.productId === undefined).length
@@ -513,6 +604,8 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
         {inv.vat !== undefined && <span>VAT {amt(Math.round(inv.vat * 100))}</span>}
         {inv.total !== undefined && <span>Invoice total {amt(Math.round(inv.total * 100))}</span>}
         <span style={{ marginLeft: 'auto' }}>
+          {corrected > 0 && <span style={{ color: '#2e7d32', marginRight: 10 }}>✓ {corrected} name(s) corrected</span>}
+          {unsure > 0 && <b style={{ color: '#ef6c00', marginRight: 10 }}>{unsure} to check (Did you mean…?)</b>}
           Receiving <b>{chosen.length}</b>: {matchedCount} already in stock, <b style={{ color: newCount ? '#e65100' : undefined }}>{newCount} new</b> · cost {amt(Math.round(linesSum * 100))}
         </span>
       </div>
@@ -532,7 +625,8 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
             <tr>
               <th style={th} />
               <th style={th}>Item Code</th>
-              <th style={th}>Description (on invoice)</th>
+              <th style={th} title="Corrected to the medicine list; what the document said is shown under it">Description (corrected)</th>
+              <th style={th} title="What one pack holds: tablets / capsules / pieces, or ml for a syrup">Size</th>
               <th style={th} title="Packs / boxes on the invoice">Qty</th>
               <th style={th} title="Pieces in one pack">Pcs/Pack</th>
               <th style={th} title="How it is sold: one piece, a pair, … or the whole pack">Sell By</th>
@@ -565,7 +659,39 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
                     <input type="checkbox" checked={l.include} onChange={(e) => set(l.key, { include: e.target.checked })} aria-label={`Receive ${l.name}`} />
                   </td>
                   <td style={td}>{l.code}</td>
-                  <td style={{ ...td, whiteSpace: 'normal', maxWidth: 220 }}>{l.name}</td>
+                  <td style={{ ...td, whiteSpace: 'normal', maxWidth: 240, ...(l.fix === 'ask' && l.include ? { background: '#fff3e0' } : {}) }}>
+                    <span style={{ fontWeight: l.fix === 'auto' || l.fix === 'picked' ? 'bold' : undefined }}>{l.name}</span>
+                    {l.fix === 'auto' && (
+                      <span style={{ marginLeft: 4, fontSize: 10, color: '#2e7d32' }} title="Spelling corrected from the medicine list — check it">
+                        ✓ corrected
+                      </span>
+                    )}
+                    {l.read !== l.name && (
+                      <div style={{ fontSize: 10, color: '#777' }} title="As written on the document">
+                        read: {l.read}
+                      </div>
+                    )}
+                    {l.options.length > 0 && (l.fix === 'ask' || l.fix === 'auto' || l.fix === 'picked' || l.fix === 'none') && (
+                      <select
+                        className="ma-input"
+                        style={{ display: 'block', width: 230, height: 19, fontSize: 10, marginTop: 1, ...(l.fix === 'ask' ? { borderColor: '#ef6c00' } : {}) }}
+                        value={l.fix === 'ask' ? '?' : l.fix === 'none' ? '' : l.name}
+                        onChange={(e) => e.target.value !== '?' && pick(l, e.target.value)}
+                        aria-label={`Did you mean ${l.read}`}
+                      >
+                        {l.fix === 'ask' && <option value="?">Did you mean…? ({l.options.length})</option>}
+                        {l.options.map((o) => (
+                          <option key={o.name} value={o.name}>
+                            {o.name} ({Math.round(o.score * 100)}%)
+                          </option>
+                        ))}
+                        <option value="">Keep as read (new medicine)</option>
+                      </select>
+                    )}
+                  </td>
+                  <td style={{ ...td, fontSize: 10, color: '#37474f' }} title="What one pack holds (from the medicine's name)">
+                    {packContents(l.name).label || packContents(l.read).label || '—'}
+                  </td>
                   <td style={td}>
                     <input className="ma-input" style={small(40)} value={l.qty} onChange={(e) => set(l.key, { qty: e.target.value })} aria-label={`Qty ${l.name}`} />
                   </td>
@@ -611,15 +737,11 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
                       onFocus={(e) => e.target.select()}
                       onChange={(e) => {
                         const v = e.target.value.trim().toUpperCase()
-                        const m = products.find((x) => x.name.toUpperCase() === v)
-                        if (m) {
-                          const pk = packFor(m, l.name)
-                          set(l.key, { productId: m.id, vat: m.taxable, best: '', ...pk, convert: pk.from !== 'medicine' && looksPerPack(m, Number(pk.perPack), Number(l.cost) || 0) })
-                        }
-                        else if (!v || v === 'NEW MEDICINE') set(l.key, { productId: undefined })
+                        if (!v || v === 'NEW MEDICINE') set(l.key, { productId: undefined })
+                        else if (cands.some((x) => x.productId !== undefined && x.name === v)) pick(l, v)
                       }}
                       aria-label={`Medicine in stock for ${l.name}`}
-                      title={p ? `Adds to ${p.name} (${p.sku})` : 'Will be created as a new medicine. Type an existing name to match it instead.'}
+                      title={p ? `Adds to ${p.name} (${p.sku})` : `Will be created as a new medicine named ${l.name}. Type an existing name to match it instead.`}
                     />
                   </td>
                   <td style={{ ...td, textAlign: 'right', color: p?.maxStock !== undefined && p.stock * f + u.units > p.maxStock ? '#c00' : undefined }} title={p?.maxStock !== undefined ? `Max level ${p.maxStock}` : undefined}>
@@ -663,15 +785,17 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
         </table>
         <datalist id="ma-imp-products">
           <option value="NEW MEDICINE" />
-          {products.map((p) => (
-            <option key={p.id} value={p.name.toUpperCase()} />
-          ))}
+          {cands
+            .filter((c) => c.productId !== undefined)
+            .map((c) => (
+              <option key={c.productId} value={c.name} />
+            ))}
         </datalist>
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10, flexWrap: 'wrap' }}>
         <Btn onClick={onClose}>◀ Back</Btn>
-        <Btn onClick={() => void receive()} disabled={saving || !loaded || !medDocs || !chosen.length}>
-          {saving ? 'Receiving…' : !loaded || !medDocs ? 'Matching…' : `Receive ${chosen.length} line(s) into stock`}
+        <Btn onClick={() => void receive()} disabled={saving || !loaded || !medDocs || !catalogue || !chosen.length}>
+          {saving ? 'Receiving…' : !loaded || !medDocs || !catalogue ? 'Matching…' : `Receive ${chosen.length} line(s) into stock`}
         </Btn>
         <span className="ma-label ma-note" style={{ fontSize: 10 }}>
           Files one Pur/GRN (Direct Invoice) with this PDF attached; stock goes up by each line&apos;s Units and the cost price becomes its Cost of 1.

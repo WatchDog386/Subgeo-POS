@@ -247,6 +247,29 @@ Instead of typing a delivery line by line, as the PURCHASE account:
    then by name. Matches show in green; anything else shows as **NEW
    MEDICINE**. To match a line to an existing medicine with a different
    name, type that medicine's name in *Medicine in stock*.
+
+   **Spelling autocorrect.** Names on the document are often misspelt
+   (handwritten order books especially). Each name is compared, letter by
+   letter, with this chemist's medicines and with the whole company's medicine
+   / price list (every chemist's medicines). Strength, size and form count:
+   `CALPO 60ML` becomes *CALPOL SUSPENSION (60ML)*, not the 100ML bottle, and
+   `CETRIZINE TABS` becomes the tablets, not the syrup.
+   - **✓ corrected:** sure enough to use. The corrected name is shown in bold
+     with *read: …* (what the document said) under it. Check it.
+   - **Did you mean…?** (orange): a close name with a different size or form,
+     or not sure. Pick the right one from the list, or *Keep as read (new
+     medicine)*. Untouched, the line is received as a new medicine with the
+     name as read.
+   - A medicine found only in another chemist's list comes in as new here,
+     with that chemist's code, selling price, Best Price and pack size filled
+     in. Check them.
+   - **Size** shows what one pack holds, from the medicine's name: e.g. *100
+     tabs*, *10 caps*, *60 ml*. Pcs/Pack is filled from it for tablets and
+     capsules, and recorded on the medicine for next time. Check it before
+     receiving. On an order book, Qty × Pcs/Pack is the number of units that
+     go into stock.
+   The company list needs the server (online). Offline, names are matched
+   against this chemist's medicines only.
 4. **Packs and pieces.** Qty and Pack Cost are as on the invoice (packs or boxes).
    On each line, check:
    - **Pcs/Pack:** read from the description where it says e.g. `100S`, `30'S`,

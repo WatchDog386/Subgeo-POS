@@ -494,6 +494,42 @@ syncRouter.get('/admin/products', requireAuth, requireOwner, (req, res) => {
   res.json(listTable<Product>('products', branchId).sort((a, b) => a.name.localeCompare(b.name)))
 })
 
+/**
+ * The company's whole medicine / price list: every medicine of every chemist,
+ * one entry per name (the most recently updated wins), with its pack size from
+ * the Medicine form. Used to autocorrect names read from uploaded documents.
+ */
+syncRouter.get('/admin/catalogue', requireAuth, requireOwner, (_req, res) => {
+  const key = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim()
+  const out = new Map<string, Rec>()
+  for (const b of branches()) {
+    const docs = listTable<Rec>('docs', b.id).filter((d) => d.slug === 'medicine')
+    const vals = (d: Rec) => (d.values ?? {}) as Record<string, string>
+    const bySku = new Map(docs.map((d) => [String(vals(d).docNo ?? '').trim().toUpperCase(), vals(d)]))
+    const byName = new Map(docs.map((d) => [key(String(vals(d).name ?? '')), vals(d)]))
+    for (const p of listTable<Product>('products', b.id)) {
+      if (!p.name || /^SRV-/i.test(p.sku)) continue
+      const k = key(p.name)
+      const old = out.get(k)
+      if (old && Number(old.updatedAt) >= p.updatedAt) continue
+      const v = bySku.get(p.sku.trim().toUpperCase()) ?? byName.get(k)
+      out.set(k, {
+        name: p.name.toUpperCase(),
+        sku: p.sku,
+        price: p.price,
+        cost: p.cost,
+        minPrice: p.minPrice ?? null,
+        taxable: !!p.taxable,
+        packSize: Math.round(Number(v?.packSize) || 0) || null,
+        sellBy: Math.round(Number(v?.sellBy) || 0) || null,
+        chem: branchCode(b.id),
+        updatedAt: p.updatedAt,
+      })
+    }
+  }
+  res.json([...out.values()].sort((a, b) => String(a.name).localeCompare(String(b.name))))
+})
+
 /** Copy the medicine list of one chemist into another (zero stock; existing SKUs are skipped). */
 syncRouter.post('/admin/copy-catalogue', requireAuth, requireOwner, (req, res) => {
   const user = (req as AuthedRequest).user
