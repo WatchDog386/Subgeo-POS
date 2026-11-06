@@ -116,3 +116,45 @@ describe('SUBGEO1 … SUBGEO12', () => {
     expect((await login('purchase', 'subgeo22')).status).toBe(200)
   })
 })
+
+describe('chemist codes the admin chooses', () => {
+  it('defaults to SUBGEO<number> / HQ; a typed name replaces it everywhere', async () => {
+    const sd = await import('../db/seedData')
+    sd.registerChemCodes([])
+    expect([sd.chemCode(12), sd.chemCode(100), sd.chemCode(undefined)]).toEqual(['SUBGEO12', 'HQ', ''])
+    sd.registerChemCodes([{ number: 12, code: ' kayole  main ' }, { number: 3, code: '' }])
+    expect([sd.chemCode(12), sd.chemCode(3)]).toEqual(['KAYOLE MAIN', 'SUBGEO3'])
+    sd.registerChemCodes([])
+  })
+  it('refuses duplicates, another chemist\'s SUBGEO number and odd characters', async () => {
+    const { chemCodeProblem } = await import('../db/seedData')
+    const all = [{ number: 1 }, { number: 2, code: 'KAYOLE' }, { number: 100 }]
+    expect(chemCodeProblem('', 5, all)).toBeUndefined()
+    expect(chemCodeProblem('Umoja 3', 5, all)).toBeUndefined()
+    expect(chemCodeProblem('SUBGEO5', 5, all)).toBeUndefined()
+    expect(chemCodeProblem('kayole', 5, all)).toMatch(/already used by chemist No. 2/)
+    expect(chemCodeProblem('HQ', 5, all)).toMatch(/already used by chemist No. 100/)
+    expect(chemCodeProblem('SUBGEO1', 5, all)).toMatch(/already used/)
+    expect(chemCodeProblem('SUBGEO9', 5, all)).toMatch(/default code of another chemist/)
+    expect(chemCodeProblem('BAD/CODE', 5, all)).toMatch(/letters, numbers/)
+  })
+  it('the server keeps a custom code in the report tables and refuses a duplicate from a till', async () => {
+    const { token } = (await (await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'admin', password: 'subgeo22' }) })).json()) as { token: string }
+    const push = (changes: unknown[]) =>
+      fetch(`${base}/api/sync/push`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ branchId: 1, changes, deletes: [] }) }).then((r) => r.json() as Promise<{ rejected?: { reason: string }[] }>)
+    const row = (n: number) => sqlMod.sql.prepare('SELECT id, data FROM sync_records WHERE tbl = ? AND scope = 0 AND deleted = 0').all('branches').map((r) => ({ id: Number((r as { id: string }).id), ...(JSON.parse((r as { data: string }).data) as { number: number }) })).find((b) => b.number === n)!
+    const b10 = row(10)
+    const now = Date.now()
+    const ok = await push([{ t: 'branches', id: b10.id, data: { ...b10, code: 'Kawangware' }, ts: now }])
+    expect(ok.rejected ?? []).toEqual([])
+    expect(sqlMod.sql.prepare('SELECT code FROM branches WHERE number = 10').get()).toEqual({ code: 'KAWANGWARE' })
+    const { chemCode } = await import('../db/seedData')
+    expect(chemCode(10)).toBe('KAWANGWARE')
+    const b11 = row(11)
+    const dup = await push([{ t: 'branches', id: b11.id, data: { ...b11, code: 'KAWANGWARE' }, ts: now + 1 }])
+    expect(JSON.stringify(dup.rejected)).toMatch(/already used by chemist No. 10/)
+    // Back to the default.
+    await push([{ t: 'branches', id: b10.id, data: { ...b10, code: undefined }, ts: now + 2 }])
+    expect(sqlMod.sql.prepare('SELECT code FROM branches WHERE number = 10').get()).toEqual({ code: 'SUBGEO10' })
+  })
+})

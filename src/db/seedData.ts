@@ -56,7 +56,44 @@ export const SEED_USERS = [SEED_ADMIN, SEED_CASHIER, SEED_PURCHASE]
 /** The head-office pharmacy "HQ" is kept on this chemist number (shown as HQ, not SUBGEO100). */
 export const HQ_NUMBER = 100
 
-export function chemCode(number: number | undefined): string {
+/** The code a chemist gets when the admin sets none: SUBGEO<number>, or HQ. */
+export function defaultChemCode(number: number | undefined): string {
   if (number === HQ_NUMBER) return 'HQ'
   return number ? `SUBGEO${number}` : ''
+}
+
+/** Codes the admin typed for chemists (Utilities → Chemists), by chemist number. */
+const customCodes = new Map<number, string>()
+
+/** Keep the custom codes in step with the chemist list (call whenever it changes). */
+export function registerChemCodes(list: { number: number; code?: string }[]): void {
+  customCodes.clear()
+  for (const b of list) {
+    const c = normChemCode(b.code)
+    if (c) customCodes.set(b.number, c)
+  }
+}
+
+/** A typed chemist code as stored: trimmed, upper case, single spaces. Blank = use the default. */
+export function normChemCode(code: string | undefined): string {
+  return (code ?? '').trim().replace(/\s+/g, ' ').toUpperCase()
+}
+
+/** Why a typed chemist code can't be used, or undefined when it can (blank is fine: the default). */
+export function chemCodeProblem(code: string, number: number, all: { number: number; code?: string }[]): string | undefined {
+  const c = normChemCode(code)
+  if (!c) return undefined
+  if (c.length > 24) return 'Chemist code: 24 characters at most'
+  if (!/^[A-Z0-9][A-Z0-9 .&'-]*$/.test(c)) return 'Chemist code: letters, numbers, spaces and . & \' - only'
+  const other = all.find((b) => b.number !== number && (normChemCode(b.code) || defaultChemCode(b.number)) === c)
+  if (other) return `Chemist code ${c} is already used by chemist No. ${other.number}`
+  // Never take another chemist's default code (SUBGEO5 for chemist 7 would confuse everyone).
+  if (/^SUBGEO\d+$/.test(c) && c !== defaultChemCode(number)) return `${c} is the default code of another chemist number — pick a name`
+  return undefined
+}
+
+/** The chemist's code everywhere it is shown: the admin's own code, else SUBGEO<number> / HQ. */
+export function chemCode(number: number | undefined): string {
+  if (number === undefined || number === null) return ''
+  return customCodes.get(number) ?? defaultChemCode(number)
 }

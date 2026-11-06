@@ -5,7 +5,7 @@ import crypto from 'node:crypto'
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import { sql } from './db'
 import { hashPassword } from '../src/lib/sha256'
-import { HQ_NUMBER, SEED_BRANCH, SEED_PURCHASE, SEED_USERS, chemCode } from '../src/db/seedData'
+import { HQ_NUMBER, SEED_BRANCH, SEED_PURCHASE, SEED_USERS, chemCode, chemCodeProblem, registerChemCodes } from '../src/db/seedData'
 import { COUNTER_FIELDS, GLOBAL_KV_KEYS, GLOBAL_TABLES, SYNCED_TABLES, hasAdminRights, isLocalKvKey, isSeqKvKey } from '../src/db/syncSchema'
 import type { Branch, Product, Role, StaffMessage, User } from '../src/db/types'
 import { LEGACY_DOCS_PREFIX, LEGACY_TASKS_KEY, convertLegacyDocs, convertLegacyTasks } from '../src/db/legacyDemo'
@@ -57,6 +57,8 @@ function writeRow(tbl: string, scope: number, id: string | number, data: Rec | n
     updated_by: userId,
     updated_at: Date.now(),
   })
+  // A chemist's code may have changed: refresh it before the relational copy uses it.
+  if (tbl === 'branches') registerChemCodes(branches())
   // Keep the relational tables (migrations/004) in step.
   project(tbl, scope, String(id), data)
 }
@@ -121,6 +123,7 @@ function toPulled(row: Row) {
  * purchase account (server-assigned id and the first open chemist, so no till
  * id can clash). */
 export function ensureSeeds(): void {
+  registerChemCodes(branches())
   sql.transaction(() => {
     // The chemist first: staff accounts point at it.
     if (!(sql.prepare("SELECT 1 FROM sync_records WHERE tbl = 'branches' LIMIT 1").get())) {
@@ -222,7 +225,9 @@ function denyReason(user: AuthedUser, tbl: string, scope: number, id: string | n
     const b = incoming as unknown as Branch
     if (!Number.isInteger(b.number) || b.number < 1) return 'Chemist number must be 1 or more'
     const clash = branches().find((x) => x.number === b.number && String(x.id) !== String(id))
-    if (clash) return `${chemCode(b.number)} already exists`
+    if (clash) return `Chemist No. ${b.number} (${chemCode(b.number)}) already exists`
+    const codeProblem = chemCodeProblem(b.code ?? '', b.number, branches().filter((x) => String(x.id) !== String(id)))
+    if (codeProblem) return codeProblem
   }
   if (hasAdminRights(user.role)) return undefined
 
@@ -763,6 +768,7 @@ function stockRowsOf(branchId: number): { plan: Omit<StockResetPlan, 'branchId' 
 
 /** Find a chemist by its number (12 = SUBGEO12, 100 = HQ). */
 export function chemistByNumber(n: number): { id: number; code: string; name: string } | undefined {
+  registerChemCodes(branches())
   for (const r of sql.prepare("SELECT id, data FROM sync_records WHERE tbl = 'branches' AND scope = 0 AND deleted = 0").all() as { id: string; data: string }[]) {
     const b = JSON.parse(r.data) as Rec
     if (Number(b.number) === n) return { id: Number(r.id), code: chemCode(n), name: String(b.name ?? '') }

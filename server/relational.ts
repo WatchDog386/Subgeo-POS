@@ -7,7 +7,7 @@
 //   rebuildRelational()             wipe and rebuild everything from sync_records
 import { sql } from './db'
 import { GLOBAL_TABLES, BRANCH_TABLES } from '../src/db/syncSchema'
-import { chemCode } from '../src/db/seedData'
+import { defaultChemCode, normChemCode } from '../src/db/seedData'
 
 type Rec = Record<string, unknown>
 
@@ -96,8 +96,9 @@ const PROJECTORS: Record<string, (id: number, d: Rec, scope: number) => void> = 
     upsert('branches', {
       id,
       number: int(d.number, 0),
-      code: chemCode(int(d.number, 0) ?? 0),
-      name: str(d.name) ?? chemCode(int(d.number, 0) ?? 0),
+      // The admin's own code for the chemist, else SUBGEO<number> / HQ.
+      code: normChemCode(str(d.code) ?? '') || defaultChemCode(int(d.number, 0) ?? 0),
+      name: str(d.name) ?? (normChemCode(str(d.code) ?? '') || defaultChemCode(int(d.number, 0) ?? 0)),
       location: str(d.location),
       phone: str(d.phone),
       active: bool(d.active),

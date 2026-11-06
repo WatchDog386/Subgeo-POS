@@ -7,6 +7,8 @@ export interface Branch {
   id?: number
   /** Chemist number, unique: 1 → CHEM1. */
   number: number
+  /** Code the admin chose for this chemist, e.g. "KAYOLE" (blank = SUBGEO<number> / HQ). */
+  code?: string
   name: string
   location?: string
   phone?: string

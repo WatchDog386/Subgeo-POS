@@ -54,7 +54,13 @@ Do these steps as the **admin**. Replace `N` with the chemist's number.
 
 1. Go to *Utilities → Chemists (Branches)* → **New Chemist**.
 2. Fill in:
-   - **Chemist No.:** the next free number, e.g. `2`. This makes it `SUBGEO2`.
+   - **Chemist No.:** the next free number, e.g. `2`.
+   - **Chemist Code:** leave it blank to use the default `SUBGEO2` (HQ for
+     number 100), or type a name of your choice, e.g. `KAYOLE`. The code is
+     what the header, the Chemist switch, reports and receipts show. It must
+     be unique and can't be another number's default (e.g. `SUBGEO5` for
+     chemist 2). To go back to the default, edit the chemist, press **Use
+     default** and save.
    - **Name:** e.g. `SCL KAYOLE`
    - **Location**, **Phone**
    - **Status:** active

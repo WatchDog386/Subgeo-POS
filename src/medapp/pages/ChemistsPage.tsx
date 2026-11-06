@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { db } from '../../db/db'
 import { logActivity } from '../../db/logs'
-import { HQ_NUMBER, chemCode } from '../../db/seedData'
+import { HQ_NUMBER, chemCode, chemCodeProblem, defaultChemCode, normChemCode } from '../../db/seedData'
 import { api, syncNow, useSyncState } from '../../db/sync'
 import type { Branch, Product } from '../../db/types'
 import { useSession } from '../../session'
@@ -257,6 +257,8 @@ function ChemistForm({ branches, selected, userName, userId }: { branches: Branc
   const nextNo = Math.max(0, ...branches.filter((b) => b.number !== HQ_NUMBER).map((b) => b.number)) + 1
   const [editId, setEditId] = useState<number>()
   const [no, setNo] = useState(String(nextNo))
+  /** The admin's own code for the chemist; blank = the default SUBGEO<number> / HQ. */
+  const [code, setCode] = useState('')
   const [name, setName] = useState('')
   const [location, setLocation] = useState('')
   const [phone, setPhone] = useState('')
@@ -265,6 +267,7 @@ function ChemistForm({ branches, selected, userName, userId }: { branches: Branc
   const reset = () => {
     setEditId(undefined)
     setNo(String(Math.max(0, ...branches.filter((b) => b.number !== HQ_NUMBER).map((b) => b.number)) + 1))
+    setCode('')
     setName('')
     setLocation('')
     setPhone('')
@@ -278,6 +281,7 @@ function ChemistForm({ branches, selected, userName, userId }: { branches: Branc
     if (!selected) return toast('Click a chemist in the list first', 'error')
     setEditId(selected.id)
     setNo(String(selected.number))
+    setCode(selected.code ?? '')
     setName(selected.name)
     setLocation(selected.location ?? '')
     setPhone(selected.phone ?? '')
@@ -289,20 +293,25 @@ function ChemistForm({ branches, selected, userName, userId }: { branches: Branc
       const n = Number(no)
       if (!Number.isInteger(n) || n < 1) throw new Error('Chemist No. must be a whole number from 1')
       if (!name.trim()) throw new Error('Enter the chemist name')
-      if (branches.some((b) => b.number === n && b.id !== editId)) throw new Error(`${chemCode(n)} already exists`)
+      if (branches.some((b) => b.number === n && b.id !== editId)) throw new Error(`Chemist No. ${n} (${chemCode(n)}) already exists`)
+      const codeErr = chemCodeProblem(code, n, branches.filter((b) => b.id !== editId))
+      if (codeErr) throw new Error(codeErr)
+      const newCode = normChemCode(code) || undefined
+      const label = newCode ?? defaultChemCode(n)
       if (editId !== undefined) {
         const cur = branches.find((b) => b.id === editId)!
         if (cur.active && !active) {
           const staff = await db.users.where('branchId').equals(editId).filter((u) => u.active).count()
           if (staff && !confirm(`Close ${chemCode(cur.number)}? Its ${staff} active cashier(s) will not be able to sign in.`)) return
         }
-        await db.branches.update(editId, { number: n, name: name.trim().toUpperCase(), location: location.trim(), phone: phone.trim(), active })
-        await logActivity('settings', `Chemist ${chemCode(n)} updated`, { detail: `${name.trim().toUpperCase()}${active ? '' : ' · closed'}`, userId, userName })
-        toast(`${chemCode(n)} saved`)
+        const before = chemCode(cur.number)
+        await db.branches.update(editId, { number: n, code: newCode, name: name.trim().toUpperCase(), location: location.trim(), phone: phone.trim(), active })
+        await logActivity('settings', `Chemist ${label} updated`, { detail: `${before !== label ? `code ${before} → ${label} · ` : ''}${name.trim().toUpperCase()}${active ? '' : ' · closed'}`, userId, userName })
+        toast(`${label} saved`)
       } else {
-        await db.branches.add({ number: n, name: name.trim().toUpperCase(), location: location.trim(), phone: phone.trim(), active, createdAt: Date.now() })
-        await logActivity('settings', `Chemist ${chemCode(n)} created`, { detail: name.trim().toUpperCase(), userId, userName })
-        toast(`${chemCode(n)} created. Next: add its cashier in User Management, then key in its medicines.`)
+        await db.branches.add({ number: n, code: newCode, name: name.trim().toUpperCase(), location: location.trim(), phone: phone.trim(), active, createdAt: Date.now() })
+        await logActivity('settings', `Chemist ${label} created`, { detail: name.trim().toUpperCase(), userId, userName })
+        toast(`${label} created. Next: add its cashier in User Management, then key in its medicines.`)
       }
       reset()
       void syncNow()
@@ -312,7 +321,7 @@ function ChemistForm({ branches, selected, userName, userId }: { branches: Branc
   }
 
   return (
-    <Box title={editId !== undefined ? `Edit ${chemCode(Number(no))}` : 'Create a new chemist'} width={470}>
+    <Box title={editId !== undefined ? `Edit ${normChemCode(code) || defaultChemCode(Number(no) || undefined)}` : 'Create a new chemist'} width={470}>
       <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
         <Btn onClick={reset}>New Chemist</Btn>
         <Btn onClick={edit}>Edit Selected</Btn>
@@ -321,7 +330,29 @@ function ChemistForm({ branches, selected, userName, userId }: { branches: Branc
         <span className="ma-label ma-bold-label">Chemist No.</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Input value={no} onChange={(v) => setNo(v.replace(/\D/g, ''))} width={60} />
-          <b style={{ color: '#c00' }}>{chemCode(Number(no) || undefined)}</b>
+        </span>
+        <span className="ma-label ma-bold-label" title="What the chemist is called on screens, reports and receipts">
+          Chemist Code
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <input
+            className="ma-input"
+            style={{ width: 150, fontWeight: 'bold', color: '#c00' }}
+            value={code}
+            maxLength={24}
+            placeholder={defaultChemCode(Number(no) || undefined) || 'default'}
+            aria-label="Chemist Code"
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+          />
+          {code.trim() && (
+            <Btn onClick={() => setCode('')} title={`Go back to ${defaultChemCode(Number(no) || undefined)}`}>
+              Use default
+            </Btn>
+          )}
+          <span className="ma-label" style={{ fontSize: 10, flexBasis: '100%', color: chemCodeProblem(code, Number(no), branches.filter((b) => b.id !== editId)) ? '#c62828' : '#555' }}>
+            {chemCodeProblem(code, Number(no), branches.filter((b) => b.id !== editId)) ??
+              (code.trim() ? `Shown as ${normChemCode(code)} everywhere` : `Blank = ${defaultChemCode(Number(no) || undefined) || 'SUBGEO + number'}; or type a name, e.g. KAYOLE`)}
+          </span>
         </span>
         <span className="ma-label ma-bold-label">Name</span>
         <Input value={name} onChange={setName} width={228} placeholder="e.g. SCL KAYOLE" />

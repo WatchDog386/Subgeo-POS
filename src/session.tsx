@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { activeBranchId, db, markRemote, switchBranchDb } from './db/db'
 import { logActivity } from './db/logs'
 import { HttpError, api, flushPending, setForbiddenHandler, setSyncToken, setUnauthorizedHandler, startSync, stopSync, syncNow, syncToken } from './db/sync'
-import { chemCode } from './db/seedData'
+import { chemCode, registerChemCodes } from './db/seedData'
 import { hasAdminRights } from './db/syncSchema'
 import { hashPassword } from './lib/sha256'
 import type { Branch, Role, Shift, User } from './db/types'
@@ -82,6 +82,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const liveUser = useLiveQuery(() => (authUser?.id ? db.users.get(authUser.id) : undefined), [authUser?.id, dbEpoch])
   const user = liveUser && liveUser.active ? liveUser : liveUser ? null : authUser
   const branches = useLiveQuery(async () => (await db.branches.toArray()).sort((a, b) => a.number - b.number), [dbEpoch], [] as Branch[])
+  // Custom chemist codes (Utilities → Chemists) take effect everywhere chemCode() is shown.
+  registerChemCodes(branches)
   const branch = branches.find((b) => b.id === activeBranchId)
 
   const openBranch = useCallback(async (branchId: number) => {
