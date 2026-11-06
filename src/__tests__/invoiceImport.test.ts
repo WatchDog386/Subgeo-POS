@@ -219,3 +219,58 @@ describe('old per-pack stock', () => {
     expect([p.stock, p.price, p.minPrice, p.cost]).toEqual([300, 419, 400, 315])
   })
 })
+
+describe('order documents (Daily Order Book): quantities, no prices', () => {
+  const orderPage = (): TextItem[] => [
+    T(214, 797, 'DAILY ORDER BOOK'),
+    T(34, 774, 'CASH WHOLESALE 6'),
+    T(38, 717, 'Account'), T(180, 717, 'Date'), T(271, 717, 'Order No'), T(361, 717, 'Delivery Note'),
+    T(38, 700, 'CASH WHOLESALE 6'),
+    T(29, 667, 'Item Code'), T(85, 667, 'Item Description'), T(328, 667, 'Units'), T(366, 667, 'Price (In)'), T(424, 667, 'Disc %'), T(517, 667, 'Total (Incl)'),
+    T(29, 651, '001'), T(85, 651, 'ABNAI NASAL DROP'), T(333, 651, '6.00'),
+    T(29, 634, '002'), T(85, 634, 'APC TABS'), T(328, 634, '104.00'),
+    T(29, 618, '003'), T(85, 618, 'CLOB B'),
+    T(29, 602, '004'), T(85, 602, 'FRANOL TABS'), T(333, 602, '4.00'), T(380, 602, '25.00'),
+    T(40, 200, 'Removed By:'), T(100, 200, 'Name ______'), T(300, 200, 'Date ______________'),
+    T(534, 23, 'Page 1'),
+  ]
+  it('reads code · description · units under the Units column, prices blank or typed', () => {
+    const inv = parseInvoiceText([orderPage()])
+    expect(inv.lines.map((l) => [l.code, l.name, l.qty, l.unitPrice])).toEqual([
+      ['001', 'ABNAI NASAL DROP', 6, 0],
+      ['002', 'APC TABS', 104, 0],
+      ['004', 'FRANOL TABS', 4, 25],
+    ])
+    expect(inv.skipped).toEqual(['003 CLOB B'])
+    expect(inv.unpriced).toBe(2)
+    expect(inv.title).toBe('DAILY ORDER BOOK')
+    expect(inv.docNo).toBeUndefined() // the empty Order No box is not "Delivery Note"
+    expect(inv.date).toBeUndefined() // nor the signature line's "Date ______"
+  })
+  it('still refuses a priced row that does not add up', () => {
+    const p = orderPage()
+    p.push(T(29, 586, '005'), T(85, 586, 'BAD ROW'), T(333, 586, '3.00'), T(380, 586, '10.00'), T(530, 586, '99.00'))
+    expect(parseInvoiceText([p]).lines.map((l) => l.name)).not.toContain('BAD ROW')
+  })
+  it('receives without prices: keeps the cost, row numbers never become codes, repeats top up', async () => {
+    vi.resetModules()
+    await Dexie.delete('subgeo-pos')
+    const m = { db: await import('../db/db'), imp: await import('../medapp/pages/InvoiceImport') }
+    const id = (await m.db.db.products.add({ sku: 'X9', name: 'ABNAI NASAL DROP', fitment: [], cost: 4500, price: 6000, stock: 1, reorderLevel: 0, taxable: false, serialized: false, trackStock: true, active: true, createdAt: 1, updatedAt: 1 })) as number
+    expect(m.imp.matchProduct(await m.db.db.products.toArray(), '001', 'ABNAI NASAL DROP')?.id).toBe(id)
+    await m.imp.receiveInvoice({
+      lines: [
+        { code: '001', name: 'ABNAI NASAL DROP', qty: 6, costCents: 0, productId: id, vat: false },
+        { code: '002', name: 'APC TABS', qty: 80, costCents: 0, priceCents: 500, vat: false },
+        { code: '026', name: 'APC TABS', qty: 57, costCents: 0, priceCents: 500, vat: false },
+      ],
+      vendor: 'CASH WHOLESALE 6', invoiceNo: '', totalCents: 0, expense: '', receivedBy: 'p',
+    })
+    const a = (await m.db.db.products.get(id))!
+    expect([a.stock, a.cost]).toEqual([7, 4500])
+    const apc = (await m.db.db.products.toArray()).filter((p) => p.name === 'APC TABS')
+    expect(apc).toHaveLength(1)
+    expect(apc[0].stock).toBe(137)
+    expect(apc[0].sku).toMatch(/^PRD00-/)
+  })
+})

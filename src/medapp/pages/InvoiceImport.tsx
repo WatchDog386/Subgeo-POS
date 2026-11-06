@@ -43,11 +43,14 @@ export type ImportLine = {
 }
 
 const norm = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim()
+/** A short plain number (001, 12, 330): a row number, never a medicine's code. */
+export const isRowNumber = (code: string) => /^\d{1,4}$/.test(code.trim())
 
 /** Medicine already in stock for an invoice line: same item code, else same name. */
 export function matchProduct(products: Product[], code: string | undefined, name: string): Product | undefined {
   const c = (code ?? '').trim().toUpperCase()
-  if (c) {
+  // 001, 002 … on an order book are row numbers, not item codes.
+  if (c && !isRowNumber(c)) {
     const byCode = products.find((p) => p.sku.trim().toUpperCase() === c || (p.barcode ?? '').trim().toUpperCase() === c)
     if (byCode) return byCode
   }
@@ -154,6 +157,8 @@ export async function receiveInvoice(input: {
     for (const l of input.lines) {
       if (l.qty <= 0) throw new Error(`${l.name}: quantity must be above 0`)
       let p = l.productId !== undefined ? await db.products.get(l.productId) : undefined
+      // The same new medicine twice on one document: the second line tops up the first.
+      if (!p && l.productId === undefined) p = await db.products.filter((x) => norm(x.name) === norm(l.name)).first()
       if (p) {
         // Old stock in packs → units, and its prices per unit, before adding this delivery.
         const f = l.convertFactor && l.convertFactor > 1 ? l.convertFactor : 1
@@ -164,7 +169,8 @@ export async function receiveInvoice(input: {
         }
         await db.products.update(p.id!, {
           stock: p.stock + l.qty,
-          cost: l.costCents,
+          // An order document with no price: keep the medicine's current cost.
+          ...(l.costCents > 0 ? { cost: l.costCents } : {}),
           supplierId: p.supplierId ?? supplier?.id,
           ...(l.priceCents && l.priceCents > 0 ? { price: l.priceCents } : {}),
           ...(l.bestCents && l.bestCents > 0 ? { minPrice: l.bestCents } : {}),
@@ -175,7 +181,8 @@ export async function receiveInvoice(input: {
       } else {
         if (!l.priceCents || l.priceCents <= 0) throw new Error(`${l.name}: set a selling price (or a markup %) for this new medicine`)
         let sku = (l.code ?? '').trim().toUpperCase()
-        if (!sku || (await db.products.where('sku').equals(sku).first())) sku = `${sku || 'MED'}-${now.toString(36).toUpperCase()}-${added}`
+        if (!sku || isRowNumber(sku)) sku = await nextDocNo('PRD00')
+        if (await db.products.where('sku').equals(sku).first()) sku = `${sku}-${now.toString(36).toUpperCase()}-${added}`
         const id = (await db.products.add({
           sku,
           name: l.name.trim().toUpperCase(),
@@ -198,13 +205,14 @@ export async function receiveInvoice(input: {
         added++
       }
       await db.movements.add({ productId: p!.id!, change: l.qty, reason: 'receive', reference: docNo, note: `${vendor} invoice ${input.invoiceNo}`.trim(), userId: input.userId, at: now })
-      const total = l.packs && l.packCostCents !== undefined ? Math.round(l.packs * l.packCostCents) : Math.round(l.qty * l.costCents)
+      const unitCost = l.costCents > 0 ? l.costCents : p!.cost
+      const total = l.packs && l.packCostCents ? Math.round(l.packs * l.packCostCents) : Math.round(l.qty * unitCost)
       docLines.push({
         productId: p!.id,
         name: p!.name,
         sku: p!.sku,
         qty: l.qty,
-        cost: l.costCents,
+        cost: unitCost,
         rate: p!.price,
         vatPct: 0,
         vat: 0,
@@ -218,7 +226,7 @@ export async function receiveInvoice(input: {
         const docs = await db.docs.where('slug').equals('medicine').toArray()
         const code = p!.sku.trim().toUpperCase()
         const doc = docs.find((d) => (d.values.docNo ?? '').trim().toUpperCase() === code) ?? docs.find((d) => (d.values.name ?? '').trim().toUpperCase() === p!.name.trim().toUpperCase())
-        const values: Record<string, string> = { ...(doc?.values ?? { docNo: p!.sku, name: p!.name.toUpperCase(), type: 'S' }), packSize: String(l.perPack), sellBy: String(l.sellBy ?? 1), cost: (l.costCents / 100).toFixed(2), retail: (p!.price / 100).toFixed(2) }
+        const values: Record<string, string> = { ...(doc?.values ?? { docNo: p!.sku, name: p!.name.toUpperCase(), type: 'S' }), packSize: String(l.perPack), sellBy: String(l.sellBy ?? 1), cost: (unitCost / 100).toFixed(2), retail: (p!.price / 100).toFixed(2) }
         if (doc) await db.docs.update(doc.id, { values, updatedAt: now })
         else await db.docs.add({ slug: 'medicine', docNo: p!.sku, values, createdAt: now, updatedAt: now, createdBy: input.userId } as unknown as DocRecord)
       }
@@ -257,7 +265,12 @@ export function useInvoiceUpload(onDone?: () => void) {
     try {
       const { readInvoicePdf } = await import('../../lib/pdf')
       const inv = await readInvoicePdf(f)
-      if (!inv.lines.length) throw new Error('No item lines found. Is it a scanned photo? Only PDFs with selectable text can be read.')
+      if (!inv.lines.length)
+        throw new Error(
+          inv.textChars < 20
+            ? 'This PDF is a scanned picture: it has no text to read. Ask the supplier for the PDF their system produces, or key the lines in with Pur/GRN (Direct Invoice) → +.'
+            : 'No item lines found in this PDF. It needs a table with a Description and a Qty/Units column (and prices, or prices left blank). Key the lines in with Pur/GRN (Direct Invoice) → + instead.',
+        )
       const data = await new Promise<string>((res, rej) => {
         const r = new FileReader()
         r.onload = () => res(r.result as string)
@@ -479,11 +492,22 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
           ))}
         </datalist>
       </div>
+      {inv.unpriced > 0 && (
+        <div className="ma-note" style={{ margin: '8px 0 0', padding: '6px 10px', border: '1px solid #e0c96a', background: '#fff8d6', fontSize: 11, lineHeight: 1.4 }}>
+          <b>{inv.title ?? 'Order document'}:</b> {inv.unpriced === list.length ? 'it lists quantities only, no prices' : `${inv.unpriced} line(s) have no price`}. Type each line&apos;s <b>Pack Cost</b> from the supplier&apos;s invoice (Cost of 1 follows). A Pack Cost
+          left at 0 keeps the medicine&apos;s current cost. New medicines need a Selling Price. Item codes 001, 002… are row numbers: lines are matched to your medicines by name. Untick lines that did not arrive.
+          {inv.skipped.length > 0 && (
+            <div style={{ marginTop: 4, color: '#8a5a00' }}>
+              <b>No quantity on the document, not received:</b> {inv.skipped.join(' · ')}
+            </div>
+          )}
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 18, alignItems: 'center', margin: '8px 0', fontSize: 11, flexWrap: 'wrap' }}>
         <span>
-          <b>{list.length}</b> lines read from {inv.pages} page(s){inv.date ? ` · dated ${inv.date}` : ''}
+          <b>{list.length}</b> lines read from {inv.pages} page(s){inv.date ? ` · dated ${inv.date}` : ''} · {chosen.reduce((s, l) => s + (Number(l.qty) || 0), 0)} item(s) in all
         </span>
-        <span style={{ color: adds ? '#2e7d32' : '#c00', fontWeight: 'bold' }}>
+        <span style={{ color: inv.unpriced === list.length ? '#8a5a00' : adds ? '#2e7d32' : '#c00', fontWeight: 'bold', display: inv.unpriced === list.length ? 'none' : undefined }}>
           {inv.subtotal === undefined ? `Lines total ${amt(Math.round(inv.linesTotal * 100))} (no subtotal printed to check against)` : adds ? `✓ Lines add up to the invoice subtotal ${amt(Math.round(inv.subtotal * 100))}` : `⚠ Lines total ${amt(Math.round(inv.linesTotal * 100))} but the invoice subtotal is ${amt(Math.round(inv.subtotal * 100))} — check for missed lines`}
         </span>
         {inv.vat !== undefined && <span>VAT {amt(Math.round(inv.vat * 100))}</span>}

@@ -273,5 +273,13 @@ each line's Units, and the cost price becomes its Cost of 1. The supplier
 is added to the Party Master if it is new. Uploading the same supplier and
 invoice number twice asks before adding the stock again.
 
+**Order documents** (e.g. a *Daily Order Book*, LPO or delivery note that
+lists the item, description and Units but leaves the prices blank) upload the
+same way. Every line with a quantity is read. A yellow note lists any row with
+no quantity (those aren't received). Type each line's **Pack Cost** from the
+supplier's invoice. A Pack Cost left at 0 keeps the medicine's current cost,
+and new medicines need a Selling Price. The order's item codes (001, 002 …)
+are row numbers, so lines are matched to your medicines by name.
+
 Only PDFs with selectable text can be read, i.e. the ones a supplier's system
 produces. A scanned photo of a paper invoice has no text to read.

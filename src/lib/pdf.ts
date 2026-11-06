@@ -21,8 +21,11 @@ export async function pdfText(file: File): Promise<TextItem[][]> {
 }
 
 /** Read a supplier invoice / proforma / sales order PDF. */
-export async function readInvoicePdf(file: File): Promise<ParsedInvoice> {
-  return parseInvoiceText(await pdfText(file))
+export async function readInvoicePdf(file: File): Promise<ParsedInvoice & { textChars: number }> {
+  const pages = await pdfText(file)
+  // How much text the PDF holds: none at all means a scanned picture.
+  const textChars = pages.reduce((n, p) => n + p.reduce((m, t) => m + t.str.trim().length, 0), 0)
+  return { ...parseInvoiceText(pages), textChars }
 }
 
 export interface ParsedMedicine {
