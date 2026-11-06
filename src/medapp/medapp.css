@@ -2031,3 +2031,40 @@
   border-top: 2px solid #555;
   border-bottom: 3px double #555;
 }
+
+/* Chemist switch + ✎ rename (admin header). */
+.ma-chem-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.ma-chem-rename {
+  width: 24px;
+  height: 22px;
+  margin-top: 3px;
+  padding: 0;
+  border: 1px solid #8cc4e6;
+  border-radius: 3px;
+  background: #fff;
+  color: #1b4f8a;
+  font-size: 13px;
+  line-height: 1;
+}
+.ma-chem-rename:hover {
+  background: #e8f3fb;
+}
+@media (max-width: 900px) {
+  .ma-chem-row {
+    width: 100%;
+  }
+  .ma-chem-row .ma-chem-switch {
+    flex: 1;
+    min-width: 0;
+  }
+  .ma-chem-rename {
+    width: 34px;
+    height: 32px;
+    margin-top: 4px;
+    font-size: 16px;
+  }
+}

@@ -30,7 +30,11 @@ import HomePage from './pages/HomePage'
 import { hashPassword } from '../lib/sha256'
 import SyncBadge from './SyncBadge'
 import { syncNow } from '../db/sync'
-import { chemCode } from '../db/seedData'
+import { chemCode, chemCodeProblem, defaultChemCode, normChemCode } from '../db/seedData'
+import { db } from '../db/db'
+import { logActivity } from '../db/logs'
+import type { Branch } from '../db/types'
+import { Btn, Dialog } from './ui'
 import { useToast } from '../components/ui'
 import { toggleFullscreen } from '../lib/fullscreen'
 import AdminHomePage from './pages/AdminHomePage'
@@ -106,6 +110,7 @@ export default function AdminApp() {
   const { user, lock, branch, branches, branchId, switchBranch } = useSession()
   const toast = useToast()
   const [switching, setSwitching] = useState(false)
+  const [renaming, setRenaming] = useState(false)
   const runTool = (t: (typeof HEADER_TOOLS)[number]) => {
     if (t.to) nav(t.to)
     else if (t.action === 'lock') lock()
@@ -175,18 +180,26 @@ export default function AdminApp() {
             {defaults.companyName}
             {branch && `-${chemCode(branch.number)}`}
           </div>
+          <div className="ma-chem-row">
           <label className="ma-chem-switch" title="Open another chemist: every screen then shows that chemist's stock, sales and records">
             Chemist
             <select value={branchId} disabled={switching} onChange={(e) => void openChemist(Number(e.target.value))}>
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>
-                  {chemCode(b.number)} - {b.name}
+                  {switchLabel(b)}
                   {b.active ? '' : ' (closed)'}
                 </option>
               ))}
             </select>
             {switching && <span>Opening…</span>}
           </label>
+          {branch && (
+            <button type="button" className="ma-chem-rename" title={`Rename ${chemCode(branch.number)} — the name shown at the top (blank = ${defaultChemCode(branch.number)})`} aria-label="Rename this chemist" onClick={() => setRenaming(true)}>
+              ✎
+            </button>
+          )}
+          </div>
+          {renaming && branch && <RenameChemist branch={branch} branches={branches} userId={user.id} userName={user.name} onClose={() => setRenaming(false)} />}
         </div>
         <span className="ma-hspacer" />
         <span className="ma-header-tools">
@@ -462,3 +475,70 @@ function HelpSidebar({ path }: { path: string }) {
     </div>
   )
 }
+
+/** Chemist switch entry: the code, and the name when it says something more. */
+function switchLabel(b: Branch): string {
+  const code = chemCode(b.number)
+  const same = (x: string) => x.replace(/\s+/g, '').toUpperCase()
+  return !b.name || same(b.name) === same(code) || same(b.name) === same(defaultChemCode(b.number)) ? code : `${code} - ${b.name}`
+}
+
+/**
+ * The ✎ next to the Chemist switch: rename the chemist shown at the top
+ * ("SUBGEO CHEMIST LTD-SUBGEO10" → "…-KAWANGWARE"). Blank = the default
+ * SUBGEO<number> / HQ. Same rules as Utilities → Chemists.
+ */
+function RenameChemist({ branch, branches, userId, userName, onClose }: { branch: Branch; branches: Branch[]; userId?: number; userName?: string; onClose: () => void }) {
+  const toast = useToast()
+  const [code, setCode] = useState(branch.code ?? '')
+  const others = branches.filter((b) => b.id !== branch.id)
+  const problem = chemCodeProblem(code, branch.number, others)
+  const label = normChemCode(code) || defaultChemCode(branch.number)
+  const save = async () => {
+    if (problem) return toast(problem, 'error')
+    const before = chemCode(branch.number)
+    await db.branches.update(branch.id!, { code: normChemCode(code) || undefined })
+    await logActivity('settings', `Chemist ${label} renamed`, { detail: `${before} → ${label}`, userId, userName })
+    void syncNow()
+    toast(`Now shown as ${label}`)
+    onClose()
+  }
+  return (
+    <Dialog
+      title={`Rename ${chemCode(branch.number)}`}
+      onClose={onClose}
+      width={420}
+      footer={
+        <>
+          <Btn onClick={() => void save()}>Save</Btn>
+          <Btn onClick={onClose}>Cancel</Btn>
+        </>
+      }
+    >
+      <div className="ma-form" style={{ gridTemplateColumns: '120px 1fr', rowGap: 8 }}>
+        <span className="ma-label ma-bold-label">Shown at the top as</span>
+        <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <input
+            className="ma-input"
+            autoFocus
+            style={{ width: 190, fontWeight: 'bold', color: '#c00' }}
+            value={code}
+            maxLength={24}
+            placeholder={defaultChemCode(branch.number)}
+            aria-label="Chemist name shown at the top"
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            onKeyDown={(e) => e.key === 'Enter' && void save()}
+          />
+          <Btn onClick={() => setCode('')} title={`Back to ${defaultChemCode(branch.number)}`}>
+            Use {defaultChemCode(branch.number)}
+          </Btn>
+        </span>
+        <span />
+        <span className="ma-label" style={{ fontSize: 10, color: problem ? '#c62828' : '#555', whiteSpace: 'normal' }}>
+          {problem ?? `The header will read “…-${label}”. Also used on reports, receipts and the Chemist list. Chemist No. ${branch.number} and the cashier password stay the same.`}
+        </span>
+      </div>
+    </Dialog>
+  )
+}
+
