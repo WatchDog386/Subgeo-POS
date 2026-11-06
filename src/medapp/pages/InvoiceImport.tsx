@@ -296,13 +296,36 @@ export async function receiveInvoice(input: {
 
 const MARKUP_KEY = 'medapp:import-markup'
 
+/**
+ * An upload being checked, saved as it is typed (on this computer only) so
+ * nothing is lost if the box is closed, the page reloads or the power goes.
+ */
+export type InvoiceDraft = {
+  file: { name: string; data: string }
+  inv: ParsedInvoice
+  lines: ImportLine[]
+  vendor: string
+  invoiceNo: string
+  expense?: string
+  markup?: string
+  savedAt: number
+}
+export const draftKey = (userId: number | undefined) => `_local:medapp:invoice-draft:${userId ?? 0}`
+
 /** Pick the PDF, read it, then show the review. */
 export function useInvoiceUpload(onDone?: () => void) {
   const toast = useToast()
   const input = useRef<HTMLInputElement | null>(null)
   const [busy, setBusy] = useState(false)
-  const [review, setReview] = useState<{ file: { name: string; data: string }; inv: ParsedInvoice } | null>(null)
-  const pick = () => input.current?.click()
+  const { user } = useSession()
+  const [review, setReview] = useState<{ file: { name: string; data: string }; inv: ParsedInvoice; draft?: InvoiceDraft } | null>(null)
+  /** An unfinished upload saved on this computer: continue it, or start a new one. */
+  const [unfinished, setUnfinished] = useState<InvoiceDraft | null>(null)
+  const pick = async () => {
+    const d = await getKv<InvoiceDraft | null>(draftKey(user?.id), null)
+    if (d?.lines?.length) setUnfinished(d)
+    else input.current?.click()
+  }
   const onFile = async (f: File) => {
     if (!/\.pdf$/i.test(f.name) && f.type !== 'application/pdf') return toast('Choose the supplier invoice as a PDF file', 'error')
     if (f.size > 10 * 1024 * 1024) return toast('PDF is too big (max 10 MB)', 'error')
@@ -322,6 +345,8 @@ export function useInvoiceUpload(onDone?: () => void) {
         r.onerror = () => rej(r.error)
         r.readAsDataURL(f)
       })
+      // A new document replaces any unfinished one.
+      await db.kv.delete(draftKey(user?.id))
       setReview({ file: { name: f.name, data }, inv })
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), 'error')
@@ -342,11 +367,44 @@ export function useInvoiceUpload(onDone?: () => void) {
           e.target.value = ''
         }}
       />
+      {unfinished && (
+        <Dialog title="Unfinished upload" onClose={() => setUnfinished(null)} width={520}>
+          <div className="ma-label" style={{ lineHeight: 1.5, whiteSpace: 'normal' }}>
+            <b>{unfinished.file.name}</b> was not received yet: {unfinished.lines.length} lines,{' '}
+            {unfinished.lines.filter((l) => l.price.trim() || l.best.trim() || Number(l.cost) > 0).length} with prices or costs typed. Last saved{' '}
+            {new Date(unfinished.savedAt).toLocaleString([], { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}.
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+            <Btn
+              onClick={() => {
+                setReview({ file: unfinished.file, inv: unfinished.inv, draft: unfinished })
+                setUnfinished(null)
+              }}
+            >
+              Continue where I stopped
+            </Btn>
+            <Btn
+              onClick={() => {
+                setUnfinished(null)
+                input.current?.click()
+              }}
+              title="The unfinished one is replaced only once a new PDF has been read"
+            >
+              Upload a new PDF instead
+            </Btn>
+            <Btn onClick={() => setUnfinished(null)}>◀ Back</Btn>
+          </div>
+        </Dialog>
+      )}
       {review && (
         <InvoiceReview
           inv={review.inv}
           file={review.file}
-          onClose={() => setReview(null)}
+          draft={review.draft}
+          onClose={() => {
+            setReview(null)
+            toast('Saved — press Upload Supplier Invoice (PDF) to continue where you stopped')
+          }}
           onDone={() => {
             setReview(null)
             onDone?.()
@@ -358,7 +416,7 @@ export function useInvoiceUpload(onDone?: () => void) {
   return { pick, busy, element }
 }
 
-function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; file: { name: string; data: string }; onClose: () => void; onDone: () => void }) {
+function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoice; file: { name: string; data: string }; draft?: InvoiceDraft; onClose: () => void; onDone: () => void }) {
   const toast = useToast()
   const { user } = useSession()
   // undefined until loaded, so lines are matched against the real list.
@@ -368,10 +426,10 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
   const suppliers = useLiveQuery(() => db.suppliers.toArray(), [], [] as Supplier[])
   const lastExpense = useLiveQuery(async () => (await db.docs.where('slug').equals('pur-grn-direct-invoice').toArray()).sort((a, b) => b.createdAt - a.createdAt)[0]?.values.expense ?? '', [], '')
   const savedMarkup = useLiveQuery(() => getKv<string>(MARKUP_KEY, ''), [], '')
-  const [vendor, setVendor] = useState(inv.supplier ?? '')
-  const [invoiceNo, setInvoiceNo] = useState(inv.docNo ?? '')
-  const [expense, setExpense] = useState<string>()
-  const [markup, setMarkup] = useState<string>()
+  const [vendor, setVendor] = useState(draft?.vendor ?? inv.supplier ?? '')
+  const [invoiceNo, setInvoiceNo] = useState(draft?.invoiceNo ?? inv.docNo ?? '')
+  const [expense, setExpense] = useState<string | undefined>(draft?.expense)
+  const [markup, setMarkup] = useState<string | undefined>(draft?.markup)
   const [q, setQ] = useState('')
   const [saving, setSaving] = useState(false)
   /**
@@ -380,7 +438,19 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
    * the names; only the names are corrected.
    */
   const pieces = inv.unpriced > 0
-  const [lines, setLines] = useState<ImportLine[] | null>(null)
+  const [lines, setLines] = useState<ImportLine[] | null>(draft?.lines ?? null)
+  const [savedAt, setSavedAt] = useState<number | undefined>(draft?.savedAt)
+  // Autosave: every change is kept (this computer) a moment after it is typed.
+  const done = useRef(false)
+  useEffect(() => {
+    if (!lines || done.current) return
+    const t = setTimeout(() => {
+      if (done.current) return
+      const now = Date.now()
+      void setKv<InvoiceDraft>(draftKey(user?.id), { file, inv, lines, vendor, invoiceNo, expense, markup, savedAt: now }).then(() => setSavedAt(now))
+    }, 400)
+    return () => clearTimeout(t)
+  }, [lines, vendor, invoiceNo, expense, markup, file, inv, user?.id])
   // The company's medicine / price list (all chemists) to autocorrect names; [] offline.
   const [catalogue, setCatalogue] = useState<CatalogueItem[] | null>(null)
   useEffect(() => {
@@ -571,6 +641,8 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
         userId: user.id,
         attachment: file,
       })
+      done.current = true
+      await db.kv.delete(draftKey(user.id))
       await logActivity('stock', `Supplier invoice received (${r.docNo})`, { detail: `${vendor} ${invoiceNo}: ${r.updated} medicine(s) topped up, ${r.added} new`, userId: user.id, userName: user.name })
       toast(`${r.docNo}: ${r.updated + r.added} medicine(s) received — ${r.updated} topped up, ${r.added} new`)
       onDone()
@@ -586,7 +658,19 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
   const small = (w: number, right = true): React.CSSProperties => ({ width: w, height: 19, fontSize: 11, textAlign: right ? 'right' : 'left', padding: '0 3px' })
   const bad = (on: boolean): React.CSSProperties => (on ? { borderColor: '#e57373', background: '#fff1f1' } : {})
   return (
-    <Dialog title={`Upload Supplier Invoice — ${file.name}`} onClose={onClose} width={1320}>
+    <Dialog
+      title={
+        <>
+          Upload Supplier Invoice — {file.name}
+          <span style={{ marginLeft: 14, fontSize: 11, fontWeight: 'normal', opacity: 0.9 }} title="Your work is kept on this computer as you type. Closing this box keeps it: press Upload Supplier Invoice to continue.">
+            {savedAt ? `✓ Saved automatically ${new Date(savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
+          </span>
+        </>
+      }
+      onClose={onClose}
+      width={1320}
+      keepOpen
+    >
       <div style={{ display: 'flex', gap: 18, alignItems: 'center', flexWrap: 'wrap' }}>
         <Btn onClick={onClose} title="Back to Pur/GRN (Direct Invoice) without receiving">
           ◀ Back

@@ -78,6 +78,35 @@ export default function PriceTable() {
       return n
     })
 
+  /** Write rows' prices (and the Medicine-form record) to the database. */
+  const write = async (rows: Row[]) => {
+    if (!user) return
+    await db.transaction('rw', [db.products, db.docs], async () => {
+      const now = Date.now()
+      for (const r of rows) {
+        const c = checkPrices(r.price, r.best, r.whole, r.p.cost).cents!
+        await db.products.update(r.p.id!, { price: c.price, minPrice: c.best, updatedAt: now })
+        const values: Record<string, string> = r.doc
+          ? { ...r.doc.values, retail: c2(c.price), whole: c2(c.whole), minPrice: c.best !== undefined ? c2(c.best) : '' }
+          : { docNo: r.p.sku, name: r.p.name.toUpperCase(), retail: c2(c.price), whole: c2(c.whole), cost: c2(r.p.cost), minPrice: c.best !== undefined ? c2(c.best) : '', type: r.p.trackStock ? 'S' : 'N' }
+        await saveDoc('medicine', values, r.doc?.id, user.id)
+      }
+    })
+    // Saved: the row's edits are now its stored values.
+    setEdits((m) => {
+      const n = new Map(m)
+      for (const r of rows) n.delete(r.p.id!)
+      return n
+    })
+  }
+  /** Autosave: leaving a medicine's row saves it when its prices are valid. */
+  const autoSave = (id: number) => {
+    const r = rows.find((x) => x.p.id === id)
+    if (!r || !r.dirty || r.error || saving) return
+    write([r])
+      .then(() => toast(`${r.p.name}: saved`))
+      .catch((e) => toast(e instanceof Error ? e.message : String(e), 'error'))
+  }
   const save = async () => {
     if (saving || !user) return
     if (!changed.length) return toast('Nothing changed')
@@ -188,7 +217,14 @@ export default function PriceTable() {
               </tr>
             )}
             {shown.map((r, i) => (
-              <tr key={r.p.id} style={{ background: r.dirty ? '#fffbe6' : undefined }}>
+              <tr
+                key={r.p.id}
+                style={{ background: r.dirty ? '#fffbe6' : undefined }}
+                onBlur={(e) => {
+                  // Focus left this medicine's row (not just moved to its next box): save it.
+                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) autoSave(r.p.id!)
+                }}
+              >
                 <td style={{ fontSize: 11 }}>{i + 1}</td>
                 <td style={{ fontSize: 11 }}>{r.p.sku}</td>
                 <td style={{ fontSize: 11, maxWidth: W.name, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.p.name}>
@@ -199,7 +235,7 @@ export default function PriceTable() {
                 <td>{cell(r, 'price', 'Selling Price')}</td>
                 <td>{cell(r, 'best', 'Best Price')}</td>
                 <td>{cell(r, 'whole', 'Whole Sale Price')}</td>
-                <td style={{ fontSize: 10, color: r.error ? '#c62828' : '#b26a00', whiteSpace: 'nowrap' }}>{r.error ? `✖ ${r.error}` : r.warn ? `⚠ ${r.warn}` : r.dirty ? 'changed — press Save' : ''}</td>
+                <td style={{ fontSize: 10, color: r.error ? '#c62828' : '#b26a00', whiteSpace: 'nowrap' }}>{r.error ? `✖ ${r.error}` : r.warn ? `⚠ ${r.warn}` : r.dirty ? 'saves when you leave the row' : ''}</td>
               </tr>
             ))}
           </tbody>

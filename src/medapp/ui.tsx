@@ -626,20 +626,23 @@ export function Dialog({
   children,
   footer,
   width,
+  keepOpen,
 }: {
   title: ReactNode
   onClose: () => void
   children: ReactNode
   footer?: ReactNode
   width?: number
+  /** A click beside the box or Esc does not close it (only its own buttons do). */
+  keepOpen?: boolean
 }) {
   useEffect(() => {
-    const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && !keepOpen && onClose()
     window.addEventListener('keydown', k)
     return () => window.removeEventListener('keydown', k)
-  }, [onClose])
+  }, [onClose, keepOpen])
   return (
-    <div className="ma-modal-back" onMouseDown={onClose}>
+    <div className="ma-modal-back" onMouseDown={keepOpen ? undefined : onClose}>
       <div className="ma-modal" style={{ width }} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <div className="ma-modal-head">
           <span>{title}</span>

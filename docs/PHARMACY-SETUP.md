@@ -306,6 +306,18 @@ Instead of typing a delivery line by line, as the PURCHASE account:
    short, then press **Receive … line(s) into stock**. **◀ Back** leaves
    without receiving.
 
+**Autosave.** Everything typed on the review is saved on this computer as
+you type (*✓ Saved automatically* in the title bar). A click beside the box
+or Esc no longer closes it. If it is closed anyway (◀ Back, ×, a reload, a
+power cut), press **Upload Supplier Invoice (PDF)** again and choose
+**Continue where I stopped**. **Upload a new PDF instead** replaces the
+unfinished one once the new PDF has been read. The saved work is cleared when
+the lines are received. It is kept per user, on the computer where it was
+typed.
+
+On *Medicine Prices (Best Price)*, a medicine's prices are saved as soon as
+you leave its row. **Save Changes** is still there for rows you are still on.
+
 One Pur/GRN (Direct Invoice) is filed with the PDF attached. Stock goes up by
 each line's Units, and the cost price becomes its Cost of 1. The supplier
 is added to the Party Master if it is new. Uploading the same supplier and
