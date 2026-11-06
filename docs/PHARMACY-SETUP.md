@@ -268,6 +268,16 @@ Instead of typing a delivery line by line, as the PURCHASE account:
      capsules, and recorded on the medicine for next time. Check it before
      receiving. On an order book, Qty × Pcs/Pack is the number of units that
      go into stock.
+   **Everything on a line can be edited** before receiving:
+   - **Description:** type over the name. On a new medicine it becomes its
+     name. On a medicine already in stock it renames that medicine (the line
+     says *renames …*). To receive it as a new medicine instead, set
+     *Medicine in stock* to NEW MEDICINE. Typing a name that is already in
+     the list links the line to it, and the *Did you mean…?* list is refreshed.
+   - **Item Code** (new medicines), **Size** (typing e.g. `30 tabs` also sets
+     Pcs/Pack), **Qty**, **Pcs/Pack**, **Sell By**, **Pack Cost**, **Amount**
+     (sets the Pack Cost), **Cost of 1** (sets the Pack Cost), **Selling
+     Price**, **Best Price** and **VAT**.
    The company list needs the server (online). Offline, names are matched
    against this chemist's medicines only.
 4. **Packs and pieces.** Qty and Pack Cost are as on the invoice (packs or boxes).

@@ -203,6 +203,25 @@ describe('packs on supplier invoices', () => {
     const med = (await m.db.db.docs.where('slug').equals('medicine').toArray())[0]
     expect(med.values).toMatchObject({ docNo: 'I00046', packSize: '100', sellBy: '1' })
   })
+
+  it('applies what the buyer corrected: the name, the VAT and what a pack holds', async () => {
+    vi.resetModules()
+    await Dexie.delete('subgeo-pos')
+    const m = { db: await import('../db/db'), imp: await import('../medapp/pages/InvoiceImport') }
+    const id = (await m.db.db.products.add({ sku: 'COF1', name: 'COFTA TABS', fitment: [], cost: 100, price: 200, stock: 1, reorderLevel: 0, taxable: false, serialized: false, trackStock: true, active: true, createdAt: 1, updatedAt: 1 })) as number
+    await m.imp.receiveInvoice({
+      lines: [
+        { name: 'COFTA TABLETS (100S)', qty: 100, costCents: 100, productId: id, vat: true, packs: 1, perPack: 100, sellBy: 1, packCostCents: 10000 },
+        { name: 'BENACOF SYRUP', code: 'BEN100', qty: 2, costCents: 9000, priceCents: 15000, vat: false, perPack: 1, sellBy: 1, contents: '100 ml' },
+      ],
+      vendor: 'V', invoiceNo: '1', totalCents: 0, expense: '', receivedBy: 'p',
+    })
+    const p = (await m.db.db.products.get(id))!
+    expect([p.name, p.taxable, p.stock]).toEqual(['COFTA TABLETS (100S)', true, 101])
+    const meds = await m.db.db.docs.where('slug').equals('medicine').toArray()
+    expect(meds.find((d) => d.values.docNo === 'COF1')?.values).toMatchObject({ name: 'COFTA TABLETS (100S)', contents: '100 tabs' })
+    expect(meds.find((d) => d.values.docNo === 'BEN100')?.values).toMatchObject({ name: 'BENACOF SYRUP', contents: '100 ml' })
+  })
 })
 
 describe('old per-pack stock', () => {

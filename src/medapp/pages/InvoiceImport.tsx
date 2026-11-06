@@ -45,7 +45,9 @@ export type ImportLine = {
   /** The description exactly as read from the document (name = the corrected one). */
   read: string
   /** How the name was found: exact, autocorrected, picked by the buyer, or still unsure / none. */
-  fix: 'exact' | 'auto' | 'picked' | 'ask' | 'none'
+  fix: 'exact' | 'auto' | 'picked' | 'ask' | 'none' | 'typed'
+  /** What one pack holds as typed by the buyer (e.g. "30 tabs", "100 ml"); undefined = read from the name. */
+  size?: string
   /** Close medicines from the company list, best first (for "Did you mean"). */
   options: { name: string; score: number }[]
 }
@@ -167,6 +169,8 @@ export async function receiveInvoice(input: {
     packCostCents?: number
     /** Old stock was counted per pack: multiply it by this (units per pack) and divide its prices. */
     convertFactor?: number
+    /** What one pack holds ("100 tabs", "60 ml"), kept on the medicine. Blank = read from its name. */
+    contents?: string
   }[]
   vendor: string
   invoiceNo: string
@@ -209,6 +213,9 @@ export async function receiveInvoice(input: {
           // An order document with no price: keep the medicine's current cost.
           ...(l.costCents > 0 ? { cost: l.costCents } : {}),
           supplierId: p.supplierId ?? supplier?.id,
+          // The buyer corrected the medicine's name or VAT on the review.
+          ...(l.name.trim() && norm(l.name) !== norm(p.name) ? { name: l.name.trim().toUpperCase() } : {}),
+          taxable: l.vat,
           ...(l.priceCents && l.priceCents > 0 ? { price: l.priceCents } : {}),
           ...(l.bestCents && l.bestCents > 0 ? { minPrice: l.bestCents } : {}),
           updatedAt: now,
@@ -263,7 +270,7 @@ export async function receiveInvoice(input: {
         const docs = await db.docs.where('slug').equals('medicine').toArray()
         const code = p!.sku.trim().toUpperCase()
         const doc = docs.find((d) => (d.values.docNo ?? '').trim().toUpperCase() === code) ?? docs.find((d) => (d.values.name ?? '').trim().toUpperCase() === p!.name.trim().toUpperCase())
-        const values: Record<string, string> = { ...(doc?.values ?? { docNo: p!.sku, name: p!.name.toUpperCase(), type: 'S' }), packSize: String(l.perPack), sellBy: String(l.sellBy ?? 1), cost: (unitCost / 100).toFixed(2), retail: (p!.price / 100).toFixed(2), ...(packContents(p!.name).label ? { contents: packContents(p!.name).label } : {}) }
+        const values: Record<string, string> = { ...(doc?.values ?? { docNo: p!.sku, name: p!.name.toUpperCase(), type: 'S' }), packSize: String(l.perPack), sellBy: String(l.sellBy ?? 1), cost: (unitCost / 100).toFixed(2), retail: (p!.price / 100).toFixed(2), name: p!.name.toUpperCase(), ...((l.contents?.trim() || packContents(p!.name).label) ? { contents: l.contents?.trim() || packContents(p!.name).label } : {}) }
         if (doc) await db.docs.update(doc.id, { values, updatedAt: now })
         else await db.docs.add({ slug: 'medicine', docNo: p!.sku, values, createdAt: now, updatedAt: now, createdBy: input.userId } as unknown as DocRecord)
       }
@@ -472,6 +479,19 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
     const c = cands.find((x) => x.name === v)
     if (c) set(l.key, { ...fromCand(c, { code: l.code, read: l.read, cost: Number(l.cost) || 0 }), fix: 'picked' })
   }
+  /** The buyer types the name: renames what is received (a matched medicine is renamed, a new one gets this name). */
+  const typeName = (l: ImportLine, v: string) => set(l.key, { name: v.toUpperCase(), fix: 'typed' })
+  /** Leaving the name box: link to a medicine with exactly that name, and refresh the suggestions. */
+  const checkName = (l: ImportLine) => {
+    const v = l.name.trim().toUpperCase().replace(/\s+/g, ' ')
+    if (!v) return set(l.key, { name: l.read })
+    const same = cands.find((c) => norm(c.name) === norm(v))
+    if (same && same.productId !== l.productId) return set(l.key, { ...fromCand(same, { code: l.code, read: l.read, cost: Number(l.cost) || 0 }), fix: 'picked' })
+    if (l.productId === undefined) {
+      const ac = autocorrect(v, cands, candKeys)
+      set(l.key, { name: v, options: ac.options.map((o) => ({ name: o.item.name, score: o.score })), ...packFor(undefined, v, l.read) })
+    } else set(l.key, { name: v })
+  }
   const corrected = list.filter((l) => l.fix === 'auto').length
   const unsure = list.filter((l) => l.fix === 'ask' && l.include).length
   const chosen = list.filter((l) => l.include)
@@ -532,6 +552,7 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
             sellBy: l.sellBy,
             packCostCents: toCents(l.cost || '0'),
             convertFactor: factorOf(l) > 1 ? factorOf(l) : undefined,
+            contents: l.size?.trim() || undefined,
           }
         }),
         vendor,
@@ -658,9 +679,33 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
                   <td style={td}>
                     <input type="checkbox" checked={l.include} onChange={(e) => set(l.key, { include: e.target.checked })} aria-label={`Receive ${l.name}`} />
                   </td>
-                  <td style={td}>{l.code}</td>
-                  <td style={{ ...td, whiteSpace: 'normal', maxWidth: 240, ...(l.fix === 'ask' && l.include ? { background: '#fff3e0' } : {}) }}>
-                    <span style={{ fontWeight: l.fix === 'auto' || l.fix === 'picked' ? 'bold' : undefined }}>{l.name}</span>
+                  <td style={td}>
+                    <input
+                      className="ma-input"
+                      style={small(54, false)}
+                      value={p ? p.sku : l.code}
+                      disabled={!!p}
+                      onChange={(e) => set(l.key, { code: e.target.value.toUpperCase() })}
+                      aria-label={`Item code ${l.name}`}
+                      title={p ? `Code of ${p.name} in stock` : 'Code for the new medicine (blank or a row number = a new PRD code)'}
+                    />
+                  </td>
+                  <td style={{ ...td, whiteSpace: 'normal', maxWidth: 206, ...(l.fix === 'ask' && l.include ? { background: '#fff3e0' } : {}) }}>
+                    <textarea
+                      className="ma-input"
+                      rows={l.name.length > 30 ? 2 : 1}
+                      style={{ width: 200, minHeight: 19, fontSize: 11, padding: '1px 3px', resize: 'vertical', fontFamily: 'inherit', fontWeight: l.fix === 'auto' || l.fix === 'picked' ? 'bold' : undefined, display: 'block' }}
+                      value={l.name}
+                      onChange={(e) => typeName(l, e.target.value.replace(/\n/g, ' '))}
+                      onBlur={() => checkName(l)}
+                      aria-label={`Name ${l.read}`}
+                      title={p && norm(l.name) !== norm(p.name) ? `${p.name} will be renamed to this` : 'Edit the name if it is wrong'}
+                    />
+                    {p && norm(l.name) !== norm(p.name) && (
+                      <div style={{ fontSize: 10, color: '#8a5a00' }}>
+                        renames {p.name}
+                      </div>
+                    )}
                     {l.fix === 'auto' && (
                       <span style={{ marginLeft: 4, fontSize: 10, color: '#2e7d32' }} title="Spelling corrected from the medicine list — check it">
                         ✓ corrected
@@ -671,15 +716,15 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
                         read: {l.read}
                       </div>
                     )}
-                    {l.options.length > 0 && (l.fix === 'ask' || l.fix === 'auto' || l.fix === 'picked' || l.fix === 'none') && (
+                    {l.options.length > 0 && (
                       <select
                         className="ma-input"
-                        style={{ display: 'block', width: 230, height: 19, fontSize: 10, marginTop: 1, ...(l.fix === 'ask' ? { borderColor: '#ef6c00' } : {}) }}
-                        value={l.fix === 'ask' ? '?' : l.fix === 'none' ? '' : l.name}
+                        style={{ display: 'block', width: 200, height: 19, fontSize: 10, marginTop: 1, ...(l.fix === 'ask' ? { borderColor: '#ef6c00' } : {}) }}
+                        value={(l.fix === 'auto' || l.fix === 'picked') && l.options.some((o) => o.name === l.name) ? l.name : '?'}
                         onChange={(e) => e.target.value !== '?' && pick(l, e.target.value)}
                         aria-label={`Did you mean ${l.read}`}
                       >
-                        {l.fix === 'ask' && <option value="?">Did you mean…? ({l.options.length})</option>}
+                        <option value="?">Did you mean…? ({l.options.length})</option>
                         {l.options.map((o) => (
                           <option key={o.name} value={o.name}>
                             {o.name} ({Math.round(o.score * 100)}%)
@@ -689,8 +734,21 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
                       </select>
                     )}
                   </td>
-                  <td style={{ ...td, fontSize: 10, color: '#37474f' }} title="What one pack holds (from the medicine's name)">
-                    {packContents(l.name).label || packContents(l.read).label || '—'}
+                  <td style={td}>
+                    <input
+                      className="ma-input"
+                      style={{ ...small(58, false), fontSize: 10 }}
+                      value={l.size ?? (packContents(l.name).label || packContents(l.read).label)}
+                      placeholder="e.g. 30 tabs"
+                      onChange={(e) => {
+                        const v = e.target.value
+                        const pc = packContents(v.replace(/\bTAB\b/i, 'TABS'))
+                        // "30 tabs" / "100 caps": that many pieces in a pack.
+                        set(l.key, { size: v, ...(pc.pieces ? { perPack: String(pc.pieces), from: 'typed' as const, sellBy: pc.pieces % l.sellBy === 0 ? l.sellBy : 1 } : {}) })
+                      }}
+                      aria-label={`Size ${l.name}`}
+                      title="What one pack holds: e.g. 100 tabs, 10 caps, 60 ml (typing pieces sets Pcs/Pack)"
+                    />
                   </td>
                   <td style={td}>
                     <input className="ma-input" style={small(40)} value={l.qty} onChange={(e) => set(l.key, { qty: e.target.value })} aria-label={`Qty ${l.name}`} />
@@ -724,14 +782,35 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
                   <td style={td}>
                     <input className="ma-input" style={small(58)} value={l.cost} onChange={(e) => set(l.key, { cost: e.target.value })} aria-label={`Cost ${l.name}`} />
                   </td>
-                  <td style={{ ...td, textAlign: 'right' }}>{((Number(l.qty) || 0) * (Number(l.cost) || 0)).toFixed(2)}</td>
-                  <td style={{ ...td, textAlign: 'right', fontWeight: 'bold' }} title={`Cost of one ${l.sellBy === 1 ? 'piece' : `unit of ${l.sellBy} pcs`}`}>
-                    {u.error ? '—' : unitCostKes.toFixed(2)}
+                  <td style={td}>
+                    <CalcInput
+                      width={60}
+                      value={((Number(l.qty) || 0) * (Number(l.cost) || 0)).toFixed(2)}
+                      onChange={(v) => {
+                        const q = Number(l.qty) || 0
+                        if (q > 0) set(l.key, { cost: (v / q).toFixed(2) })
+                      }}
+                      label={`Amount ${l.name}`}
+                      title="Amount for the line (Qty × Pack Cost) — typing it sets the Pack Cost"
+                    />
+                  </td>
+                  <td style={td}>
+                    <CalcInput
+                      width={58}
+                      bold
+                      value={u.error ? '' : unitCostKes.toFixed(2)}
+                      onChange={(v) => {
+                        const perUnit = per > 0 && l.sellBy > 0 ? per / l.sellBy : 1
+                        set(l.key, { cost: (v * perUnit).toFixed(2) })
+                      }}
+                      label={`Cost of 1 ${l.name}`}
+                      title={`Cost of one ${l.sellBy === 1 ? 'piece' : `unit of ${l.sellBy} pcs`} — typing it sets the Pack Cost`}
+                    />
                   </td>
                   <td style={td}>
                     <input
                       className="ma-input"
-                      style={{ ...small(190, false), color: p ? '#1b5e20' : '#e65100', fontWeight: 'bold' }}
+                      style={{ ...small(160, false), color: p ? '#1b5e20' : '#e65100', fontWeight: 'bold' }}
                       list="ma-imp-products"
                       value={p ? p.name : 'NEW MEDICINE'}
                       onFocus={(e) => e.target.select()}
@@ -776,7 +855,7 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
                     />
                   </td>
                   <td style={td}>
-                    <input type="checkbox" checked={l.vat} disabled={!!p} onChange={(e) => set(l.key, { vat: e.target.checked })} title={p ? 'As set on the medicine' : 'Tick if VAT is charged when this medicine is sold'} aria-label={`VAT ${l.name}`} />
+                    <input type="checkbox" checked={l.vat} onChange={(e) => set(l.key, { vat: e.target.checked })} title={p ? `VAT on ${p.name} (change it here if it is wrong)` : 'Tick if VAT is charged when this medicine is sold'} aria-label={`VAT ${l.name}`} />
                   </td>
                 </tr>
               )
@@ -802,5 +881,29 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
         </span>
       </div>
     </Dialog>
+  )
+}
+
+/** A figure worked out from others that can be typed over: keeps what is typed while the box has focus. */
+function CalcInput({ value, onChange, width, label, title, bold }: { value: string; onChange: (v: number) => void; width: number; label: string; title?: string; bold?: boolean }) {
+  const [text, setText] = useState<string | null>(null)
+  return (
+    <input
+      className="ma-input"
+      style={{ width, height: 19, fontSize: 11, textAlign: 'right', padding: '0 3px', fontWeight: bold ? 'bold' : undefined }}
+      value={text ?? value}
+      onFocus={(e) => {
+        setText(value)
+        e.target.select()
+      }}
+      onChange={(e) => {
+        setText(e.target.value)
+        const n = Number(e.target.value)
+        if (e.target.value.trim() && Number.isFinite(n) && n >= 0) onChange(n)
+      }}
+      onBlur={() => setText(null)}
+      aria-label={label}
+      title={title}
+    />
   )
 }
