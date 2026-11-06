@@ -5,6 +5,7 @@ import { db } from '../../db/db'
 import type { Customer, Sale } from '../../db/types'
 import { useToast } from '../../components/ui'
 import { downloadCsv } from '../../lib/csv'
+import { printReport } from '../../lib/reportPrint'
 import { amt, billNo, dmy, getMedDefaults, inRange, monthStartDmy, paidBy, todayDmy } from '../data'
 import { ADMIN_REPORT_TREE } from '../nav-admin'
 import { MagnifierIcon, SearchLens, ZoomGlass } from '../icons'
@@ -17,6 +18,8 @@ interface ReportDef {
   datesPrefilled: boolean
   /** Show the day calendar: the report runs on that one day (from = to = day). */
   dayFilter?: boolean
+  /** Columns printed in the Sub Total / Total rows of the printed sheet. */
+  totals?: string[]
   selWidth: number
   initialCols: Col[]
   run: (from: string, to: string, sel: string) => Promise<Result>
@@ -78,6 +81,7 @@ const ADMIN_REPORTS: Record<string, ReportDef> = {
     datesPrefilled: false,
     selWidth: 65,
     initialCols: [],
+    totals: ['os'],
     async run() {
       const cs = (await db.customers.toArray()).filter((c) => c.balance > 0).sort((a, b) => b.balance - a.balance)
       return {
@@ -92,6 +96,7 @@ const ADMIN_REPORTS: Record<string, ReportDef> = {
     datesPrefilled: false,
     selWidth: 65,
     initialCols: [],
+    totals: ['ordered', 'received'],
     async run(from, to) {
       const [sups, pos] = await Promise.all([db.suppliers.toArray(), db.purchaseOrders.toArray()])
       const rows = sups
@@ -114,6 +119,7 @@ const ADMIN_REPORTS: Record<string, ReportDef> = {
     datesPrefilled: false,
     selWidth: 65,
     initialCols: [],
+    totals: ['d30', 'd60', 'd90', 'd120', 'dmore'],
     async run() {
       const [cs, sales] = await Promise.all([db.customers.toArray(), db.sales.toArray()])
       const rows = cs
@@ -133,6 +139,7 @@ const ADMIN_REPORTS: Record<string, ReportDef> = {
     datesPrefilled: false,
     selWidth: 65,
     initialCols: [],
+    totals: ['d30', 'd60', 'd90', 'd120', 'dmore'],
     async run() {
       const [sups, pos] = await Promise.all([db.suppliers.toArray(), db.purchaseOrders.toArray()])
       const rows = sups
@@ -161,6 +168,7 @@ const ADMIN_REPORTS: Record<string, ReportDef> = {
     datesPrefilled: false,
     dayFilter: true,
     selWidth: 65,
+    totals: ['cost', 'amount', 'profit'],
     initialCols: [C('date', 'Date', 105), C('doc', 'Doc No', 110), C('client', 'Client Name', 215), C('cost', 'TOT COST', 115, 'right'), C('amount', 'Amount', 100, 'right'), C('profit', 'TOT PROFIT', 400, 'right')],
     async run(from, to) {
       const d = await getMedDefaults()
@@ -193,7 +201,9 @@ const ADMIN_REPORTS: Record<string, ReportDef> = {
     name: 'CASH COLLECTION DEBTORS + OTC',
     selectDefault: 'SELECT',
     datesPrefilled: false,
+    dayFilter: true,
     selWidth: 65,
+    totals: ['cash', 'mpesa', 'card', 'cheque', 'total'],
     initialCols: [C('date', 'Date', 105), C('rec', 'Rec No', 110), C('cash', 'Cash', 100), C('mpesa', 'Mpesa', 100), C('card', 'Credit Card', 105), C('cheque', 'Cheque', 110), C('total', 'Total Rec Amt', 400)],
     async run(from, to) {
       const d = await getMedDefaults()
@@ -224,6 +234,7 @@ const ADMIN_REPORTS: Record<string, ReportDef> = {
     selectDefault: 'SELECT',
     datesPrefilled: false,
     selWidth: 65,
+    totals: [],
     initialCols: [C('name', 'Medicine Name', 105), C('group', 'Group', 95), C('cost', 'Cost Rate', 95, 'right'), C('cash', 'Cash S Rate', 105), C('credit', 'Credit S Rate', 85, 'right'), C('type', 'Type', 400)],
     async run() {
       const [products, cats] = await Promise.all([db.products.toArray(), db.categories.toArray()])
@@ -249,6 +260,7 @@ const ADMIN_REPORTS: Record<string, ReportDef> = {
     selectDefault: 'SELECT',
     datesPrefilled: false,
     selWidth: 65,
+    totals: [],
     initialCols: [C('exp', 'Expiary Date', 105), C('name', 'Product Name', 215), C('qty', 'Avl Qty', 100, 'right'), C('rate', 'Rate', 400, 'right')],
     async run() {
       // The POS does not capture batch / expiry dates yet, so there is
@@ -260,7 +272,9 @@ const ADMIN_REPORTS: Record<string, ReportDef> = {
     name: 'OTC MEDICINE ISSUE',
     selectDefault: 'DATE',
     datesPrefilled: true,
+    dayFilter: true,
     selWidth: 65,
+    totals: ['qty', 'amount'],
     initialCols: [C('doc', 'DOC NO', 105), C('date', 'DATE', 100), C('patient', 'PATIENT NAME', 120), C('age', 'AGE', 100), C('med', 'MEDICINE', 100), C('qty', 'QTY', 100), C('rate', 'RATE', 155, 'right'), C('amount', 'AMT', 400, 'right')],
     async run(from, to) {
       const d = await getMedDefaults()
@@ -298,6 +312,7 @@ function AdminReportViewer({ slug, def }: { slug: string; def: ReportDef }) {
   const [from, setFrom] = useState(def.datesPrefilled ? monthStartDmy() : '')
   const [to, setTo] = useState(def.datesPrefilled ? todayDmy() : '')
   const [day, setDay] = useState(def.dayFilter ? todayDmy() : '')
+  const [used, setUsed] = useState({ from: '', to: '' })
   const [sel, setSel] = useState(def.selectDefault)
   const [q, setQ] = useState('')
   const [result, setResult] = useState<Result | null>(null)
@@ -307,11 +322,12 @@ function AdminReportViewer({ slug, def }: { slug: string; def: ReportDef }) {
   const label = ADMIN_REPORT_TREE.find((r) => r.slug === slug)?.label ?? def.name
   useEffect(() => setResult(null), [slug])
 
+  const runFrom = def.dayFilter ? day : from
+  const runTo = def.dayFilter ? day : to
   const view = async () => {
     try {
       // Day-filtered reports (Daily Sales) run on the picked day alone.
-      const runFrom = def.dayFilter ? day : from
-      const runTo = def.dayFilter ? day : to
+      setUsed({ from: runFrom, to: runTo })
       setResult(await def.run(runFrom, runTo, sel))
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), 'error')
@@ -323,9 +339,24 @@ function AdminReportViewer({ slug, def }: { slug: string; def: ReportDef }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug, day])
   const cols = result?.cols ?? def.initialCols
-  const rows = (result?.rows ?? []).filter((r) => !q.trim() || Object.values(r).some((v) => v.toLowerCase().includes(q.trim().toLowerCase())))
+  const rawRows = result?.rows ?? []
+  const rows = rawRows.filter((r) => !q.trim() || Object.values(r).some((v) => v.toLowerCase().includes(q.trim().toLowerCase())))
+  const printNow = async () => {
+    const d = await getMedDefaults()
+    const ok = printReport({
+      title: def.name,
+      store: `${d.companyName}${d.location ? ' - ' + d.location : ''}${d.licenceFrom || d.licenceTo ? ` ( ${d.licenceFrom || '…'} To ${d.licenceTo || '…'} )` : ''}`,
+      from: used.from,
+      to: used.to,
+      party: !['', 'SELECT', 'ALL', 'DATE'].includes(sel) ? sel : d.location,
+      cols: cols.map((c) => ({ key: c.key, label: c.label })),
+      rows: rawRows,
+      totals: def.totals,
+    })
+    if (!ok) toast('Allow pop-ups to print', 'error')
+  }
   const exportNow = () => {
-    if (fmt === 'ExportReportToPdfFile') return window.print()
+    if (fmt === 'ExportReportToPdfFile') return void printNow()
     downloadCsv(label.replace(/[^a-z0-9]+/gi, '-'), cols.map((c) => c.label), rows.map((r) => cols.map((c) => r[c.key] ?? '')))
   }
   const selOptions =
@@ -377,7 +408,7 @@ function AdminReportViewer({ slug, def }: { slug: string; def: ReportDef }) {
       </div>
       <div className="ma-noprint" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 13 }}>
         <Select value={fmt} onChange={setFmt} plain round width={152} options={['ExportReportToPdfFile', 'ExportReportToExcelFile', 'ExportReportToCsvFile']} />
-        <Btn onClick={() => window.print()}>Print</Btn>
+        <Btn onClick={() => void printNow()}>Print</Btn>
         <Btn onClick={exportNow}>Export</Btn>
       </div>
     </div>

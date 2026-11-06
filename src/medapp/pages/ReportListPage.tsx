@@ -5,16 +5,21 @@ import { db } from '../../db/db'
 import type { Customer, Sale } from '../../db/types'
 import { useToast } from '../../components/ui'
 import { downloadCsv } from '../../lib/csv'
+import { printReport } from '../../lib/reportPrint'
 import { amt, billNo, dmy, getMedDefaults, inRange, monthStartDmy, paidBy, todayDmy } from '../data'
 import { REPORT_TREE } from '../nav'
 import { FindIcon, SearchLens, ZoomGlass } from '../icons'
-import { Btn, DateField, Grid, IBtn, Rows, SearchBar, Select, type Col } from '../ui'
+import { Btn, CalendarPicker, DateField, Grid, IBtn, Rows, SearchBar, Select, type Col } from '../ui'
 
 type Result = { cols: Col[]; rows: Record<string, string>[] }
 interface ReportDef {
   name: string
   selectDefault: string
   datesPrefilled: boolean
+  /** Show the day calendar: the report runs on that one day (from = to = day). */
+  dayFilter?: boolean
+  /** Columns printed in the Sub Total / Total rows of the printed sheet. */
+  totals?: string[]
   initialCols: Col[]
   run: (from: string, to: string, sel: string) => Promise<Result>
 }
@@ -72,6 +77,7 @@ const REPORTS: Record<string, ReportDef> = {
     selectDefault: 'SELECT',
     datesPrefilled: false,
     initialCols: [],
+    totals: ['os'],
     async run() {
       const cs = (await db.customers.toArray()).filter((c) => c.balance > 0).sort((a, b) => b.balance - a.balance)
       return {
@@ -85,6 +91,7 @@ const REPORTS: Record<string, ReportDef> = {
     selectDefault: 'SELECT',
     datesPrefilled: false,
     initialCols: [],
+    totals: ['ordered', 'received'],
     async run(from, to) {
       const [sups, pos] = await Promise.all([db.suppliers.toArray(), db.purchaseOrders.toArray()])
       const rows = sups
@@ -106,6 +113,7 @@ const REPORTS: Record<string, ReportDef> = {
     selectDefault: 'SELECT',
     datesPrefilled: false,
     initialCols: [],
+    totals: ['d30', 'd60', 'd90', 'd120', 'dmore'],
     async run() {
       const [cs, sales] = await Promise.all([db.customers.toArray(), db.sales.toArray()])
       const rows = cs
@@ -124,6 +132,7 @@ const REPORTS: Record<string, ReportDef> = {
     selectDefault: 'SELECT',
     datesPrefilled: false,
     initialCols: [],
+    totals: ['d30', 'd60', 'd90', 'd120', 'dmore'],
     async run() {
       const [sups, pos] = await Promise.all([db.suppliers.toArray(), db.purchaseOrders.toArray()])
       const rows = sups
@@ -150,6 +159,8 @@ const REPORTS: Record<string, ReportDef> = {
     name: 'CASH COLLECTION DEBTORS + OTC',
     selectDefault: 'SELECT',
     datesPrefilled: false,
+    dayFilter: true,
+    totals: ['cash', 'mpesa', 'card', 'cheque', 'total'],
     initialCols: [C('date', 'Date', 100), C('rec', 'Rec No', 100), C('cash', 'Cash', 100), C('mpesa', 'Mpesa', 100), C('card', 'Credit Card', 100), C('cheque', 'Cheque', 100), C('total', 'Total Rec Amt', 400)],
     async run(from, to) {
       const d = await getMedDefaults()
@@ -180,6 +191,7 @@ const REPORTS: Record<string, ReportDef> = {
     selectDefault: 'SELECT',
     datesPrefilled: false,
     initialCols: [C('exp', 'Expiary Date', 100), C('name', 'Product Name', 250), C('qty', 'Avl Qty', 100), C('rate', 'Rate', 550)],
+    totals: [],
     async run() {
       // The POS does not capture batch / expiry dates yet, so there is
       // nothing to list until that field exists on products.
@@ -190,6 +202,8 @@ const REPORTS: Record<string, ReportDef> = {
     name: 'OTC MEDICINE ISSUE',
     selectDefault: 'SELECT',
     datesPrefilled: true,
+    dayFilter: true,
+    totals: ['qty', 'amount'],
     initialCols: [C('exp', 'Expiary Date', 100), C('name', 'Product Name', 250), C('qty', 'Avl Qty', 100), C('rate', 'Rate', 550)],
     async run(from, to) {
       const d = await getMedDefaults()
@@ -222,6 +236,8 @@ function ReportViewer({ slug, def }: { slug: string; def: ReportDef }) {
   const toast = useToast()
   const [from, setFrom] = useState(def.datesPrefilled ? monthStartDmy() : '')
   const [to, setTo] = useState(def.datesPrefilled ? todayDmy() : '')
+  const [day, setDay] = useState(def.dayFilter ? todayDmy() : '')
+  const [used, setUsed] = useState({ from: '', to: '' })
   const [sel, setSel] = useState(def.selectDefault)
   const [q, setQ] = useState('')
   const [result, setResult] = useState<Result | null>(null)
@@ -232,17 +248,41 @@ function ReportViewer({ slug, def }: { slug: string; def: ReportDef }) {
   const label = REPORT_TREE.find((r) => r.slug === slug)?.label ?? def.name
   useEffect(() => setResult(null), [slug])
 
+  // Date-range the report actually ran on (the day picked for day-filtered reports).
+  const runFrom = def.dayFilter ? day : from
+  const runTo = def.dayFilter ? day : to
   const view = async () => {
     try {
-      setResult(await def.run(from, to, sel))
+      setUsed({ from: runFrom, to: runTo })
+      setResult(await def.run(runFrom, runTo, sel))
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), 'error')
     }
   }
+  // Day-filtered reports run on their own whenever another day is picked.
+  useEffect(() => {
+    if (def.dayFilter) void view()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug, day])
   const cols = result?.cols ?? def.initialCols
-  const rows = (result?.rows ?? []).filter((r) => !q.trim() || Object.values(r).some((v) => v.toLowerCase().includes(q.trim().toLowerCase())))
+  const rawRows = result?.rows ?? []
+  const rows = rawRows.filter((r) => !q.trim() || Object.values(r).some((v) => v.toLowerCase().includes(q.trim().toLowerCase())))
+  const printNow = async () => {
+    const d = await getMedDefaults()
+    const ok = printReport({
+      title: def.name,
+      store: `${d.companyName}${d.location ? ' - ' + d.location : ''}${d.licenceFrom || d.licenceTo ? ` ( ${d.licenceFrom || '…'} To ${d.licenceTo || '…'} )` : ''}`,
+      from: used.from,
+      to: used.to,
+      party: sel && sel !== 'SELECT' && sel !== 'ALL' && sel !== 'Date' ? sel : d.location,
+      cols: cols.map((c) => ({ key: c.key, label: c.label })),
+      rows: rawRows,
+      totals: def.totals,
+    })
+    if (!ok) toast('Allow pop-ups to print', 'error')
+  }
   const exportNow = () => {
-    if (fmt === 'ExportReportToPdfFile') return window.print()
+    if (fmt === 'ExportReportToPdfFile') return void printNow()
     downloadCsv(label.replace(/[^a-z0-9]+/gi, '-'), cols.map((c) => c.label), rows.map((r) => cols.map((c) => r[c.key] ?? '')))
   }
   const selOptions = def.selectDefault === 'Date' ? ['Date', ...parties] : ['SELECT', 'ALL']
@@ -254,7 +294,7 @@ function ReportViewer({ slug, def }: { slug: string; def: ReportDef }) {
           <span className="ma-bold-label">Report :</span>
           <span className="ma-report-name">{def.name}</span>
         </span>
-        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, marginRight: 90 }}>
+        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, marginRight: 40 }}>
           <IBtn bare title="Find" onClick={() => searchRef.current?.querySelector('input')?.focus()}>
             <FindIcon size={24} />
           </IBtn>
@@ -265,8 +305,14 @@ function ReportViewer({ slug, def }: { slug: string; def: ReportDef }) {
             <SearchLens size={24} />
           </IBtn>
           <Select value={sel} onChange={setSel} options={selOptions} width={78} plain={def.selectDefault === 'Date'} />
-          <DateField value={from} onChange={setFrom} />
-          <DateField value={to} onChange={setTo} />
+          {def.dayFilter ? (
+            <CalendarPicker value={day} onChange={setDay} />
+          ) : (
+            <>
+              <DateField value={from} onChange={setFrom} />
+              <DateField value={to} onChange={setTo} />
+            </>
+          )}
           <Btn onClick={view}>View</Btn>
         </span>
       </div>
@@ -287,7 +333,7 @@ function ReportViewer({ slug, def }: { slug: string; def: ReportDef }) {
       </div>
       <div className="ma-noprint" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 13 }}>
         <Select value={fmt} onChange={setFmt} plain round width={152} options={['ExportReportToPdfFile', 'ExportReportToExcelFile', 'ExportReportToCsvFile']} />
-        <Btn onClick={() => window.print()}>Print</Btn>
+        <Btn onClick={() => void printNow()}>Print</Btn>
         <Btn onClick={exportNow}>Export</Btn>
       </div>
     </div>
