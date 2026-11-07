@@ -530,7 +530,11 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
   const byId = useMemo(() => new Map(products.map((p) => [p.id!, p])), [products])
   const set = (key: number, patch: Partial<ImportLine>) => setLines((ls) => (ls ?? []).map((l) => (l.key === key ? { ...l, ...patch } : l)))
   /** Stock units, the cost of one unit (cents) and any problem with the pack figures. */
-  const unitsOf = (l: ImportLine) => lineUnits(Number(l.qty) || 0, Number(l.perPack), l.sellBy, toCents(l.cost || '0'))
+  const unitsOf = (l: ImportLine) => {
+    const u = lineUnits(Number(l.qty) || 0, Number(l.perPack), l.sellBy, toCents(l.cost || '0'))
+    // Pieces: a part of a piece (8.79) can't go into stock.
+    return pieces && u.error && /whole units/.test(u.error) ? { ...u, error: `Qty ${l.qty} is not a whole number of pieces — type the real count` } : u
+  }
   /** Units in one pack when the medicine's old per-pack stock and prices are converted, else 1. */
   const factorOf = (l: ImportLine) => {
     const per = Number(l.perPack)
@@ -857,7 +861,14 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
                     />
                   </td>
                   <td style={td}>
-                    <input className="ma-input" style={small(40)} value={l.qty} onChange={(e) => set(l.key, { qty: e.target.value })} aria-label={`Qty ${l.name}`} />
+                    <input
+                      className="ma-input"
+                      style={{ ...small(40), ...bad(l.include && !!u.error && !/Pcs|Sell By/.test(u.error)) }}
+                      value={l.qty}
+                      onChange={(e) => set(l.key, { qty: e.target.value })}
+                      aria-label={`Qty ${l.name}`}
+                      title={l.include && u.error ? u.error : undefined}
+                    />
                   </td>
                   {!pieces && (
                     <>

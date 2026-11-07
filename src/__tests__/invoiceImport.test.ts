@@ -240,6 +240,25 @@ describe('old per-pack stock', () => {
 })
 
 describe('order documents (Daily Order Book): quantities, no prices', () => {
+  it('reads a stock print whose quantity heading is "QTY / UNITS" (no item codes)', () => {
+    const pg: TextItem[] = [
+      T(29, 552, 'SUBGEO CHEMIST'),
+      T(29, 539, 'PUR/GRN (DIRECT INVOICE +) | SUBGEO KWARE'),
+      T(226, 490, 'DESCRIPTION'), T(502, 490, 'QTY / UNITS'), T(599, 490, 'UNIT PRICE'), T(701, 490, 'AMOUNT'),
+      T(34, 473, 'ABZ tabs 1s'), T(537, 472, '27.000'),
+      T(34, 395, 'Amoxicillin Capsules tab 500mg 100s'), T(532, 394, '432.000'),
+      T(34, 426, 'Acnesol Cream 25gm'), T(543, 425, '5.000'),
+      T(23, 17, 'PUR/GRN (Direct Invoice +) - Prices intentionally left blank for entry'), T(797, 17, 'Page 1'),
+    ]
+    const r = parseInvoiceText([pg])
+    expect(r.lines.map((l) => [l.name, l.qty, l.unitPrice])).toEqual([
+      ['ABZ tabs 1s', 27, 0],
+      ['Acnesol Cream 25gm', 5, 0],
+      ['Amoxicillin Capsules tab 500mg 100s', 432, 0],
+    ])
+    expect(r.unpriced).toBe(3)
+  })
+
   const orderPage = (): TextItem[] => [
     T(214, 797, 'DAILY ORDER BOOK'),
     T(34, 774, 'CASH WHOLESALE 6'),

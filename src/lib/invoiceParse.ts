@@ -103,10 +103,13 @@ const after = (row: TextItem[], label: RegExp): string | undefined => {
 type Columns = { y: number; qtyX: number; codeX?: number; descX?: number; priceX?: number }
 function headerOf(row: TextItem[]): Columns | undefined {
   const find = (re: RegExp) => row.find((c) => re.test(c.str.trim()))
-  const qty = find(/^(units?|qty\.?|quantity|qty\s*ordered|ordered)$/i)
+  // "Qty", "Units", "Qty / Units", "Qty (Units)", "Quantity Ordered"…
+  const qty = find(/^(units?|qty\.?|quantity|qty\s*ordered|quantity\s*ordered|ordered|qty\.?\s*[/(-]?\s*units?\)?|quantity\s*[/(-]?\s*units?\)?)$/i)
   const desc = find(/^(item\s*)?(description|product|item\s*name|particulars|details)$/i)
   if (!qty || !desc) return undefined
-  return { y: row[0].y, qtyX: qty.x, codeX: find(/^(item\s*)?code$|^(item\s*)?no\.?$/i)?.x, descX: desc.x, priceX: find(/^(unit\s*)?(price|rate|cost)\b/i)?.x }
+  // Figures sit right-aligned under a wide heading: aim at its middle, not its left edge.
+  const mid = qty.x + Math.max(0, qty.str.trim().length - 4) * 2.5
+  return { y: row[0].y, qtyX: mid, codeX: find(/^(item\s*)?code$|^(item\s*)?no\.?$/i)?.x, descX: desc.x, priceX: find(/^(unit\s*)?(price|rate|cost)\b/i)?.x }
 }
 
 /**
