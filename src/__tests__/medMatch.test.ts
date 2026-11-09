@@ -1,7 +1,7 @@
 // Autocorrecting medicine names read from uploaded (often handwritten) documents.
 import { describe, expect, it } from 'vitest'
 import { AUTO_MATCH, matchMedicine, medKey, packContents, wordSimilarity } from '../lib/medMatch'
-import { autocorrect, candidatesFrom, packSizeFrom, type CatalogueItem } from '../medapp/pages/InvoiceImport'
+import { autocorrect, candidatesFrom, clearKnownPrices, fillKnownPrices, packSizeFrom, type CatalogueItem, type ImportLine } from '../medapp/pages/InvoiceImport'
 import type { Product } from '../db/types'
 
 // Names as they are in the price list.
@@ -98,3 +98,30 @@ describe('autocorrect against this chemist and the company list', () => {
   })
 })
 
+
+describe('prices filled in from the company (same price at every chemist)', () => {
+  const line = (over: Partial<ImportLine> = {}): ImportLine => ({ key: 1, include: true, code: '', name: 'CALPOL', read: 'CALPOL', qty: '5', cost: '0.00', price: '', best: '', vat: false, perPack: '1', sellBy: 1, from: 'none', convert: false, fix: 'exact', options: [], ...over })
+  const own = { id: 1, sku: 'C1', name: 'CALPOL', price: 15000, minPrice: 0, cost: 9000 } as unknown as Product
+  const other: CatalogueItem = { name: 'CALPOL', sku: 'C1', price: 16000, cost: 9500, minPrice: 13000, taxable: false, packSize: null, sellBy: null, chem: 'SUBGEO10' }
+
+  it("uses this chemist's price, another chemist's Best Price and the known cost", () => {
+    const l = fillKnownPrices(line(), own, other, { here: 'this chemist' })
+    expect([l.price, l.best, l.cost]).toEqual(['150.00', '130.00', '90.00'])
+    expect(l.auto).toEqual({ price: 'this chemist', best: 'SUBGEO10', cost: 'this chemist' })
+  })
+  it('a medicine new here takes everything from the chemist that has it', () => {
+    const l = fillKnownPrices(line(), undefined, other, { here: 'this chemist' })
+    expect([l.price, l.best, l.cost, l.auto?.price]).toEqual(['160.00', '130.00', '95.00', 'SUBGEO10'])
+  })
+  it('never overwrites what was typed, a printed cost, or prices being converted; can be undone', () => {
+    const l = fillKnownPrices(line({ price: '170', cost: '88.00' }), own, other, { here: 'x' })
+    expect([l.price, l.cost, l.auto?.price, l.auto?.cost]).toEqual(['170', '88.00', undefined, undefined])
+    expect(fillKnownPrices(line(), own, other, { here: 'x', factor: 100 }).price).toBe('')
+    // A Best Price above the selling price is not used.
+    expect(fillKnownPrices(line(), own, { ...other, minPrice: 20000 }, { here: 'x' }).best).toBe('')
+    // Never entered anywhere: left for the buyer.
+    expect(fillKnownPrices(line(), undefined, undefined, { here: 'x' }).price).toBe('')
+    const filled = fillKnownPrices(line(), undefined, other, { here: 'x' })
+    expect(clearKnownPrices(filled)).toMatchObject({ price: '', best: '', cost: '0.00', auto: {} })
+  })
+})

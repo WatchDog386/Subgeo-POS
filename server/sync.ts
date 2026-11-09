@@ -511,14 +511,21 @@ syncRouter.get('/admin/catalogue', requireAuth, requireOwner, (_req, res) => {
       if (!p.name || /^SRV-/i.test(p.sku)) continue
       const k = key(p.name)
       const old = out.get(k)
-      if (old && Number(old.updatedAt) >= p.updatedAt) continue
+      // The priced entry wins over an unpriced one; between priced ones, the latest.
+      const priced = (x?: Rec) => Number(x?.price) > 0
+      if (old && (priced(old) && !(p.price > 0) || (priced(old) === p.price > 0 && Number(old.updatedAt) >= p.updatedAt))) {
+        // Keep the winner, but fill what it lacks from this chemist's copy.
+        if (!old.minPrice && p.minPrice) old.minPrice = p.minPrice
+        if (!(Number(old.cost) > 0) && p.cost > 0) old.cost = p.cost
+        continue
+      }
       const v = bySku.get(p.sku.trim().toUpperCase()) ?? byName.get(k)
       out.set(k, {
         name: p.name.toUpperCase(),
         sku: p.sku,
         price: p.price,
-        cost: p.cost,
-        minPrice: p.minPrice ?? null,
+        cost: p.cost > 0 ? p.cost : (old?.cost ?? 0),
+        minPrice: p.minPrice || old?.minPrice || null,
         taxable: !!p.taxable,
         packSize: Math.round(Number(v?.packSize) || 0) || null,
         sellBy: Math.round(Number(v?.sellBy) || 0) || null,

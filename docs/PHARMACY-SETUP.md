@@ -267,6 +267,17 @@ Instead of typing a delivery line by line, as the PURCHASE account:
      tabs*, *10 caps*, *60 ml*. Pcs/Pack is filled from it for tablets and
      capsules, and recorded on the medicine for next time. Check it before
      receiving. On an order book Size is for information only: Qty is pieces.
+   **Prices filled in for you.** Prices are the same at every chemist, so
+   every line whose medicine has been entered before, at this chemist or
+   any other, gets its **Selling Price**, **Best Price** and (on a document
+   without prices) **Cost of 1** filled in. Those boxes are **green**. Hover
+   over one to see where it came from: *this chemist* or e.g. *SUBGEO10*. If
+   this chemist has no Best Price or cost for a medicine, it is taken from
+   another chemist that has one. Type over any green box to change it. Only
+   medicines never entered anywhere are left empty (orange **PRICE?**). Tick
+   **Only lines needing a price (N)** to see just those, and type their
+   prices. Picking a medicine from *Did you mean…?* fills its prices too.
+
    **Everything on a line can be edited** before receiving:
    - **Description:** type over the name. On a new medicine it becomes its
      name. On a medicine already in stock it renames that medicine (the line

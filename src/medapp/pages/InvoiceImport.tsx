@@ -46,6 +46,11 @@ export type ImportLine = {
   read: string
   /** How the name was found: exact, autocorrected, picked by the buyer, or still unsure / none. */
   fix: 'exact' | 'auto' | 'picked' | 'ask' | 'none' | 'typed'
+  /**
+   * Boxes filled in from the company's prices (the same medicine at this or
+   * another chemist): the source, e.g. "SUBGEO10". Cleared when typed over.
+   */
+  auto?: { price?: string; best?: string; cost?: string }
   /** What one pack holds as typed by the buyer (e.g. "30 tabs", "100 ml"); undefined = read from the name. */
   size?: string
   /** Close medicines from the company list, best first (for "Did you mean"). */
@@ -56,6 +61,44 @@ export type ImportLine = {
 export type CatalogueItem = { name: string; sku: string; price: number; cost: number; minPrice: number | null; taxable: boolean; packSize: number | null; sellBy: number | null; chem?: string }
 /** A medicine a line can be corrected to: one in this chemist's stock, or one from the company list. */
 export type MedCandidate = { name: string; sku: string; productId?: number; price?: number; minPrice?: number; taxable: boolean; packSize?: number; sellBy?: number; chem?: string }
+
+/**
+ * Fill a line's empty Selling Price, Best Price and (unpriced) cost from what
+ * the company already knows for that medicine: this chemist's own record
+ * first, else the same medicine at another chemist. Prices are the same
+ * everywhere, so only medicines never entered anywhere are left to type.
+ * Boxes already filled by the buyer are never touched.
+ */
+export function fillKnownPrices(l: ImportLine, own: Product | undefined, company: CatalogueItem | undefined, opts: { here: string; factor?: number }): ImportLine {
+  // Old per-pack stock being converted: its prices are divided on the screen instead.
+  if ((opts.factor ?? 1) > 1) return l
+  const pickC = (mine: number | undefined, theirs: number | null | undefined) =>
+    mine && mine > 0 ? { v: mine, from: opts.here } : theirs && theirs > 0 ? { v: theirs, from: company?.chem ?? 'price list' } : undefined
+  const out: ImportLine = { ...l, auto: { ...(l.auto ?? {}) } }
+  const price = pickC(own?.price, company?.price)
+  if (!l.price.trim() && price) {
+    out.price = (price.v / 100).toFixed(2)
+    out.auto!.price = price.from
+  }
+  const best = pickC(own?.minPrice, company?.minPrice)
+  if (!l.best.trim() && best && (!price || best.v <= price.v)) {
+    out.best = (best.v / 100).toFixed(2)
+    out.auto!.best = best.from
+  }
+  // A document without prices (order book, stock list): the known cost of one piece.
+  const cost = pickC(own?.cost, company?.cost)
+  if (!(Number(l.cost) > 0) && cost && Number(l.perPack) <= 1) {
+    out.cost = (cost.v / 100).toFixed(2)
+    out.auto!.cost = cost.from
+  }
+  return out
+}
+
+/** Undo what fillKnownPrices filled (the line now points at another medicine). */
+export function clearKnownPrices(l: ImportLine): ImportLine {
+  if (!l.auto) return l
+  return { ...l, price: l.auto.price ? '' : l.price, best: l.auto.best ? '' : l.best, cost: l.auto.cost ? '0.00' : l.cost, auto: {} }
+}
 
 /** This chemist's medicines first, then the company list's others (same name = same medicine). */
 export function candidatesFrom(products: Product[], catalogue: CatalogueItem[]): MedCandidate[] {
@@ -295,6 +338,8 @@ export async function receiveInvoice(input: {
 }
 
 const MARKUP_KEY = 'medapp:import-markup'
+/** A box filled in from the company's prices (green). */
+const AUTO_STYLE: React.CSSProperties = { background: '#e8f5e9', borderColor: '#81c784', color: '#1b5e20' }
 
 /**
  * An upload being checked, saved as it is typed (on this computer only) so
@@ -506,6 +551,18 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
   // No pack cost (an order book): nothing to compare with, so leave it unticked.
   const looksPerPack = (p: Product | undefined, perPack: number, packCostKes: number) => !!p && perPack > 1 && packCostKes > 0 && p.price >= 0.6 * Math.round(packCostKes * 100)
 
+  const catByName = useMemo(() => new Map((catalogue ?? []).map((c) => [norm(c.name), c])), [catalogue])
+  const catBySku = useMemo(() => new Map((catalogue ?? []).map((c) => [c.sku.trim().toUpperCase(), c])), [catalogue])
+  /** Fill a line's prices from this chemist's record or the company's (see fillKnownPrices). */
+  const withPrices = (l: ImportLine): ImportLine => {
+    const p = l.productId !== undefined ? products.find((x) => x.id === l.productId) : undefined
+    // A new medicine is looked up only when its name is known exactly (corrected or picked).
+    const c = catByName.get(norm(p?.name ?? l.name)) ?? (p ? catBySku.get(p.sku.trim().toUpperCase()) : undefined)
+    const per = Number(l.perPack)
+    const factor = l.convert && p && per > 1 && per % l.sellBy === 0 ? per / l.sellBy : 1
+    return fillKnownPrices(l, p, c, { here: 'this chemist', factor })
+  }
+
   // Match once the medicines (and their pack sizes) have loaded.
   if (lines === null && loaded && medDocs && catalogue) {
     setLines(
@@ -516,12 +573,12 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
         const p = matchProduct(products, l.code, l.name)
         if (p) {
           const pk = packFor(p, l.name)
-          return { ...base, productId: p.id, name: p.name.toUpperCase(), vat: p.taxable, ...pk, convert: pk.from !== 'medicine' && looksPerPack(p, Number(pk.perPack), l.unitPrice), fix: 'exact' as const, options: [] }
+          return withPrices({ ...base, productId: p.id, name: p.name.toUpperCase(), vat: p.taxable, ...pk, convert: pk.from !== 'medicine' && looksPerPack(p, Number(pk.perPack), l.unitPrice), fix: 'exact' as const, options: [] })
         }
         // Misspelt / handwritten: the closest medicine of this chemist or of the company list.
         const ac = autocorrect(read, cands, candKeys)
         const options = ac.options.map((o) => ({ name: o.item.name, score: o.score }))
-        if (ac.use) return { ...base, vat: false, ...packFor(undefined, read), ...fromCand(ac.use, { code: base.code, read, cost: l.unitPrice }), fix: norm(ac.use.name) === norm(read) ? ('exact' as const) : ('auto' as const), options } as ImportLine
+        if (ac.use) return withPrices({ ...base, vat: false, ...packFor(undefined, read), ...fromCand(ac.use, { code: base.code, read, cost: l.unitPrice }), price: '', best: '', fix: norm(ac.use.name) === norm(read) ? ('exact' as const) : ('auto' as const), options } as ImportLine)
         return { ...base, productId: undefined, vat: false, ...packFor(undefined, read), fix: options.length ? ('ask' as const) : ('none' as const), options }
       }),
     )
@@ -529,6 +586,12 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
   const list = lines ?? []
   const byId = useMemo(() => new Map(products.map((p) => [p.id!, p])), [products])
   const set = (key: number, patch: Partial<ImportLine>) => setLines((ls) => (ls ?? []).map((l) => (l.key === key ? { ...l, ...patch } : l)))
+  /** The line now points at another medicine (or none): refill its prices for that one. */
+  const setMedicine = (key: number, patch: Partial<ImportLine>) =>
+    setLines((ls) => (ls ?? []).map((l) => (l.key === key ? withPrices({ ...clearKnownPrices(l), ...patch, auto: {} }) : l)))
+  /** Typed over: no longer marked as filled in automatically. */
+  const typed = (l: ImportLine, field: 'price' | 'best' | 'cost', v: string) => set(l.key, { [field]: v, auto: { ...(l.auto ?? {}), [field]: undefined } })
+  const needsPrice = (l: ImportLine) => l.include && priceOf(l) <= 0
   /** Stock units, the cost of one unit (cents) and any problem with the pack figures. */
   const unitsOf = (l: ImportLine) => {
     const u = lineUnits(Number(l.qty) || 0, Number(l.perPack), l.sellBy, toCents(l.cost || '0'))
@@ -556,10 +619,10 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
   const pick = (l: ImportLine, name: string) => {
     const v = name.trim().toUpperCase()
     if (!v || v === 'NEW MEDICINE' || v === l.read) {
-      return set(l.key, { productId: undefined, name: l.read, price: '', best: '', convert: false, ...packFor(undefined, l.read), fix: 'none' })
+      return setMedicine(l.key, { productId: undefined, name: l.read, price: '', best: '', convert: false, ...packFor(undefined, l.read), fix: 'none' })
     }
     const c = cands.find((x) => x.name === v)
-    if (c) set(l.key, { ...fromCand(c, { code: l.code, read: l.read, cost: Number(l.cost) || 0 }), fix: 'picked' })
+    if (c) setMedicine(l.key, { ...fromCand(c, { code: l.code, read: l.read, cost: Number(l.cost) || 0 }), price: '', best: '', fix: 'picked' })
   }
   /** The buyer types the name: renames what is received (a matched medicine is renamed, a new one gets this name). */
   const typeName = (l: ImportLine, v: string) => set(l.key, { name: v.toUpperCase(), fix: 'typed' })
@@ -568,7 +631,7 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
     const v = l.name.trim().toUpperCase().replace(/\s+/g, ' ')
     if (!v) return set(l.key, { name: l.read })
     const same = cands.find((c) => norm(c.name) === norm(v))
-    if (same && same.productId !== l.productId) return set(l.key, { ...fromCand(same, { code: l.code, read: l.read, cost: Number(l.cost) || 0 }), fix: 'picked' })
+    if (same && same.productId !== l.productId) return setMedicine(l.key, { ...fromCand(same, { code: l.code, read: l.read, cost: Number(l.cost) || 0 }), price: '', best: '', fix: 'picked' })
     if (l.productId === undefined) {
       const ac = autocorrect(v, cands, candKeys)
       set(l.key, { name: v, options: ac.options.map((o) => ({ name: o.item.name, score: o.score })), ...packFor(undefined, v, l.read) })
@@ -581,7 +644,10 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
   const newCount = chosen.filter((l) => l.productId === undefined).length
   const matchedCount = chosen.length - newCount
   const adds = inv.subtotal !== undefined && Math.abs(inv.linesTotal - inv.subtotal) < 0.05
-  const shown = list.filter((l) => !q.trim() || `${l.code} ${l.name}`.toUpperCase().includes(q.trim().toUpperCase()))
+  const [onlyNeeding, setOnlyNeeding] = useState(false)
+  const needing = list.filter(needsPrice).length
+  const filledIn = list.filter((l) => l.include && (l.auto?.price || l.auto?.best)).length
+  const shown = list.filter((l) => (!q.trim() || `${l.code} ${l.name}`.toUpperCase().includes(q.trim().toUpperCase())) && (!onlyNeeding || needsPrice(l)))
   const AMOUNT = /^\d+(\.\d{0,2})?$/
 
   const receive = async () => {
@@ -726,6 +792,12 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4, flexWrap: 'wrap' }}>
         <Input value={q} onChange={setQ} width={260} placeholder="Find a line by code or name" />
+        <span style={{ fontSize: 11, color: '#1b5e20' }} title="Prices filled in from this chemist or another chemist (green boxes)">
+          ✓ {filledIn} priced automatically
+        </span>
+        <Check checked={onlyNeeding} onChange={setOnlyNeeding} dark>
+          <b style={{ color: needing ? '#ef6c00' : undefined }}>Only lines needing a price ({needing})</b>
+        </Check>
         <Check checked={list.length > 0 && list.every((l) => l.include)} onChange={(v) => setLines((ls) => (ls ?? []).map((l) => ({ ...l, include: v })))} dark>
           All
         </Check>
@@ -901,7 +973,14 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
                     </>
                   )}
                   <td style={td}>
-                    <input className="ma-input" style={small(58)} value={l.cost} onChange={(e) => set(l.key, { cost: e.target.value })} aria-label={`Cost ${l.name}`} />
+                    <input
+                      className="ma-input"
+                      style={{ ...small(58), ...(l.auto?.cost ? AUTO_STYLE : {}) }}
+                      value={l.cost}
+                      onChange={(e) => typed(l, 'cost', e.target.value)}
+                      aria-label={`Cost ${l.name}`}
+                      title={l.auto?.cost ? `Cost filled in from ${l.auto.cost} — type over it if this delivery cost differs` : undefined}
+                    />
                   </td>
                   <td style={td}>
                     <CalcInput
@@ -958,23 +1037,23 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
                   <td style={td}>
                     <input
                       className="ma-input"
-                      style={{ ...small(62), ...(sell > 0 && u.unitCost > 0 && sell * 100 < u.unitCost ? { color: '#c00' } : {}) }}
+ style={{ ...small(62), ...(l.auto?.price ? AUTO_STYLE : {}), ...(sell > 0 && u.unitCost > 0 && sell * 100 < u.unitCost ? { color: '#c00' } : {}), ...(l.include && sell <= 0 ? { borderColor: '#ef6c00', background: '#fff3e0' } : {}) }}
                       value={l.price}
-                      placeholder={sell ? sell.toFixed(2) : 'price'}
-                      onChange={(e) => set(l.key, { price: e.target.value })}
+                      placeholder={sell ? sell.toFixed(2) : 'PRICE?'}
+                      onChange={(e) => typed(l, 'price', e.target.value)}
                       aria-label={`Selling price ${l.name}`}
-                      title={p ? `Current selling price ${(p.price / 100).toFixed(2)}${f > 1 ? ` per pack = ${(Math.round(p.price / f) / 100).toFixed(2)} per unit` : ' per unit'} — type a new one to change it` : 'Selling price of one unit (blank = cost of 1 + markup)'}
+                      title={l.auto?.price ? `Price from ${l.auto.price} (prices are the same at every chemist) — type over it to change it` : p ? `Current selling price ${(p.price / 100).toFixed(2)}${f > 1 ? ` per pack = ${(Math.round(p.price / f) / 100).toFixed(2)} per unit` : ' per unit'} — type a new one to change it` : 'Selling price of one unit (blank = cost of 1 + markup)'}
                     />
                   </td>
                   <td style={td}>
                     <input
                       className="ma-input"
-                      style={{ ...small(62), background: '#fff8d6', ...bad(bestN !== undefined && sell > 0 && bestN > sell) }}
+                      style={{ ...small(62), background: '#fff8d6', ...(l.auto?.best ? AUTO_STYLE : {}), ...bad(bestN !== undefined && sell > 0 && bestN > sell) }}
                       value={l.best}
                       placeholder={cb !== undefined ? (cb / 100).toFixed(2) : 'lowest'}
-                      onChange={(e) => set(l.key, { best: e.target.value })}
+                      onChange={(e) => typed(l, 'best', e.target.value)}
                       aria-label={`Best Price ${l.name}`}
-                      title="Lowest price one unit may be sold for (KES, not %)"
+                      title={l.auto?.best ? `Best Price from ${l.auto.best} — type over it to change it` : 'Lowest price one unit may be sold for (KES, not %)'}
                     />
                   </td>
                   <td style={td}>
