@@ -277,6 +277,12 @@ Instead of typing a delivery line by line, as the PURCHASE account:
    medicines never entered anywhere are left empty (orange **PRICE?**). Tick
    **Only lines needing a price (N)** to see just those, and type their
    prices. Picking a medicine from *Did you mean…?* fills its prices too.
+   **Each chemist keeps its own prices.** Changing a price at one chemist
+   (here, on *Medicine Prices*, or anywhere else) never changes another
+   chemist's price. A chemist's own price is always used on its uploads. A
+   chemist that has never priced a medicine is offered the **default**: the
+   price most chemists use (a tie goes to the latest). So one chemist's
+   change does not become everyone's default.
 
    **Everything on a line can be edited** before receiving:
    - **Description:** type over the name. On a new medicine it becomes its

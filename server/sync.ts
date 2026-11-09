@@ -2,6 +2,7 @@
 // Storage is the sync_records table (migrations/003_sync.sql): one JSON row per
 // till record, scoped to a chemist (branch) or company-wide (scope 0).
 import crypto from 'node:crypto'
+import { companyPrice } from '../src/lib/companyPrice'
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import { sql } from './db'
 import { hashPassword } from '../src/lib/sha256'
@@ -501,7 +502,8 @@ syncRouter.get('/admin/products', requireAuth, requireOwner, (req, res) => {
  */
 syncRouter.get('/admin/catalogue', requireAuth, requireOwner, (_req, res) => {
   const key = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim()
-  const out = new Map<string, Rec>()
+  // Every chemist's copy of each medicine (same name = same medicine).
+  const groups = new Map<string, { p: Product; chem: string; packSize: number | null; sellBy: number | null }[]>()
   for (const b of branches()) {
     const docs = listTable<Rec>('docs', b.id).filter((d) => d.slug === 'medicine')
     const vals = (d: Rec) => (d.values ?? {}) as Record<string, string>
@@ -510,31 +512,30 @@ syncRouter.get('/admin/catalogue', requireAuth, requireOwner, (_req, res) => {
     for (const p of listTable<Product>('products', b.id)) {
       if (!p.name || /^SRV-/i.test(p.sku)) continue
       const k = key(p.name)
-      const old = out.get(k)
-      // The priced entry wins over an unpriced one; between priced ones, the latest.
-      const priced = (x?: Rec) => Number(x?.price) > 0
-      if (old && (priced(old) && !(p.price > 0) || (priced(old) === p.price > 0 && Number(old.updatedAt) >= p.updatedAt))) {
-        // Keep the winner, but fill what it lacks from this chemist's copy.
-        if (!old.minPrice && p.minPrice) old.minPrice = p.minPrice
-        if (!(Number(old.cost) > 0) && p.cost > 0) old.cost = p.cost
-        continue
-      }
       const v = bySku.get(p.sku.trim().toUpperCase()) ?? byName.get(k)
-      out.set(k, {
-        name: p.name.toUpperCase(),
-        sku: p.sku,
-        price: p.price,
-        cost: p.cost > 0 ? p.cost : (old?.cost ?? 0),
-        minPrice: p.minPrice || old?.minPrice || null,
-        taxable: !!p.taxable,
-        packSize: Math.round(Number(v?.packSize) || 0) || null,
-        sellBy: Math.round(Number(v?.sellBy) || 0) || null,
-        chem: branchCode(b.id),
-        updatedAt: p.updatedAt,
-      })
+      groups.set(k, [...(groups.get(k) ?? []), { p, chem: branchCode(b.id), packSize: Math.round(Number(v?.packSize) || 0) || null, sellBy: Math.round(Number(v?.sellBy) || 0) || null }])
     }
   }
-  res.json([...out.values()].sort((a, b) => String(a.name).localeCompare(String(b.name))))
+  const out: Rec[] = []
+  for (const copies of groups.values()) {
+    // The price most chemists use: one chemist's own change does not become everyone's default.
+    const cp = companyPrice(copies.map((c) => ({ price: c.p.price, minPrice: c.p.minPrice, cost: c.p.cost, updatedAt: c.p.updatedAt, chem: c.chem })))!
+    const latest = copies.slice().sort((a, b) => b.p.updatedAt - a.p.updatedAt)
+    const main = latest.find((c) => c.chem === cp.chem && c.p.price === cp.price) ?? latest[0]
+    const pack = latest.find((c) => c.packSize)
+    out.push({
+      name: main.p.name.toUpperCase(),
+      sku: main.p.sku,
+      price: cp.price,
+      cost: cp.cost,
+      minPrice: cp.minPrice,
+      taxable: !!main.p.taxable,
+      packSize: pack?.packSize ?? null,
+      sellBy: pack?.sellBy ?? null,
+      chem: copies.length > 1 && copies.filter((c) => c.p.price === cp.price).length > 1 ? `${copies.filter((c) => c.p.price === cp.price).length} chemists` : cp.chem,
+    })
+  }
+  res.json(out.sort((a, b) => String(a.name).localeCompare(String(b.name))))
 })
 
 /** Copy the medicine list of one chemist into another (zero stock; existing SKUs are skipped). */

@@ -176,7 +176,7 @@ export default function PriceTable() {
       </div>
       <div className="ma-label ma-note" style={{ margin: '0 0 10px 10px', fontSize: 11, maxWidth: 900 }}>
         <b>Selling Price</b> is offered first. <b>Best Price</b> is the lowest a medicine may be sold for (an amount in KES, not %): if the customer complains, the seller may come down to it, never below — the tills refuse any bill, discount or
-        wholesale invoice below it. Blank = no best price. Pick the chemist in the header to edit another chemist&apos;s prices.
+        wholesale invoice below it. Blank = no best price. <b>Prices here change only this chemist</b>: other chemists keep the prices they have keyed. When a medicine is uploaded at a chemist that has never priced it, it is offered the price most chemists use. Pick the chemist in the header to edit another chemist&apos;s prices.
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, margin: '0 0 6px 10px' }}>
         <SearchBar value={q} onChange={setQ} width={260} />
