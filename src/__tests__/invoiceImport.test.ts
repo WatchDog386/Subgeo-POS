@@ -239,6 +239,27 @@ describe('old per-pack stock', () => {
   })
 })
 
+describe('sales quote with units on quantities, a VAT % column and wrapped codes', () => {
+  it('reads Philmed-style lines, the supplier on the right, number, date and total', () => {
+    const pg: TextItem[] = [
+      T(57, 796, 'Sales Quote SQ299284'), T(57, 775, 'November 9, 2026'),
+      T(57, 704, 'SUBGEO PHARMACY UMOJA 3'), T(486, 704, 'PHILMED LIMITED'),
+      T(57, 508, 'No.'), T(105, 508, 'Description'), T(261, 508, 'Quantity'), T(349, 518, 'Unit Price Excl.'), T(389, 508, 'VAT'), T(452, 508, 'VAT %'), T(483, 508, 'Line Amount Excl. VAT'),
+      T(57, 482, 'ITM0491'), T(105, 482, 'PCM CALPOL SUSP 60ML'), T(288, 482, '5 WHL'), T(340, 482, '265.00'), T(447, 482, '0'), T(482, 482, '1,325.00'),
+      T(57, 468, '0'),
+      T(57, 187, 'ITM0546'), T(105, 187, 'SALBUTAMOL(VENTIL) BPTABS'), T(288, 187, '3 WHL'), T(340, 187, '50.00'), T(447, 187, '0'), T(482, 187, '150.00'),
+      T(57, 174, '8'), T(105, 174, '100S'),
+      T(340, 143, 'Total KSH Incl. VAT'), T(522, 143, '1,475.00'),
+    ]
+    const r = parseInvoiceText([pg])
+    expect(r.lines.map((l) => [l.code, l.name, l.qty, l.unitPrice, l.amount])).toEqual([
+      ['ITM04910', 'PCM CALPOL SUSP 60ML', 5, 265, 1325],
+      ['ITM05468', 'SALBUTAMOL(VENTIL) BPTABS 100S', 3, 50, 150],
+    ])
+    expect([r.supplier, r.docNo, invoiceDate(r.date), r.total]).toEqual(['PHILMED LIMITED', 'SQ299284', '09-11-2026', 1475])
+  })
+})
+
 describe('order documents (Daily Order Book): quantities, no prices', () => {
   it('reads a stock print whose quantity heading is "QTY / UNITS" (no item codes)', () => {
     const pg: TextItem[] = [

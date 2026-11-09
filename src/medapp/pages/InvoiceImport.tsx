@@ -643,7 +643,10 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
   const linesSum = chosen.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.cost) || 0), 0)
   const newCount = chosen.filter((l) => l.productId === undefined).length
   const matchedCount = chosen.length - newCount
-  const adds = inv.subtotal !== undefined && Math.abs(inv.linesTotal - inv.subtotal) < 0.05
+  // Checked against the subtotal, else (no VAT on top) the printed total.
+  const checkAgainst = inv.subtotal ?? inv.total
+  const checkLabel = inv.subtotal !== undefined ? 'subtotal' : 'total'
+  const adds = checkAgainst !== undefined && Math.abs(inv.linesTotal - checkAgainst) < 0.05
   const [onlyNeeding, setOnlyNeeding] = useState(false)
   const needing = list.filter(needsPrice).length
   const filledIn = list.filter((l) => l.include && (l.auto?.price || l.auto?.best)).length
@@ -780,9 +783,14 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
           <b>{list.length}</b> lines read from {inv.pages} page(s){inv.date ? ` · dated ${inv.date}` : ''} · {chosen.reduce((s, l) => s + (Number(l.qty) || 0), 0)} item(s) in all
         </span>
         <span style={{ color: inv.unpriced === list.length ? '#8a5a00' : adds ? '#2e7d32' : '#c00', fontWeight: 'bold', display: inv.unpriced === list.length ? 'none' : undefined }}>
-          {inv.subtotal === undefined ? `Lines total ${amt(Math.round(inv.linesTotal * 100))} (no subtotal printed to check against)` : adds ? `✓ Lines add up to the invoice subtotal ${amt(Math.round(inv.subtotal * 100))}` : `⚠ Lines total ${amt(Math.round(inv.linesTotal * 100))} but the invoice subtotal is ${amt(Math.round(inv.subtotal * 100))} — check for missed lines`}
+          {checkAgainst === undefined
+            ? `Lines total ${amt(Math.round(inv.linesTotal * 100))} (no subtotal printed to check against)`
+            : adds
+              ? `✓ Lines add up to the invoice ${checkLabel} ${amt(Math.round(checkAgainst * 100))}`
+              : inv.subtotal === undefined
+                ? `Lines total ${amt(Math.round(inv.linesTotal * 100))} · invoice total ${amt(Math.round(checkAgainst * 100))} (may include VAT — check for missed lines)`
+                : `⚠ Lines total ${amt(Math.round(inv.linesTotal * 100))} but the invoice subtotal is ${amt(Math.round(checkAgainst * 100))} — check for missed lines`}
         </span>
-        {inv.vat !== undefined && <span>VAT {amt(Math.round(inv.vat * 100))}</span>}
         {inv.total !== undefined && <span>Invoice total {amt(Math.round(inv.total * 100))}</span>}
         <span style={{ marginLeft: 'auto' }}>
           {corrected > 0 && <span style={{ color: '#2e7d32', marginRight: 10 }}>✓ {corrected} name(s) corrected</span>}
@@ -841,7 +849,6 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
               <th style={th}>In stock</th>
               <th style={th} title="Selling price of one unit (blank = keep the current one)">Selling Price</th>
               <th style={th} title="Lowest price one unit may be sold for (KES)">Best Price</th>
-              <th style={th}>VAT</th>
             </tr>
           </thead>
           <tbody>
@@ -1055,9 +1062,6 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
                       aria-label={`Best Price ${l.name}`}
                       title={l.auto?.best ? `Best Price from ${l.auto.best} — type over it to change it` : 'Lowest price one unit may be sold for (KES, not %)'}
                     />
-                  </td>
-                  <td style={td}>
-                    <input type="checkbox" checked={l.vat} onChange={(e) => set(l.key, { vat: e.target.checked })} title={p ? `VAT on ${p.name} (change it here if it is wrong)` : 'Tick if VAT is charged when this medicine is sold'} aria-label={`VAT ${l.name}`} />
                   </td>
                 </tr>
               )

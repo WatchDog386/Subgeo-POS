@@ -314,7 +314,7 @@ Instead of typing a delivery line by line, as the PURCHASE account:
    the medicine's current price; for a new medicine it is Cost of 1 +
    **Markup % for new**. **Best Price** is the lowest a unit may be sold for
    (KES, not %). It can't be above the Selling Price, and the lines warn if
-   either is below the Cost of 1. Tick **VAT** for new medicines that carry VAT.
+   either is below the Cost of 1.
 6. **Medicines counted per pack before.** The first time such a medicine comes in by
    the piece, *In stock* shows e.g. `2 → 200` with **convert old stock**
    ticked. Its old packs become units and its old prices are divided down to
