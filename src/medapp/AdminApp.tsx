@@ -38,6 +38,7 @@ import { Btn, Dialog } from './ui'
 import { useToast } from '../components/ui'
 import { toggleFullscreen } from '../lib/fullscreen'
 import AdminHomePage from './pages/AdminHomePage'
+import AdminProfilePage from './pages/AdminProfilePage'
 import AdminReportListPage from './pages/AdminReportListPage'
 import ChartsPage from './pages/ChartsPage'
 import { ModuleListPage, ModulesEmpty } from './pages/ModulesPage'
@@ -168,7 +169,7 @@ export default function AdminApp() {
       <header className="ma-header">
         <img className="ma-logo" src="/logo.png" alt="SUBGEO" />
         <span className="ma-version">{APP_VERSION}</span>
-        <div className="ma-welcome">
+        <div className="ma-welcome" role="link" tabIndex={0} style={{ cursor: 'pointer' }} title="My profile — details and passwords" onClick={() => nav('/my-profile')} onKeyDown={(e) => e.key === 'Enter' && nav('/my-profile')}>
           <UsersIcon />
           <div>
             <div>Welcome</div>
@@ -290,6 +291,7 @@ export default function AdminApp() {
               <Route path="/notifications" element={<Legacy><NotificationsPage /></Legacy>} />
               <Route path="/messages" element={<Legacy><MessagesPage /></Legacy>} />
               <Route path="/profile" element={<Legacy><ProfilePage /></Legacy>} />
+              <Route path="/my-profile" element={<AdminProfilePage />} />
               <Route path="/staff" element={<Legacy><StaffPage /></Legacy>} />
               <Route path="/logs" element={<Legacy><LogsPage /></Legacy>} />
               <Route path="/settings" element={<Legacy><SettingsPage /></Legacy>} />

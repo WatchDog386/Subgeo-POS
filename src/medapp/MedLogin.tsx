@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useLiveQuery } from 'dexie-react-hooks'
+import { db } from '../db/db'
 import { useSession } from '../session'
 import { APP_VERSION, BRAND_NAME } from './data'
 import { EmrLiteLogo, LogoutIcon, NotepadIcon, UsersIcon } from './icons'
@@ -16,6 +18,19 @@ export default function MedLogin() {
   const [pass, setPass] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  // Admin and purchase accounts: the browser must never save or fill in their
+  // password. Their password box is not a password field to the browser (the
+  // dots are drawn by CSS), so it offers neither. Cashiers keep autofill.
+  const users = useLiveQuery(() => db.users.toArray(), [], [])
+  const privileged = useMemo(
+    () => new Set(['admin', 'purchase', ...users.filter((u) => u.role === 'owner' || u.role === 'purchase').map((u) => u.username.toLowerCase())]),
+    [users],
+  )
+  const secret = privileged.has(name.trim().toLowerCase())
+  // A password the browser filled in for one of these accounts is wiped.
+  useEffect(() => {
+    if (secret) setPass('')
+  }, [secret])
 
   const submit = async () => {
     if (busy || !name.trim() || !pass) return
@@ -77,16 +92,38 @@ export default function MedLogin() {
             <label className="ma-login-label" htmlFor="ma-login-pass">
               Pass
             </label>
-            <input
-              id="ma-login-pass"
-              className="ma-input"
-              style={{ width: 150 }}
-              type="password"
-              value={pass}
-              onChange={(e) => setPass(e.target.value.slice(0, 64))}
-              onKeyDown={(e) => e.key === 'Enter' && void submit()}
-              autoComplete="current-password"
-            />
+            {secret ? (
+              <input
+                key="secret"
+                id="ma-login-pass"
+                className="ma-input"
+                style={{ width: 150, WebkitTextSecurity: 'disc' } as React.CSSProperties}
+                type="text"
+                name="ma-admin-code"
+                value={pass}
+                onChange={(e) => setPass(e.target.value.slice(0, 64))}
+                onKeyDown={(e) => e.key === 'Enter' && void submit()}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                data-lpignore="true"
+                data-1p-ignore="true"
+                data-form-type="other"
+              />
+            ) : (
+              <input
+                key="pass"
+                id="ma-login-pass"
+                className="ma-input"
+                style={{ width: 150 }}
+                type="password"
+                value={pass}
+                onChange={(e) => setPass(e.target.value.slice(0, 64))}
+                onKeyDown={(e) => e.key === 'Enter' && void submit()}
+                autoComplete="current-password"
+              />
+            )}
             <button type="button" className="ma-btn ma-login-btn" onClick={() => void submit()} disabled={busy || !name.trim() || !pass}>
               {busy ? 'Signing in…' : 'Log In'}
             </button>
