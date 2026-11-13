@@ -4,7 +4,7 @@
 // lets the buyer check it, then receives it in one go: stock up, cost
 // updated, new medicines created, and one MRN document filed with the PDF
 // attached and every line (synced to the server like any document).
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
 import { logActivity } from '../../db/logs'
@@ -558,6 +558,8 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
   const [q, setQ] = useState('')
   const [saving, setSaving] = useState(false)
   const [lines, setLines] = useState<ImportLine[] | null>(null)
+  const view = useReviewView('invoice-review')
+  const pdfUrl = usePdfUrl(file.data)
   const markupV = markup ?? savedMarkup
   const expenseV = expense ?? lastExpense
 
@@ -696,7 +698,7 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
   const small = (w: number, right = true): React.CSSProperties => ({ width: w, height: 19, fontSize: 11, textAlign: right ? 'right' : 'left', padding: '0 3px' })
   const bad = (on: boolean): React.CSSProperties => (on ? { borderColor: '#e57373', background: '#fff1f1' } : {})
   return (
-    <Dialog title={`Upload Supplier Invoice — ${file.name}`} onClose={onClose} width={1320}>
+    <Dialog title={`Upload Supplier Invoice — ${file.name}`} onClose={onClose} width={1320} sizable="invoice-review">
       <div style={{ display: 'flex', gap: 18, alignItems: 'center', flexWrap: 'wrap' }}>
         <Btn onClick={onClose} title="Back to Pur/GRN (Direct Invoice) without receiving">
           ◀ Back
@@ -738,13 +740,20 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
         <Check checked={list.length > 0 && list.every((l) => l.include)} onChange={(v) => setLines((ls) => (ls ?? []).map((l) => ({ ...l, include: v })))} dark>
           All
         </Check>
+        <ViewControls view={view} pdf={!!pdfUrl} />
         <span className="ma-label ma-note" style={{ fontSize: 10 }}>
           Qty and Pack Cost are as on the invoice (packs / boxes). Check <b>Pcs/Pack</b> (read from the description where it says e.g. 100S, 10X10) and choose <b>Sell By</b>: each, a pair, or the whole pack. Stock goes up by <b>Units</b>; <b>Cost of 1</b> = Pack Cost ÷ units in a pack. Selling
           Price and <b>Best Price</b> (the lowest it may be sold for, KES) are per unit.
         </span>
       </div>
-      <div style={{ height: 380, overflow: 'auto', border: '1px solid #c3c3c3', background: '#fff' }}>
-        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+      <div className="ma-fill">
+        {view.showPdf && pdfUrl && (
+          <div style={{ width: '42%', minWidth: 220, maxWidth: '75%', resize: 'horizontal', overflow: 'hidden', border: '1px solid #c3c3c3', background: '#525659', display: 'flex' }} title="Drag the bottom-right corner to make the invoice wider or narrower">
+            <iframe src={pdfUrl} title={`Invoice ${file.name}`} style={{ flex: 1, border: 0, width: '100%', height: '100%' }} />
+          </div>
+        )}
+      <div style={{ flex: 1, minWidth: 0, overflow: 'auto', border: '1px solid #c3c3c3', background: '#fff' }}>
+        <table style={{ borderCollapse: 'collapse', width: '100%', zoom: view.zoom }}>
           <thead>
             <tr>
               <th style={th} />
@@ -853,6 +862,7 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
           ))}
         </datalist>
       </div>
+      </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10, flexWrap: 'wrap' }}>
         <Btn onClick={onClose}>◀ Back</Btn>
         <Btn onClick={() => void receive()} disabled={saving || !loaded || !medDocs || !chosen.length}>
@@ -866,8 +876,87 @@ function InvoiceReview({ inv, file, onClose, onDone }: { inv: ParsedInvoice; fil
   )
 }
 
+// ---------------------------------------------------------------- review view
+
+/** How the review is shown: invoice PDF beside the lines, and table text size. Remembered per review. */
+function useReviewView(key: string) {
+  const read = <T,>(k: string, fallback: T): T => {
+    try {
+      const v = localStorage.getItem(`ma-view:${key}:${k}`)
+      return v === null ? fallback : (JSON.parse(v) as T)
+    } catch {
+      return fallback
+    }
+  }
+  const [showPdf, setShowPdfState] = useState(() => read('pdf', true))
+  const [zoom, setZoomState] = useState(() => read('zoom', 1))
+  const save = (k: string, v: unknown) => {
+    try {
+      localStorage.setItem(`ma-view:${key}:${k}`, JSON.stringify(v))
+    } catch {
+      /* not remembered */
+    }
+  }
+  return {
+    showPdf,
+    zoom,
+    setShowPdf: (v: boolean) => {
+      setShowPdfState(v)
+      save('pdf', v)
+    },
+    setZoom: (v: number) => {
+      const z = Math.min(1.6, Math.max(0.6, Math.round(v * 10) / 10))
+      setZoomState(z)
+      save('zoom', z)
+    },
+  }
+}
+
+/** A blob: URL for the uploaded PDF (browsers won't show data: PDFs in a frame). */
+function usePdfUrl(data: string): string | null {
+  const url = useMemo(() => {
+    if (!data.startsWith('data:application/pdf')) return null
+    try {
+      const bin = atob(data.slice(data.indexOf(',') + 1))
+      const bytes = new Uint8Array(bin.length)
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+      return URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
+    } catch {
+      return null
+    }
+  }, [data])
+  useEffect(
+    () => () => {
+      if (url) URL.revokeObjectURL(url)
+    },
+    [url],
+  )
+  return url
+}
+
+function ViewControls({ view, pdf }: { view: ReturnType<typeof useReviewView>; pdf: boolean }) {
+  return (
+    <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', marginLeft: 'auto' }}>
+      {pdf && (
+        <Btn onClick={() => view.setShowPdf(!view.showPdf)} title="Show the uploaded invoice beside the lines">
+          {view.showPdf ? 'Hide invoice' : 'Show invoice'}
+        </Btn>
+      )}
+      <span className="ma-label">Text size</span>
+      <Btn onClick={() => view.setZoom(view.zoom - 0.1)} title="Smaller — see more lines at once" disabled={view.zoom <= 0.6}>
+        A−
+      </Btn>
+      <span style={{ minWidth: 34, textAlign: 'center' }}>{Math.round(view.zoom * 100)}%</span>
+      <Btn onClick={() => view.setZoom(view.zoom + 0.1)} title="Bigger" disabled={view.zoom >= 1.6}>
+        A+
+      </Btn>
+    </span>
+  )
+}
+
 /** Review and receive a stock report Excel imported from another chemist. */
 function StockReportReview({ stock, file, onClose, onDone }: { stock: StockReportLine[]; file: { name: string; data: string }; onClose: () => void; onDone: () => void }) {
+  const view = useReviewView('stock-report-review')
   const toast = useToast()
   const { user } = useSession()
   const loaded = useLiveQuery(() => db.products.toArray(), [])
@@ -952,7 +1041,7 @@ function StockReportReview({ stock, file, onClose, onDone }: { stock: StockRepor
   const small = (w: number, right = true): React.CSSProperties => ({ width: w, height: 19, fontSize: 11, textAlign: right ? 'right' : 'left', padding: '0 3px' })
   const shown = list.filter((l) => !q.trim() || `${l.code} ${l.name}`.toUpperCase().includes(q.trim().toUpperCase()))
   return (
-    <Dialog title={`Upload Stock Report — ${file.name}`} onClose={onClose} width={1400}>
+    <Dialog title={`Upload Stock Report — ${file.name}`} onClose={onClose} width={1400} sizable="stock-report-review">
       <div style={{ display: 'flex', gap: 18, alignItems: 'center', flexWrap: 'wrap' }}>
         <Btn onClick={onClose} title="Back to Pur/GRN (Direct Invoice) without receiving">
           ◀ Back
@@ -986,12 +1075,13 @@ function StockReportReview({ stock, file, onClose, onDone }: { stock: StockRepor
         <Check checked={list.length > 0 && list.every((l) => l.include)} onChange={(v) => setLines((ls) => (ls ?? []).map((l) => ({ ...l, include: v })))} dark>
           All
         </Check>
+        <ViewControls view={view} pdf={false} />
         <span className="ma-label ma-note" style={{ fontSize: 10 }}>
           Qty received is added to stock. For new medicines the Retail Price is required. Whole Price and Best Price are stored on the medicine form. UOM is saved with the medicine.
         </span>
       </div>
-      <div style={{ height: 400, overflow: 'auto', border: '1px solid #c3c3c3', background: '#fff' }}>
-        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+      <div style={{ flex: 1, minHeight: 160, overflow: 'auto', border: '1px solid #c3c3c3', background: '#fff' }}>
+        <table style={{ borderCollapse: 'collapse', width: '100%', zoom: view.zoom }}>
           <thead>
             <tr>
               <th style={th} />

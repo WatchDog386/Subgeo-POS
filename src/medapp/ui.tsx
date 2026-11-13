@@ -750,26 +750,54 @@ export function Dialog({
   children,
   footer,
   width,
+  sizable,
 }: {
   title: ReactNode
   onClose: () => void
   children: ReactNode
   footer?: ReactNode
   width?: number
+  /** Resizable from the corner, with a full-screen button (remembered under this key). */
+  sizable?: string
 }) {
+  const fullKey = sizable ? `ma-dialog-full:${sizable}` : ''
+  const [full, setFull] = useState(() => {
+    try {
+      return !!fullKey && localStorage.getItem(fullKey) === '1'
+    } catch {
+      return false
+    }
+  })
+  const toggleFull = () =>
+    setFull((f) => {
+      try {
+        if (fullKey) localStorage.setItem(fullKey, f ? '0' : '1')
+      } catch {
+        /* not remembered */
+      }
+      return !f
+    })
   useEffect(() => {
     const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', k)
     return () => window.removeEventListener('keydown', k)
   }, [onClose])
+  const cls = `ma-modal${sizable ? ' ma-modal--sizable' : ''}${full ? ' ma-modal--full' : ''}`
   return (
-    <div className="ma-modal-back" onMouseDown={onClose}>
-      <div className="ma-modal" style={{ width }} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-        <div className="ma-modal-head">
+    <div className="ma-modal-back" onMouseDown={full ? undefined : onClose}>
+      <div className={cls} style={full ? undefined : { width }} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <div className="ma-modal-head" onDoubleClick={sizable ? toggleFull : undefined}>
           <span>{title}</span>
-          <button type="button" onClick={onClose} aria-label="Close">
-            ×
-          </button>
+          <span style={{ display: 'flex', gap: 4 }}>
+            {sizable && (
+              <button type="button" onClick={toggleFull} aria-label={full ? 'Restore size' : 'Full screen'} title={full ? 'Restore size' : 'Full screen'} style={{ width: 'auto', padding: '0 6px' }}>
+                {full ? '❐ Restore' : '⛶ Full screen'}
+              </button>
+            )}
+            <button type="button" onClick={onClose} aria-label="Close">
+              ×
+            </button>
+          </span>
         </div>
         <div className="ma-modal-body">{children}</div>
         {footer && <div className="ma-modal-foot">{footer}</div>}
