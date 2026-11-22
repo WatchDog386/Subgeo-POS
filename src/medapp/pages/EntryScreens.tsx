@@ -82,6 +82,19 @@ export function BestCell({ product, width, onUse }: { product?: Product; width: 
   )
 }
 
+/** One of a line's two prices: tick it to sell at that price (Selling Price or Best Price — no other discount). */
+export function PriceChoice({ label, cents, on, width, onPick }: { label: string; cents: number; on: boolean; width: number; onPick: () => void }) {
+  return (
+    <label
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, width, height: 23, padding: '0 4px', border: `1px solid ${on ? '#2e7d32' : '#b4b4b4'}`, background: on ? '#e8f5e9' : label === 'Best Price' ? '#fff8d6' : '#fff', cursor: 'pointer', fontSize: 11, fontWeight: on ? 'bold' : undefined, userSelect: 'none' }}
+      title={`Sell at the ${label} ${c2(cents)}`}
+    >
+      <input type="radio" checked={on} onChange={onPick} aria-label={`Sell at ${label}`} style={{ margin: 0 }} />
+      <span style={{ flex: 1, textAlign: 'right' }}>{c2(cents)}</span>
+    </label>
+  )
+}
+
 export function Cell({ value, onChange, width, right, readOnly, placeholder, inputRef, onEnter, label }: { value: string; onChange?: (v: string) => void; width: number; right?: boolean; readOnly?: boolean; placeholder?: string; inputRef?: React.Ref<HTMLInputElement>; onEnter?: () => void; label?: string }) {
   return (
     <input
@@ -957,6 +970,8 @@ type OLine = {
   cost: string
   price: string
   disc: string
+  /** Sold at the medicine's Best Price instead of its Selling Price (there is no free discount). */
+  useBest?: boolean
   batch: string
   expiry: string
   taxable: boolean
@@ -1088,8 +1103,8 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: OtcMode; fromSale?
     return { qty, price, discount, cost: toCents(l.cost || '0'), amount: Math.max(0, Math.round(qty * price) - discount), totalCost: Math.round(qty * toCents(l.cost || '0')) }
   })
   const gross = calc.reduce((s, c) => s + c.amount, 0)
-  const pharmaPct = isReturn ? 0 : Math.min(100, Math.max(0, n(patient.pharma)))
-  const pharmaDisc = Math.round((gross * pharmaPct) / 100)
+  // No discounts: each line is sold at its Selling Price or its Best Price.
+  const pharmaDisc = 0
   const bill = gross - pharmaDisc
   const paid = Object.fromEntries(PAY_FIELDS.map(([k]) => [k, toCents(pay[k] || '0')])) as Record<PayKey, number>
   const received = paid.cash + paid.mpesa + paid.card + paid.cheque
@@ -1104,7 +1119,7 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: OtcMode; fromSale?
   const takeProduct = (key: string, p: Product) => {
     if (lines.some((l) => l.key !== key && l.productId === p.id)) return toast(`${p.name} is already on the bill — change its Qty`, 'error')
     const cur = lines.find((l) => l.key === key)
-    setLine(key, { productId: p.id, name: p.name, sku: p.sku, cost: c2(p.cost), price: c2(p.price), qty: cur && n(cur.qty) > 0 ? cur.qty : '1', taxable: p.taxable, batch: cur?.batch || (isService ? '' : p.location || '') })
+    setLine(key, { productId: p.id, name: p.name, sku: p.sku, cost: c2(p.cost), price: c2(p.price), disc: '0.0', useBest: false, qty: cur && n(cur.qty) > 0 ? cur.qty : '1', taxable: p.taxable, batch: cur?.batch || (isService ? '' : p.location || '') })
   }
   const typedName = (key: string, name: string) => {
     const p = products.find((x) => labelOf(x).toUpperCase() === name.trim().toUpperCase() || x.name.toUpperCase() === name.trim().toUpperCase())
@@ -1414,7 +1429,7 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: OtcMode; fromSale?
             <table style={{ borderCollapse: 'separate', borderSpacing: '6px 4px' }}>
               <thead>
                 <tr>
-                  {[['S NO', 30], ['Medicine Name', W.name + 26], ['Type', W.form], ['Instruction', W.instr], ['Qty', W.qty], ['Cost Rate', W.cost], ['Total Cost', W.tcost], ['Selling Price', W.price], ['Best Price', W.price], ['Disc', W.disc], ['Amount', W.amt], ['Batch No', W.batch], ['Exp Dt', W.exp], ['', 20]].map(([h, w]) => (
+                  {[['S NO', 30], ['Medicine Name', W.name + 26], ['Type', W.form], ['Qty', W.qty], ['Cost Rate', W.cost], ['Total Cost', W.tcost], ['Selling Price', W.price + 18], ['Best Price', W.price + 18], ['Amount', W.amt], ['Batch No', W.batch], ['Exp Dt', W.exp], ['', 20]].map(([h, w]) => (
                     <th key={String(h) || 'x'} style={{ ...head, width: w as number }}>
                       {h}
                     </th>
@@ -1441,17 +1456,42 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: OtcMode; fromSale?
                         {!isReturn && <LookupBtn title="Look up a medicine" onClick={() => setPick({ kind: 'product', key: l.key })} />}
                       </td>
                       <td><Cell value={l.form} onChange={(v) => setLine(l.key, { form: v.toUpperCase() })} width={W.form} placeholder="TAB" label="Type" /></td>
-                      <td>
-                        <textarea className="ma-input" style={{ width: W.instr, height: 42, resize: 'vertical', fontSize: 11 }} value={l.instruction} placeholder="e.g. 1 x 3 for 5 days" aria-label="Instruction" onChange={(e) => setLine(l.key, { instruction: e.target.value })} />
-                      </td>
                       <td><Cell value={l.qty} onChange={(v) => setLine(l.key, { qty: v })} width={W.qty} right label="Qty" placeholder={l.max !== undefined ? `max ${l.max}` : undefined} /></td>
                       <td><Cell value={l.cost} onChange={(v) => setLine(l.key, { cost: v })} width={W.cost} right readOnly={readOnlyPrice} label="Cost Rate" /></td>
                       <td><Cell value={c2(c.totalCost)} width={W.tcost} right readOnly label="Total Cost" /></td>
-                      <td><Cell value={l.price} onChange={(v) => setLine(l.key, { price: v })} width={W.price} right readOnly={readOnlyPrice} label="Selling Price" /></td>
-                      <td>
-                        <BestCell product={l.productId !== undefined ? products.find((x) => x.id === l.productId) : undefined} width={W.price} onUse={readOnlyPrice ? undefined : (b) => setLine(l.key, { price: c2(b), disc: '0.00' })} />
-                      </td>
-                      <td><Cell value={l.disc} onChange={(v) => setLine(l.key, { disc: v })} width={W.disc} right readOnly={readOnlyPrice} label="Disc" /></td>
+                      {(() => {
+                        const p = l.productId !== undefined ? products.find((x) => x.id === l.productId) : undefined
+                        // A return keeps the price it was sold at; a bill picks Selling Price or Best Price.
+                        if (readOnlyPrice) {
+                          return (
+                            <>
+                              <td><Cell value={l.price} width={W.price + 18} right readOnly label="Selling Price" /></td>
+                              <td><Cell value={p?.minPrice ? c2(p.minPrice) : ''} width={W.price + 18} right readOnly label="Best Price" placeholder="—" /></td>
+                            </>
+                          )
+                        }
+                        const sell = p ? p.price : undefined
+                        const best = p?.minPrice && p.minPrice < p.price ? p.minPrice : undefined
+                        return (
+                          <>
+                            <td>
+                              {sell !== undefined && sell > 0 ? (
+                                <PriceChoice label="Selling Price" cents={sell} on={!l.useBest} width={W.price + 18} onPick={() => setLine(l.key, { price: c2(sell), useBest: false, disc: '0.0' })} />
+                              ) : (
+                                // No price on record (or no medicine picked yet): type it.
+                                <Cell value={l.price} onChange={(v) => setLine(l.key, { price: v, useBest: false })} width={W.price + 18} right label="Selling Price" placeholder="price" />
+                              )}
+                            </td>
+                            <td>
+                              {best !== undefined ? (
+                                <PriceChoice label="Best Price" cents={best} on={!!l.useBest} width={W.price + 18} onPick={() => setLine(l.key, { price: c2(best), useBest: true, disc: '0.0' })} />
+                              ) : (
+                                <Cell value="" width={W.price + 18} right readOnly label="Best Price" placeholder="—" />
+                              )}
+                            </td>
+                          </>
+                        )
+                      })()}
                       <td><Cell value={c2(c.amount)} width={W.amt} right readOnly label="Amount" /></td>
                       <td><Cell value={l.batch} onChange={(v) => setLine(l.key, { batch: v.toUpperCase() })} width={W.batch} placeholder="Batch no." label="Batch No" /></td>
                       <td><Cell value={l.expiry} onChange={(v) => setLine(l.key, { expiry: v })} width={W.exp} placeholder="dd-mm-yyyy" label="Exp Dt" /></td>
@@ -1463,7 +1503,7 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: OtcMode; fromSale?
                 })}
                 <tr>
                   <td style={{ fontSize: 11 }}>SUM</td>
-                  <td colSpan={8} />
+                  <td colSpan={7} />
                   <td>
                     <Cell value={c2(gross)} width={W.amt} right readOnly label="SUM" />
                   </td>
@@ -1505,13 +1545,6 @@ export function OtcEntry({ mode, fromSale, onClose }: { mode: OtcMode; fromSale?
                 <LookupBtn title="Pick how it is paid" onClick={() => setPick({ kind: 'payable' })} />
               </span>
             </Field>
-            <Field label="Pharma %">
-              <Input value={isReturn ? '0.00' : patient.pharma} onChange={(v) => setPatient({ ...patient, pharma: v })} width={75} readOnly={isReturn} style={{ textAlign: 'right' }} placeholder="Discount %" />
-            </Field>
-            <span />
-            <span className="ma-label" style={{ fontSize: 10 }}>
-              {isReturn ? 'Any bill discount is shared out on the return automatically.' : pharmaDisc ? `Discount ${amt(pharmaDisc)} off ${amt(gross)}` : 'Discount on the whole bill, e.g. 5'}
-            </span>
             <Field label="Narration">
               <textarea className="ma-input" style={{ width: 200, height: 44, resize: 'vertical' }} value={patient.narration} placeholder={isReturn ? 'Why it is returned' : isService ? 'What was done (optional)' : 'Note on the bill (optional)'} aria-label="Narration" onChange={(e) => setPatient({ ...patient, narration: e.target.value })} />
             </Field>

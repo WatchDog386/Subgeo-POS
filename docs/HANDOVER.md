@@ -67,7 +67,7 @@ Set these for each medicine in *Modules → Medicine* (select it → edit), or o
 
 | Field | What it does |
 |---|---|
-| **Best Price** | The lowest price the medicine may be sold for, typed as an amount in KES (not a %). The seller offers the **Selling Price** first; if the customer complains, they may come down to the Best Price, never below it. The tills refuse anything below it: a lower price, a line discount, the Pharma %, a bill discount or a whole-sale invoice. On the OTC bill and whole-sale screens the Best Price shows next to the selling price; clicking it puts that line on the Best Price. On the Sell screen, tapping a line shows it with a **Use Best Price** button. |
+| **Best Price** | The lowest price the medicine may be sold for, typed as an amount in KES (not a %). The seller offers the **Selling Price** first; if the customer complains, they may come down to the Best Price, never below it. The tills refuse anything below it: a lower price, a line discount, the Pharma %, a bill discount or a whole-sale invoice. On the **OTC Medicine Issue/Bill** each line has two prices to tick, **Selling Price** or **Best Price**. There is no Disc box, no Pharma % and no Instruction box, so a medicine is issued only at one of those two prices. On the whole-sale screen the Best Price shows next to the selling price; clicking it puts that line on the Best Price. On the Sell screen, tapping a line shows it with a **Use Best Price** button. |
 | **Re-order Level** | When stock falls to this, the medicine shows on the To-Do lists and the re-order report. |
 | **Max Level** | The most to hold. Re-order suggestions top up to this level, and receiving more than it (GRN or PDF upload) asks first. Leave it blank for no limit. |
 
