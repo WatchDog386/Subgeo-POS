@@ -69,7 +69,7 @@ export type MedCandidate = { name: string; sku: string; productId?: number; pric
  * everywhere, so only medicines never entered anywhere are left to type.
  * Boxes already filled by the buyer are never touched.
  */
-export function fillKnownPrices(l: ImportLine, own: Product | undefined, company: CatalogueItem | undefined, opts: { here: string; factor?: number }): ImportLine {
+export function fillKnownPrices(l: ImportLine, own: Product | undefined, company: CatalogueItem | undefined, opts: { here: string; factor?: number; noCost?: boolean }): ImportLine {
   // Old per-pack stock being converted: its prices are divided on the screen instead.
   if ((opts.factor ?? 1) > 1) return l
   const pickC = (mine: number | undefined, theirs: number | null | undefined) =>
@@ -85,8 +85,8 @@ export function fillKnownPrices(l: ImportLine, own: Product | undefined, company
     out.best = (best.v / 100).toFixed(2)
     out.auto!.best = best.from
   }
-  // A document without prices (order book, stock list): the known cost of one piece.
-  const cost = pickC(own?.cost, company?.cost)
+  // Cost: only when asked (a document without prices records no cost of its own).
+  const cost = opts.noCost ? undefined : pickC(own?.cost, company?.cost)
   if (!(Number(l.cost) > 0) && cost && Number(l.perPack) <= 1) {
     out.cost = (cost.v / 100).toFixed(2)
     out.auto!.cost = cost.from
@@ -242,6 +242,12 @@ export async function receiveInvoice(input: {
    * changes by the difference only.
    */
   replaceDocId?: number
+  /**
+   * The document had no prices (order book, stock list). A line with no cost typed records no
+   * cost and is valued at the medicine's selling price; the document's value is their sum
+   * (marked so), never a cost taken from elsewhere.
+   */
+  noPrices?: boolean
 }): Promise<{ docNo: string; added: number; updated: number; docId: number }> {
   if (!input.lines.length) throw new Error('No lines to receive')
   if (!input.vendor.trim()) throw new Error('Type or pick the Vendor Name')
@@ -324,13 +330,14 @@ export async function receiveInvoice(input: {
       }
       await db.movements.add({ productId: p!.id!, change: l.qty, reason: 'receive', reference: docNo, note: `${vendor} invoice ${input.invoiceNo}`.trim(), userId: input.userId, at: now })
       const unitCost = l.costCents > 0 ? l.costCents : p!.cost
-      const total = l.packs && l.packCostCents ? Math.round(l.packs * l.packCostCents) : Math.round(l.qty * unitCost)
+      const atSelling = !!input.noPrices && !(l.costCents > 0)
+      const total = atSelling ? Math.round(l.qty * p!.price) : l.packs && l.packCostCents ? Math.round(l.packs * l.packCostCents) : Math.round(l.qty * unitCost)
       docLines.push({
         productId: p!.id,
         name: p!.name,
         sku: p!.sku,
         qty: l.qty,
-        cost: unitCost,
+        cost: atSelling ? 0 : unitCost,
         rate: p!.price,
         vatPct: 0,
         vat: 0,
@@ -355,7 +362,9 @@ export async function receiveInvoice(input: {
       mrnDate: dmy(now),
       invoice: input.invoiceNo.trim(),
       vendorName: vendor,
-      total: (input.totalCents / 100).toFixed(2),
+      // No prices on the document: its value is the units at their selling prices (said so), else the invoice's total.
+      total: ((input.noPrices ? docLines.reduce((t, x) => t + x.total, 0) : input.totalCents) / 100).toFixed(2),
+      ...(input.noPrices ? { valueAt: 'SELLING PRICE (no prices on the document)' } : {}),
       expense: input.expense.trim().toUpperCase(),
       receivedBy: input.receivedBy.toUpperCase(),
       status: 'GOOD RECEIVED',
@@ -683,7 +692,8 @@ function InvoiceReview({ inv, file, draft, editDocId, onClose, onDone }: { inv: 
       own = perPiece(own, (remembered(p)?.perPack ?? 1) > 1)
       company = perPiece(company, (c?.packSize ?? 1) > 1)
     }
-    return fillKnownPrices(l, own, company, { here: 'this chemist', factor })
+    // A document with no prices (order book, stock list): no cost is filled in from elsewhere.
+    return fillKnownPrices(l, own, company, { here: 'this chemist', factor, noCost: pieces })
   }
 
   // Match once the medicines (and their pack sizes) have loaded.
@@ -848,6 +858,7 @@ function InvoiceReview({ inv, file, draft, editDocId, onClose, onDone }: { inv: 
         userId: user.id,
         attachment: editing ? undefined : file,
         replaceDocId: editDocId,
+        noPrices: pieces,
       })
       done.current = true
       if (!editing) await db.kv.delete(draftKey(user.id))

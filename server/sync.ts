@@ -893,6 +893,28 @@ export function applyUnitPriceFix(branchId: number, fixes: import('../src/lib/un
   return n
 }
 
+/**
+ * A stock document filed from an upload that had NO prices (names and quantities only): take
+ * off the costs the upload filled in from elsewhere and value it at the medicines' selling
+ * prices, said so on the document. Medicines and stock are not touched.
+ */
+export function revalueAtSellingPrice(branchId: number, docNo: string): { docNo: string; lines: number; before: number; after: number } | undefined {
+  const want = docNo.trim().toUpperCase()
+  const doc = listTable<Rec>('docs', branchId).find((d) => STOCK_IN_SLUGS.includes(String(d.slug)) && String(((d.values ?? {}) as Rec).docNo ?? d.docNo ?? '').toUpperCase() === want)
+  if (!doc) return undefined
+  const lines = ((doc.lines ?? []) as Rec[]).map((l) => {
+    const p = l.productId !== undefined ? parse(getRow('products', branchId, l.productId as number)) : undefined
+    const price = Number(p?.price ?? l.rate ?? 0)
+    return { ...l, cost: 0, rate: price, total: Math.round(Number(l.qty || 0) * price) }
+  })
+  const values = (doc.values ?? {}) as Rec
+  const before = Number(values.total) || 0
+  const after = lines.reduce((t, l) => t + Number(l.total), 0)
+  const now = Date.now()
+  writeRow('docs', branchId, doc.id as number, { ...doc, lines, values: { ...values, total: (after / 100).toFixed(2), valueAt: 'SELLING PRICE (no prices on the document)' }, updatedAt: now }, now, null)
+  return { docNo: want, lines: lines.length, before: Math.round(before * 100), after }
+}
+
 /** What resetChemistStock would delete (nothing is changed). */
 export function planStockReset(branchId: number, code: string, name: string): StockResetPlan {
   return { branchId, code, name, ...stockRowsOf(branchId).plan }

@@ -70,6 +70,9 @@ export default function PriceTable() {
   const changed = rows.filter((r) => r.dirty)
   const invalid = changed.filter((r) => r.error)
   const missing = rows.filter((r) => !r.best.trim()).length
+  // Stock value: stock × saved selling price, exactly as Admin Home and Utilities → Chemists add it up.
+  const valueOf = (r: Row) => (r.p.trackStock && r.p.stock > 0 ? r.p.stock * r.p.price : 0)
+  const stockValue = rows.reduce((t, r) => t + valueOf(r), 0)
 
   const edit = (id: number, patch: Edit) =>
     setEdits((m) => {
@@ -151,7 +154,7 @@ export default function PriceTable() {
   }
   useEntryKeys({ save: () => void save(), back: leave })
 
-  const W = { sno: 34, code: 110, name: 270, cost: 75, stock: 60, price: 90 }
+  const W = { sno: 34, code: 110, name: 270, cost: 75, stock: 60, value: 90, price: 90 }
   const cell = (r: Row, k: 'price' | 'best' | 'whole', label: string) => (
     <input
       className="ma-input"
@@ -186,16 +189,16 @@ export default function PriceTable() {
         <Check checked={onlyChanged} onChange={setOnlyChanged} dark>
           Only changed ({changed.length})
         </Check>
-        <span className="ma-rows" style={{ marginLeft: 'auto' }}>
-          | {shown.length} of {rows.length} medicines |
+        <span className="ma-rows" style={{ marginLeft: 'auto' }} title="Every medicine's stock × its saved selling price — the Stock Value on Admin Home">
+          Stock value at selling price: <b>{c2(stockValue)}</b> &nbsp;| {shown.length} of {rows.length} medicines |
         </span>
       </div>
       <div className="ma-grid" style={{ maxHeight: 'calc(100vh - 290px)', minHeight: 240, overflow: 'auto', padding: '0 4px' }}>
         <table style={{ borderCollapse: 'separate', borderSpacing: '6px 3px' }}>
           <thead>
             <tr>
-              {[['S NO', W.sno], ['Product Code', W.code], ['Medicine Name', W.name], ['Cost Rate', W.cost], ['In Stock', W.stock], ['Selling Price', W.price], ['Best Price', W.price], ['Whole Sale Price', W.price], ['', 260]].map(([h, w]) => (
-                <th key={String(h) || 'x'} style={{ ...head, width: w as number, position: 'sticky', top: 0, background: '#f0f0f0', zIndex: 1, textAlign: typeof w === 'number' && ['Cost Rate', 'In Stock', 'Selling Price', 'Best Price', 'Whole Sale Price'].includes(String(h)) ? 'right' : 'left' }}>
+              {[['S NO', W.sno], ['Product Code', W.code], ['Medicine Name', W.name], ['Cost Rate', W.cost], ['In Stock', W.stock], ['Stock Value', W.value], ['Selling Price', W.price], ['Best Price', W.price], ['Whole Sale Price', W.price], ['', 260]].map(([h, w]) => (
+                <th key={String(h) || 'x'} style={{ ...head, width: w as number, position: 'sticky', top: 0, background: '#f0f0f0', zIndex: 1, textAlign: typeof w === 'number' && ['Cost Rate', 'In Stock', 'Stock Value', 'Selling Price', 'Best Price', 'Whole Sale Price'].includes(String(h)) ? 'right' : 'left' }}>
                   {h}
                 </th>
               ))}
@@ -204,14 +207,14 @@ export default function PriceTable() {
           <tbody>
             {products === undefined && (
               <tr>
-                <td colSpan={9} className="ma-label">
+                <td colSpan={10} className="ma-label">
                   Loading…
                 </td>
               </tr>
             )}
             {products !== undefined && !shown.length && (
               <tr>
-                <td colSpan={9} className="ma-label" style={{ padding: 10 }}>
+                <td colSpan={10} className="ma-label" style={{ padding: 10 }}>
                   {rows.length ? 'No medicine matches.' : 'This chemist has no medicines yet — receive stock first (Pur/GRN or Medicine +).'}
                 </td>
               </tr>
@@ -232,6 +235,9 @@ export default function PriceTable() {
                 </td>
                 <td style={{ fontSize: 11, textAlign: 'right' }}>{c2(r.p.cost)}</td>
                 <td style={{ fontSize: 11, textAlign: 'right' }}>{r.p.trackStock ? r.p.stock : '-'}</td>
+                <td style={{ fontSize: 11, textAlign: 'right' }} title={valueOf(r) ? `${r.p.stock} × ${c2(r.p.price)}` : undefined}>
+                  {valueOf(r) ? c2(valueOf(r)) : '-'}
+                </td>
                 <td>{cell(r, 'price', 'Selling Price')}</td>
                 <td>{cell(r, 'best', 'Best Price')}</td>
                 <td>{cell(r, 'whole', 'Whole Sale Price')}</td>
