@@ -77,6 +77,18 @@ function Legacy({ children }: { children: ReactNode }) {
 
 export default function MedApp() {
   const { user, lock, branchCode } = useSession()
+  // The log-out door sits just right of the centred company name, however long the chemist's name is.
+  const companyRef = useRef<HTMLDivElement>(null)
+  const [companyHalf, setCompanyHalf] = useState(0)
+  useEffect(() => {
+    const el = companyRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const measure = () => setCompanyHalf(Math.ceil(el.getBoundingClientRect().width / 2))
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [user])
   const defaults = useMedDefaults()
   const nav = useNavigate()
   const path = useLocation().pathname
@@ -117,7 +129,7 @@ export default function MedApp() {
             <div>{user.name.toUpperCase()}</div>
           </div>
         </div>
-        <div className="ma-company">
+        <div className="ma-company" ref={companyRef}>
           {defaults.companyName}
           {branchCode && `-${branchCode}`}
           {(defaults.licenceFrom || defaults.licenceTo) && (
@@ -126,7 +138,7 @@ export default function MedApp() {
             </div>
           )}
         </div>
-        <button type="button" className="ma-logout" title="Log Out" aria-label="Log Out" onClick={lock}>
+        <button type="button" className="ma-logout" title="Log Out" aria-label="Log Out" onClick={lock} style={companyHalf ? { left: `calc(50% + ${companyHalf + 14}px)` } : undefined}>
           <LogoutIcon />
         </button>
         <div className="ma-header-right">
