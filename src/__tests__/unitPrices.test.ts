@@ -32,6 +32,13 @@ describe('unit prices for stock keyed in pieces', () => {
     // 100 per pack sold in pairs = 50 pairs a pack: 1000.00 → 20.00 a pair. 40 pieces of the 50 came in the last upload = 20 pairs.
     expect(of(3)).toMatchObject({ change: true, sellBy: 2, perPack: 50, price: 2000, cost: 1400, stock: 10 + 20 })
   })
+  it('a price copied from a chemist that sells by the pack is a pack price, whatever its size', () => {
+    const cet = p(7, 'CETRIZINE 10MG TABLETS (100S)', 441, 44, 33)
+    const keyed = p(8, 'CETRIZINE 10MG TABLETS (100S) B', 100, 2, 1) // keyed in by hand, per tablet
+    const out = planUnitPrices({ products: [cet, keyed], hq: () => undefined, packInfo: () => undefined, lastUpload: new Map(), packPricesElsewhere: () => [4400] })
+    expect(out.find((f) => f.p.id === 7)).toMatchObject({ change: true, price: 44, cost: 33, stock: 441 })
+    expect(out.find((f) => f.p.id === 8)!.change).toBe(false)
+  })
   it('uses HQ\'s price to tell a pack price from a piece price', () => {
     // HQ sells Zulu MR at 46.00 a tablet: 904.00 is the pack of 20 → 45.20.
     expect(of(5)).toMatchObject({ change: true, price: 4520, cost: 3395 })

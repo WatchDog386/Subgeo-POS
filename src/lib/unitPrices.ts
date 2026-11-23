@@ -47,6 +47,11 @@ export function planUnitPrices(input: {
   packInfo: (p: FixProduct) => PackInfo | undefined
   /** Quantity each medicine got from the last upload (keyed in pieces). */
   lastUpload: Map<string, number>
+  /**
+   * Prices the same medicine has at other chemists that sell it by the pack (no pack size on
+   * record there). This chemist's price equal to one of them was copied from it: a pack price.
+   */
+  packPricesElsewhere?: (p: FixProduct) => number[]
 }): UnitFix[] {
   const out: UnitFix[] = []
   for (const p of input.products) {
@@ -72,11 +77,14 @@ export function planUnitPrices(input: {
     // of 100.00 or more for a pack of 10+ is taken as a pack price.
     const ref = input.hq(p)
     const perUnit = p.price / perPack
+    const copied = (input.packPricesElsewhere?.(p) ?? []).some((x) => Math.abs(x - p.price) <= Math.max(1, p.price * 0.005))
     const isPack = !(p.price > 0)
       ? false
-      : ref && ref.price > 0
-        ? !nearer(p.price, perUnit, ref.price)
-        : pieces >= 10 && p.price >= 100_00
+      : copied
+        ? true
+        : ref && ref.price > 0
+          ? !nearer(p.price, perUnit, ref.price)
+          : pieces >= 10 && p.price >= 100_00
     const costIsPack = !(p.cost > 0) ? false : ref && ref.cost > 0 ? !nearer(p.cost, p.cost / perPack, ref.cost) : isPack
     if (!isPack && !costIsPack && stock === p.stock) {
       out.push(keep(ref ? `already per ${sellBy === 1 ? 'piece' : 'unit'} (HQ sells it at ${(ref.price / 100).toFixed(2)})` : 'already per unit', how))
@@ -88,7 +96,7 @@ export function planUnitPrices(input: {
       perPack,
       sellBy,
       how,
-      why: [isPack ? `price ${(p.price / 100).toFixed(2)} is for a pack of ${perPack} ${sellBy === 1 ? 'pieces' : 'units'}${ref ? ` (HQ: ${(ref.price / 100).toFixed(2)})` : ''}` : '', costIsPack ? 'cost is for a pack' : '', stock !== p.stock ? `${fromUpload} pieces from the last upload = ${Math.floor(fromUpload / sellBy)} pairs` : ''].filter(Boolean).join('; '),
+      why: [isPack ? `price ${(p.price / 100).toFixed(2)} is for a pack of ${perPack} ${sellBy === 1 ? 'pieces' : 'units'}${copied ? ' (the same as another chemist\'s pack price)' : ref ? ` (HQ: ${(ref.price / 100).toFixed(2)})` : ''}` : '', costIsPack ? 'cost is for a pack' : '', stock !== p.stock ? `${fromUpload} pieces from the last upload = ${Math.floor(fromUpload / sellBy)} pairs` : ''].filter(Boolean).join('; '),
       change: true,
       price: div(p.price, isPack)!,
       minPrice: div(p.minPrice, isPack),

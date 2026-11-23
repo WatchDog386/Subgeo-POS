@@ -666,8 +666,23 @@ function InvoiceReview({ inv, file, draft, editDocId, onClose, onDone }: { inv: 
     const per = Number(l.perPack)
     const factor = l.convert && p && per > 1 && per % l.sellBy === 0 ? per / l.sellBy : 1
     // Only prices that make sense for one unit (never a pack price on pieces).
-    const own = p && !saneFor(l, p.price) ? { ...p, price: 0, minPrice: undefined } : p
-    const company = c && !saneFor(l, c.price) ? { ...c, price: 0, minPrice: null } : c
+    let own = p && !saneFor(l, p.price) ? { ...p, price: 0, minPrice: undefined } : p
+    let company = c && !saneFor(l, c.price) ? { ...c, price: 0, minPrice: null } : c
+    // A list counted in pieces (order book, stock list) has no cost to check against. A price is
+    // for one piece only where the medicine is on record as sold by the piece (a pack size above
+    // 1). Otherwise, for a medicine whose name gives the pieces in a pack (100S, 30 TABS, 3S), it
+    // is the price of the pack and is divided down to one piece — never put on the pieces as it is.
+    if (pieces) {
+      const namePieces = (name: string) => packContents(name).pieces
+      const perPiece = <T extends { name: string; price: number; cost: number; minPrice?: number | null }>(x: T | undefined, soldByPiece: boolean): T | undefined => {
+        const n = x ? namePieces(x.name) : undefined
+        if (!x || soldByPiece || !n || n < 2 || !(x.price > 0)) return x
+        const div = (v: number | null | undefined) => (v ? Math.round(v / n) : v)
+        return { ...x, price: Math.round(x.price / n), cost: div(x.cost) ?? 0, minPrice: div(x.minPrice) }
+      }
+      own = perPiece(own, (remembered(p)?.perPack ?? 1) > 1)
+      company = perPiece(company, (c?.packSize ?? 1) > 1)
+    }
     return fillKnownPrices(l, own, company, { here: 'this chemist', factor })
   }
 

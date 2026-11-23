@@ -65,7 +65,18 @@ const docNo = doc ? String(((doc.values ?? {}) as Rec).docNo ?? doc.docNo ?? '')
 const lastUpload = new Map<string, number>()
 for (const l of (doc?.lines ?? []) as { productId?: number; qty: number }[]) if (l.productId !== undefined) lastUpload.set(String(l.productId), (lastUpload.get(String(l.productId)) ?? 0) + Number(l.qty || 0))
 
-const plan = planUnitPrices({ products, hq, packInfo, lastUpload })
+// Other chemists' prices for each medicine where they sell it by the pack (no pack size on record).
+const elsewhere = new Map<string, number[]>()
+for (const c of chemists) {
+  if (c.id === chem.id) continue
+  const docs = records.find((r) => r.id === c.id)?.docs ?? []
+  for (const x of live('products', c.id).map(asProduct)) {
+    if (!(x.price > 0) || infoIn(docs, x)) continue
+    const k = norm(x.name)
+    elsewhere.set(k, [...(elsewhere.get(k) ?? []), x.price])
+  }
+}
+const plan = planUnitPrices({ products, hq, packInfo, lastUpload, packPricesElsewhere: (p) => elsewhere.get(norm(p.name)) ?? [] })
 const changes = plan.filter((f) => f.change)
 const before = plan.reduce((s, f) => s + f.p.stock * f.p.price, 0)
 const after = plan.reduce((s, f) => s + f.stock * f.price, 0)
