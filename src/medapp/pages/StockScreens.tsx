@@ -373,6 +373,16 @@ export function GrnEntry({ editId, onClose }: { editId?: number; onClose: () => 
             </Btn>
           </span>
         )}
+        {orig && (orig.values.attachmentName || orig.values.attachment || (orig.lines ?? []).some((l) => l.discPct === undefined && l.retail === undefined)) && (
+          <span style={{ marginLeft: 120 }}>
+            <Btn
+                onClick={() => void upload.editUploaded(orig)}
+                title="Open this uploaded invoice in the upload screen: change Pcs/Pack, Sell By, quantities, costs and prices, then re-file it (stock changes by the difference only)"
+              >
+                Edit as uploaded invoice
+            </Btn>
+          </span>
+        )}
         {upload.element}
       </div>
       <SubTabs

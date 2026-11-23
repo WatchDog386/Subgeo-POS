@@ -236,6 +236,12 @@ export async function receiveInvoice(input: {
   receivedBy: string
   userId?: number
   attachment?: { name: string; data: string }
+  /**
+   * Re-file an invoice received before (edited on the review): its old quantities are taken
+   * back out first, then the edited lines go in, and the same MRN is updated — so stock
+   * changes by the difference only.
+   */
+  replaceDocId?: number
 }): Promise<{ docNo: string; added: number; updated: number; docId: number }> {
   if (!input.lines.length) throw new Error('No lines to receive')
   if (!input.vendor.trim()) throw new Error('Type or pick the Vendor Name')
@@ -246,8 +252,20 @@ export async function receiveInvoice(input: {
       const id = (await db.suppliers.add({ name: vendor, notes: 'Added from an uploaded supplier invoice' })) as number
       supplier = await db.suppliers.get(id)
     }
-    const docNo = await nextDocNo('MRN')
     const now = Date.now()
+    const old = input.replaceDocId !== undefined ? await db.docs.get(input.replaceDocId) : undefined
+    if (input.replaceDocId !== undefined && !old) throw new Error('That invoice no longer exists')
+    const docNo = old ? String(old.values.docNo ?? old.docNo ?? '') : await nextDocNo('MRN')
+    if (old) {
+      // Undo what the invoice put in stock the first time.
+      for (const l of old.lines ?? []) {
+        if (l.productId === undefined || !(l.qty > 0)) continue
+        const p = await db.products.get(l.productId)
+        if (!p) continue
+        await db.products.update(p.id!, { stock: p.stock - l.qty, updatedAt: now })
+        await db.movements.add({ productId: p.id!, change: -l.qty, reason: 'adjust', reference: docNo, note: `Invoice ${docNo} edited: first receipt undone`, userId: input.userId, at: now })
+      }
+    }
     let added = 0
     let updated = 0
     const docLines: DocLine[] = []
@@ -345,6 +363,11 @@ export async function receiveInvoice(input: {
       ...(input.invoiceDate ? { invoiceDate: input.invoiceDate } : {}),
       ...(input.attachment ? { attachment: input.attachment.data, attachmentName: input.attachment.name } : {}),
     }
+    if (old) {
+      // The same MRN, its first date kept, now with the edited lines.
+      await db.docs.update(old.id, { values: { ...old.values, ...values, mrnDate: old.values.mrnDate ?? values.mrnDate, editedAt: dmy(now) }, lines: docLines, updatedAt: now })
+      return { docNo, added, updated, docId: old.id }
+    }
     const docId = (await db.docs.add({ slug: 'pur-grn-direct-invoice', docNo, values, lines: docLines, createdAt: now, updatedAt: now, createdBy: input.userId } as DocRecord)) as number
     return { docNo, added, updated, docId }
   })
@@ -376,7 +399,46 @@ export function useInvoiceUpload(onDone?: () => void) {
   const input = useRef<HTMLInputElement | null>(null)
   const [busy, setBusy] = useState(false)
   const { user } = useSession()
-  const [review, setReview] = useState<{ file: { name: string; data: string }; inv: ParsedInvoice; draft?: InvoiceDraft } | null>(null)
+  const [review, setReview] = useState<{ file: { name: string; data: string }; inv: ParsedInvoice; draft?: InvoiceDraft; editDocId?: number } | null>(null)
+  /**
+   * Reopen an invoice received from an upload in the review, every box editable (Pcs/Pack,
+   * Sell By, quantities, costs, prices); receiving it again re-files the same MRN.
+   */
+  const editUploaded = async (doc: DocRecord) => {
+    const v = doc.values
+    const lines: ImportLine[] = []
+    for (const [i, l] of (doc.lines ?? []).entries()) {
+      const p = l.productId !== undefined ? await db.products.get(l.productId) : undefined
+      const perPack = l.perPack && l.perPack > 1 ? l.perPack : 1
+      const sellBy = perPack > 1 && l.sellBy && l.sellBy >= 1 ? l.sellBy : 1
+      // Received before as packs (with Pcs/Pack) or, without it, one unit per pack.
+      const packs = perPack > 1 && l.packs ? l.packs : l.qty
+      const packCost = l.total && packs ? Math.round(l.total / packs) : Math.round(l.cost * (perPack / sellBy))
+      lines.push({
+        key: i,
+        include: true,
+        code: l.sku ?? p?.sku ?? '',
+        name: (p?.name ?? l.name).toUpperCase(),
+        read: l.name.toUpperCase(),
+        qty: String(packs),
+        cost: (packCost / 100).toFixed(2),
+        productId: p ? l.productId : undefined,
+        price: (((l.rate || p?.price) ?? 0) / 100).toFixed(2),
+        best: l.best ? (l.best / 100).toFixed(2) : p?.minPrice ? (p.minPrice / 100).toFixed(2) : '',
+        vat: p?.taxable ?? false,
+        perPack: String(perPack),
+        sellBy,
+        from: perPack > 1 ? 'medicine' : 'none',
+        convert: false,
+        fix: 'exact',
+        options: [],
+      })
+    }
+    if (!lines.length) return toast('This invoice has no lines to edit', 'error')
+    const total = Number(v.total) || lines.reduce((s, l) => s + Number(l.qty) * Number(l.cost), 0)
+    const inv: ParsedInvoice = { supplier: v.vendorName, docNo: v.invoice, date: v.invoiceDate, total, lines: [], linesTotal: total, pages: 0, unpriced: 0, skipped: [], title: String(v.docNo ?? doc.docNo ?? '') }
+    setReview({ file: { name: v.attachmentName || `${v.docNo ?? doc.docNo}.pdf`, data: v.attachment ?? '' }, inv, editDocId: doc.id, draft: { file: { name: '', data: '' }, inv, lines, vendor: v.vendorName ?? '', invoiceNo: v.invoice ?? '', expense: v.expense, savedAt: Date.now() } })
+  }
   /** An unfinished upload saved on this computer: continue it, or start a new one. */
   const [unfinished, setUnfinished] = useState<InvoiceDraft | null>(null)
   const pick = async () => {
@@ -459,9 +521,10 @@ export function useInvoiceUpload(onDone?: () => void) {
           inv={review.inv}
           file={review.file}
           draft={review.draft}
+          editDocId={review.editDocId}
           onClose={() => {
             setReview(null)
-            toast('Saved — press Upload Supplier Invoice (PDF) to continue where you stopped')
+            if (review.editDocId === undefined) toast('Saved — press Upload Supplier Invoice (PDF) to continue where you stopped')
           }}
           onDone={() => {
             setReview(null)
@@ -471,10 +534,11 @@ export function useInvoiceUpload(onDone?: () => void) {
       )}
     </>
   )
-  return { pick, busy, element }
+  return { pick, busy, element, editUploaded }
 }
 
-function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoice; file: { name: string; data: string }; draft?: InvoiceDraft; onClose: () => void; onDone: () => void }) {
+function InvoiceReview({ inv, file, draft, editDocId, onClose, onDone }: { inv: ParsedInvoice; file: { name: string; data: string }; draft?: InvoiceDraft; editDocId?: number; onClose: () => void; onDone: () => void }) {
+  const editing = editDocId !== undefined
   const toast = useToast()
   const { user } = useSession()
   // undefined until loaded, so lines are matched against the real list.
@@ -497,9 +561,9 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
    */
   const pieces = inv.unpriced > 0
   const [lines, setLines] = useState<ImportLine[] | null>(draft?.lines ?? null)
-  const [savedAt, setSavedAt] = useState<number | undefined>(draft?.savedAt)
+  const [savedAt, setSavedAt] = useState<number | undefined>(editing ? undefined : draft?.savedAt)
   // Autosave: every change is kept (this computer) a moment after it is typed.
-  const done = useRef(false)
+  const done = useRef(editDocId !== undefined)
   useEffect(() => {
     if (!lines || done.current) return
     const t = setTimeout(() => {
@@ -735,7 +799,7 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
       .filter(({ p, qty, f }) => p?.maxStock !== undefined && p.stock * f + qty > p.maxStock)
       .map(({ p, qty, f }) => `${p!.name}: ${p!.stock * f + qty} (max ${p!.maxStock})`)
     if (over.length && !confirm(`This takes these medicines above their maximum level:\n\n${over.slice(0, 12).join('\n')}\n\nReceive anyway?`)) return
-    if (dup && !confirm(`${vendor} invoice ${invoiceNo} was already received as ${dup.values.docNo}. Receive it again (stock will be added twice)?`)) return
+    if (dup && !editing && !confirm(`${vendor} invoice ${invoiceNo} was already received as ${dup.values.docNo}. Receive it again (stock will be added twice)?`)) return
     setSaving(true)
     try {
       if (markupV.trim()) await setKv(MARKUP_KEY, markupV.trim())
@@ -767,12 +831,13 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
         expense: expenseV,
         receivedBy: user.name,
         userId: user.id,
-        attachment: file,
+        attachment: editing ? undefined : file,
+        replaceDocId: editDocId,
       })
       done.current = true
-      await db.kv.delete(draftKey(user.id))
-      await logActivity('stock', `Supplier invoice received (${r.docNo})`, { detail: `${vendor} ${invoiceNo}: ${r.updated} medicine(s) topped up, ${r.added} new`, userId: user.id, userName: user.name })
-      toast(`${r.docNo}: ${r.updated + r.added} medicine(s) received — ${r.updated} topped up, ${r.added} new`)
+      if (!editing) await db.kv.delete(draftKey(user.id))
+      await logActivity('stock', editing ? `Uploaded invoice edited (${r.docNo})` : `Supplier invoice received (${r.docNo})`, { detail: `${vendor} ${invoiceNo}: ${r.updated} medicine(s) topped up, ${r.added} new`, userId: user.id, userName: user.name })
+      toast(editing ? `${r.docNo} re-filed: stock and prices now follow the edited lines` : `${r.docNo}: ${r.updated + r.added} medicine(s) received — ${r.updated} topped up, ${r.added} new`)
       onDone()
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), 'error')
@@ -789,7 +854,7 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
     <Dialog
       title={
         <>
-          Upload Supplier Invoice — {file.name}
+          {editing ? `Edit uploaded invoice ${inv.title ?? ''}${draft?.invoiceNo ? ` (invoice ${draft.invoiceNo})` : ''}` : `Upload Supplier Invoice — ${file.name}`}
           <span style={{ marginLeft: 14, fontSize: 11, fontWeight: 'normal', opacity: 0.9 }} title="Your work is kept on this computer as you type. Closing this box keeps it: press Upload Supplier Invoice to continue.">
             {savedAt ? `✓ Saved automatically ${new Date(savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
           </span>
@@ -1135,7 +1200,7 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10, flexWrap: 'wrap' }}>
         <Btn onClick={onClose}>◀ Back</Btn>
         <Btn onClick={() => void receive()} disabled={saving || !loaded || !medDocs || !catalogue || !chosen.length}>
-          {saving ? 'Receiving…' : !loaded || !medDocs || !catalogue ? 'Matching…' : `Receive ${chosen.length} line(s) into stock`}
+          {saving ? 'Receiving…' : !loaded || !medDocs || !catalogue ? 'Matching…' : editing ? `Re-file ${chosen.length} line(s) (stock changes by the difference)` : `Receive ${chosen.length} line(s) into stock`}
         </Btn>
         <span className="ma-label ma-note" style={{ fontSize: 10 }}>
           Files one Pur/GRN (Direct Invoice) with this PDF attached; stock goes up by each line&apos;s Units and the cost price becomes its Cost of 1.

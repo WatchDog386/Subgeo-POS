@@ -334,6 +334,14 @@ Instead of typing a delivery line by line, as the PURCHASE account:
    short, then press **Receive … line(s) into stock**. **◀ Back** leaves
    without receiving.
 
+**Correcting an invoice already received.** Open it in *Pur/GRN (Direct
+Invoice)* (double-click it in the list) and press **Edit as uploaded
+invoice**. It opens in the upload screen with its saved lines, and every box
+can be changed: Qty (packs), Pcs/Pack, Sell By, Pack Cost, Selling Price,
+Best Price. **Re-file** takes the invoice's first quantities back out of stock
+and puts the edited ones in, so stock changes only by the difference. The
+same MRN is updated, not a second one, and an unticked line is taken out.
+
 **Autosave.** Everything typed on the review is saved on this computer as
 you type (*✓ Saved automatically* in the title bar). A click beside the box
 or Esc no longer closes it. If it is closed anyway (◀ Back, ×, a reload, a

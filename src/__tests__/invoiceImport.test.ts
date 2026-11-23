@@ -224,6 +224,28 @@ describe('packs on supplier invoices', () => {
   })
 })
 
+describe('editing an invoice received before', () => {
+  it('re-files the same MRN: stock changes by the difference, prices as edited', async () => {
+    vi.resetModules()
+    await Dexie.delete('subgeo-pos')
+    const m = { db: await import('../db/db'), imp: await import('../medapp/pages/InvoiceImport') }
+    const id = (await m.db.db.products.add({ sku: 'DOL', name: 'DOLOACT MR TABS (10S)', fitment: [], cost: 0, price: 2500, stock: 3, reorderLevel: 0, taxable: false, serialized: false, trackStock: true, active: true, createdAt: 1, updatedAt: 1 })) as number
+    // First upload: 5 packs, Pcs/Pack left at 1 → 5 units at the pack cost 215.00.
+    const first = await m.imp.receiveInvoice({ lines: [{ name: 'DOLOACT MR TABS (10S)', qty: 5, costCents: 21500, priceCents: 2500, productId: id, vat: false, packs: 5, perPack: 1, sellBy: 1, packCostCents: 21500 }], vendor: 'CASH WHOLESALE 6', invoiceNo: 'NB1', totalCents: 107500, expense: '', receivedBy: 'p' })
+    expect((await m.db.db.products.get(id))!.stock).toBe(8)
+    // Edited: 10 tablets a pack → 50 units, cost of 1 21.50; the same MRN.
+    const again = await m.imp.receiveInvoice({ lines: [{ name: 'DOLOACT MR TABS (10S)', qty: 50, costCents: 2150, priceCents: 2500, productId: id, vat: false, packs: 5, perPack: 10, sellBy: 1, packCostCents: 21500 }], vendor: 'CASH WHOLESALE 6', invoiceNo: 'NB1', totalCents: 107500, expense: '', receivedBy: 'p', replaceDocId: first.docId })
+    expect(again.docNo).toBe(first.docNo)
+    expect(again.docId).toBe(first.docId)
+    const p = (await m.db.db.products.get(id))!
+    expect([p.stock, p.cost, p.price]).toEqual([3 + 50, 2150, 2500])
+    const doc = (await m.db.db.docs.get(first.docId))!
+    expect(doc.lines).toHaveLength(1)
+    expect(doc.lines?.[0]).toMatchObject({ qty: 50, packs: 5, perPack: 10, cost: 2150 })
+    expect((await m.db.db.docs.where('slug').equals('pur-grn-direct-invoice').count())).toBe(1)
+  })
+})
+
 describe('old per-pack stock', () => {
   it('is converted to units, with its prices per unit, before the delivery is added', async () => {
     vi.resetModules()
