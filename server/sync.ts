@@ -858,6 +858,40 @@ export function chemistByNumber(n: number): { id: number; code: string; name: st
   return undefined
 }
 
+/**
+ * Write a unit-price fix (src/lib/unitPrices.ts) to one chemist: the medicines'
+ * prices per selling unit, the pieces of the last upload counted as pairs where
+ * sold in pairs (with a stock movement), and how each comes and is sold on its
+ * Medicine form record. Every till of the chemist gets it on its next sync.
+ */
+export function applyUnitPriceFix(branchId: number, fixes: import('../src/lib/unitPrices').UnitFix[], reference: string): number {
+  const now = Date.now()
+  let n = 0
+  sql.transaction(() => {
+    const docs = listTable<Rec>('docs', branchId).filter((d) => d.slug === 'medicine')
+    for (const f of fixes) {
+      if (!f.change) continue
+      const p = parse(getRow('products', branchId, f.p.id))
+      if (!p) continue
+      writeRow('products', branchId, f.p.id, { ...p, price: f.price, cost: f.cost, ...(f.minPrice ? { minPrice: f.minPrice } : {}), stock: f.stock, updatedAt: now }, now, null)
+      if (f.stock !== Number(p.stock)) {
+        const id = newServerId()
+        writeRow('movements', branchId, id, { id, productId: Number(f.p.id), change: f.stock - Number(p.stock), reason: 'adjust', reference, note: `Pieces counted as pairs (${f.how})`, at: now }, now, null)
+      }
+      const sku = String(p.sku ?? '').trim().toUpperCase()
+      const doc = docs.find((d) => String(((d.values ?? {}) as Rec).docNo ?? '').trim().toUpperCase() === sku)
+      const values = { ...(((doc?.values ?? { docNo: p.sku, name: String(p.name).toUpperCase(), type: 'S' }) as Rec)), packSize: String(f.perPack * f.sellBy), sellBy: String(f.sellBy), retail: (f.price / 100).toFixed(2), cost: (f.cost / 100).toFixed(2), ...(f.minPrice ? { minPrice: (f.minPrice / 100).toFixed(2) } : {}) }
+      if (doc) writeRow('docs', branchId, doc.id as number, { ...doc, values, updatedAt: now }, now, null)
+      else {
+        const id = newServerId()
+        writeRow('docs', branchId, id, { id, slug: 'medicine', docNo: p.sku, values, createdAt: now, updatedAt: now }, now, null)
+      }
+      n++
+    }
+  })()
+  return n
+}
+
 /** What resetChemistStock would delete (nothing is changed). */
 export function planStockReset(branchId: number, code: string, name: string): StockResetPlan {
   return { branchId, code, name, ...stockRowsOf(branchId).plan }

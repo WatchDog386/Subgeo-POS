@@ -20,7 +20,8 @@
     "setup:subgeo": "tsx scripts/setup-subgeo.ts",
     "stock:reset": "tsx scripts/reset-stock.ts",
     "stock:status": "tsx scripts/stock-status.ts",
-    "stock:value": "tsx scripts/stock-value.ts"
+    "stock:value": "tsx scripts/stock-value.ts",
+    "stock:unit-prices": "tsx scripts/fix-unit-prices.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
