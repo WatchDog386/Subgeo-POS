@@ -125,3 +125,15 @@ describe('prices filled in from the company (same price at every chemist)', () =
     expect(clearKnownPrices(filled)).toMatchObject({ price: '', best: '', cost: '0.00', auto: {} })
   })
 })
+
+describe('pack count stated on the invoice line', () => {
+  it('reads it, including 1, and nothing when the line states none', async () => {
+    const { statedPackSize } = await import('../medapp/pages/InvoiceImport')
+    expect(statedPackSize("ENO SACHETS 1'S")).toBe(1)
+    expect(statedPackSize("ACETAL MR 100's")).toBe(100)
+    expect(statedPackSize("AMOXICILLIN 500mg100'S")).toBe(100)
+    expect(statedPackSize('AZITHROMYCIN (ATROMAX)500MG TABS 3`S')).toBe(3)
+    expect(statedPackSize('CALPOL INFANT SUSP 60ML')).toBeUndefined()
+    expect(statedPackSize('ACNESOL CREAM')).toBeUndefined()
+  })
+})

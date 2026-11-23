@@ -541,7 +541,7 @@ syncRouter.get('/admin/products', requireAuth, requireOwner, (req, res) => {
 syncRouter.get('/admin/catalogue', requireAuth, requireOwner, (_req, res) => {
   const key = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim()
   // Every chemist's copy of each medicine (same name = same medicine).
-  const groups = new Map<string, { p: Product; chem: string; packSize: number | null; sellBy: number | null }[]>()
+  const groups = new Map<string, { p: Product; chem: string; hq: boolean; packSize: number | null; sellBy: number | null }[]>()
   for (const b of branches()) {
     const docs = listTable<Rec>('docs', b.id).filter((d) => d.slug === 'medicine')
     const vals = (d: Rec) => (d.values ?? {}) as Record<string, string>
@@ -551,7 +551,7 @@ syncRouter.get('/admin/catalogue', requireAuth, requireOwner, (_req, res) => {
       if (!p.name || /^SRV-/i.test(p.sku)) continue
       const k = key(p.name)
       const v = bySku.get(p.sku.trim().toUpperCase()) ?? byName.get(k)
-      groups.set(k, [...(groups.get(k) ?? []), { p, chem: branchCode(b.id), packSize: Math.round(Number(v?.packSize) || 0) || null, sellBy: Math.round(Number(v?.sellBy) || 0) || null }])
+      groups.set(k, [...(groups.get(k) ?? []), { p, chem: branchCode(b.id), hq: b.number === HQ_NUMBER, packSize: Math.round(Number(v?.packSize) || 0) || null, sellBy: Math.round(Number(v?.sellBy) || 0) || null }])
     }
   }
   const out: Rec[] = []
@@ -560,7 +560,8 @@ syncRouter.get('/admin/catalogue', requireAuth, requireOwner, (_req, res) => {
     const cp = companyPrice(copies.map((c) => ({ price: c.p.price, minPrice: c.p.minPrice, cost: c.p.cost, updatedAt: c.p.updatedAt, chem: c.chem })))!
     const latest = copies.slice().sort((a, b) => b.p.updatedAt - a.p.updatedAt)
     const main = latest.find((c) => c.chem === cp.chem && c.p.price === cp.price) ?? latest[0]
-    const pack = latest.find((c) => c.packSize)
+    // How it comes and is sold (pieces per pack; each or in pairs): HQ's record first.
+    const pack = latest.find((c) => c.hq && c.packSize) ?? latest.find((c) => c.packSize)
     out.push({
       name: main.p.name.toUpperCase(),
       sku: main.p.sku,

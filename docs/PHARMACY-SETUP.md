@@ -310,7 +310,18 @@ Instead of typing a delivery line by line, as the PURCHASE account:
    3.15. Face masks, 50 per pack at 135.00, sold in pairs, give 25 units at
    5.40 a pair. The medicine remembers its pack size and Sell By for its
    next invoice.
-5. **Selling Price and Best Price** are per unit. A blank Selling Price keeps
+   - **Where Pcs/Pack and Sell By come from:** the pack count written on the
+     invoice line itself (`1'S`, `100's`, `10X10`) wins. Otherwise it comes
+     from this chemist's record, then how the company already sells the
+     medicine (HQ first, then any chemist): each or in pairs. Otherwise the
+     medicine's name.
+   - **Convert old stock** is never ticked by itself. Tick it only for a
+     medicine whose stock here was counted in packs.
+5. **Selling Price and Best Price** are per unit. A price is filled in only
+   if it makes sense for one unit: not below its Cost of 1, and not over 3×
+   it. So a medicine whose price was for a whole pack gets Cost of 1 +
+   Markup % for new (shown in grey), and its price is corrected when you
+   receive. Type over it to set your own. A blank Selling Price keeps
    the medicine's current price; for a new medicine it is Cost of 1 +
    **Markup % for new**. **Best Price** is the lowest a unit may be sold for
    (KES, not %). It can't be above the Selling Price, and the lines warn if

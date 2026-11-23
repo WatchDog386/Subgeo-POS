@@ -164,6 +164,8 @@ function orderRowFrom(row: TextItem[], cols: Columns, page: number): InvoiceLine
 export function parseInvoiceText(pages: TextItem[][]): ParsedInvoice {
   const lines: InvoiceLine[] = []
   const res: ParsedInvoice = { lines, linesTotal: 0, pages: pages.length, unpriced: 0, skipped: [] }
+  /** Where the item codes stand (from rows whose code is its own piece of text); the same on every page. */
+  let pageCodeX: number | undefined
   pages.forEach((items, p) => {
     const rs = rows(items)
     if (p === 0 && rs.length) {
@@ -190,9 +192,28 @@ export function parseInvoiceText(pages: TextItem[][]): ParsedInvoice {
       }
       const item = itemFromRow(r, p + 1) ?? (cols && r[0].y < cols.y ? orderRowFrom(r, cols, p + 1) : undefined)
       if (item) {
+        // The code and the description came out as one piece of text ("WHO28778 ABZ SUSPENSION 10ML")
+        // starting in the code column the other rows use: its first word is the item code.
+        const first = r.find((c) => c.str.trim())
+        // A short code with no digit ("WHC", "whox") standing alone in the code column is the code too.
+        if (!item.code && first && pageCodeX !== undefined && Math.abs(first.x - pageCodeX) < 4 && !first.str.trim().includes(' ')) {
+          const w = first.str.trim()
+          if (/^[A-Z][A-Z0-9/.-]{1,14}$/i.test(w) && item.name.startsWith(`${w} `)) {
+            item.code = w.toUpperCase()
+            item.name = item.name.slice(w.length + 1)
+          }
+        }
+        if (!item.code && first && pageCodeX !== undefined && Math.abs(first.x - pageCodeX) < 4 && first.str.trim().includes(' ')) {
+          const [w, ...rest] = item.name.split(' ')
+          if (rest.length && /^[A-Z0-9][A-Z0-9/.-]{1,14}$/i.test(w) && !/^\d+(\.\d+)?$/.test(w)) {
+            item.code = w.toUpperCase()
+            item.name = rest.join(' ')
+          }
+        }
         lines.push(item)
         const desc = r.find((c) => item.name.startsWith(c.str.trim())) ?? r[0]
         const codeCell = item.code ? r.find((c) => c.str.trim().toUpperCase() === item.code) : undefined
+        if (codeCell && codeCell.str.trim().toUpperCase() === item.code) pageCodeX ??= codeCell.x
         last = { line: item, y: r[0].y, descX: desc.x, codeX: codeCell?.x }
         continue
       }

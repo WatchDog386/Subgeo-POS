@@ -184,7 +184,7 @@ export function packContents(name: string): { pieces?: number; ml?: number; labe
   let pieces: number | undefined
   const ok = (n: number) => Number.isInteger(n) && n > 1 && n <= 5000
   const mult = t.match(/\b(\d{1,3})\s*[X×]\s*(\d{1,3})(?:\s*'?S)?\b(?!\s*(?:ML|MG|G|GM|L|MCG|IU|%))/)
-  const s = t.match(/\b(\d{1,4})\s*'?\s*S\b/)
+  const s = t.match(/(?<![\d.])(\d{1,4})\s*['`]?\s*S\b/)
   const packOf = t.match(/PACK\s+OF\s+(\d{1,4})\b/)
   const unit = t.match(/\b(\d{1,4})\s*(?:TABS?|TABLETS|CAPS?|CAPSULES|PCS|PIECES|SACHETS|VIALS|AMPOULES|AMPS|PESSARIES|SUPPOSITORIES|LOZENGES)\b/)
   if (mult && ok(Number(mult[1]) * Number(mult[2]))) pieces = Number(mult[1]) * Number(mult[2])

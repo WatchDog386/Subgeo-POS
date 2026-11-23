@@ -36,7 +36,7 @@ export type ImportLine = {
   perPack: string
   sellBy: number
   /** Where Pcs/Pack came from: the description, this medicine's last invoice, typed, or not found. */
-  from: 'invoice' | 'medicine' | 'typed' | 'none'
+  from: 'invoice' | 'medicine' | 'company' | 'typed' | 'none'
   /**
    * A medicine stocked before pack sizes were recorded (counted per pack):
    * turn its old stock into units and its prices into per-unit prices first.
@@ -152,11 +152,24 @@ export function packSizeFrom(name: string): number {
   if (mult && ok(Number(mult[1]) * Number(mult[2]))) return Number(mult[1]) * Number(mult[2])
   const packOf = t.match(/PACK\s+OF\s+(\d{1,4})\b/)
   if (packOf && ok(Number(packOf[1]))) return Number(packOf[1])
-  const s = t.match(/\b(\d{1,4})\s*'?\s*S\b/)
+  const s = t.match(/(?<![\d.])(\d{1,4})\s*['`]?\s*S\b/)
   if (s && ok(Number(s[1]))) return Number(s[1])
   const unit = t.match(/\b(\d{1,4})\s*(?:TABS?|TABLETS|CAPS?|CAPSULES|PCS|PIECES|SACHETS|VIALS|AMPOULES|AMPS|PESSARIES|SUPPOSITORIES)\b/)
   if (unit && ok(Number(unit[1]))) return Number(unit[1])
   return 1
+}
+
+/**
+ * The pack count the invoice line itself states — "1'S", "100's", "10X10", "PACK OF 3" —
+ * including 1; undefined when it states none. What was delivered beats any record.
+ */
+export function statedPackSize(name: string): number | undefined {
+  const t = ` ${name.toUpperCase()} `
+  if (/\b\d{1,3}\s*[X×]\s*\d{1,3}(?:\s*'?S)?\b(?!\s*(?:ML|MG|G|GM|L|MCG|IU|%))|PACK\s+OF\s+\d|(?<![\d.])\d{1,4}\s*['`]\s*S\b|(?<![\d.])\d{1,4}\s*(?:TABS?|TABLETS|CAPS?|CAPSULES|PCS|PIECES|SACHETS)\b/.test(t)) {
+    const n = packSizeFrom(name)
+    return n > 1 ? n : /(?<![\d.])1\s*['`]?\s*S\b/.test(t) ? 1 : n
+  }
+  return undefined
 }
 
 /** Sell-by choices for a pack: each, a pair, … the whole pack (only sizes that divide the pack). */
@@ -522,7 +535,18 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
   const packFor = (p: Product | undefined, ...names: string[]) => {
     if (pieces) return { perPack: '1', sellBy: 1, from: 'none' as const }
     const r = remembered(p)
+    // The invoice line says how many come in a pack ("1'S", "100's"): that is what was delivered.
+    const said = names.length ? statedPackSize(names[names.length - 1]) : undefined
+    if (said !== undefined) {
+      const sellBy = r && said % r.sellBy === 0 && r.sellBy <= said ? r.sellBy : 1
+      const c = !r && p ? catByName.get(norm(p.name)) ?? catBySku.get(p.sku.trim().toUpperCase()) : undefined
+      const sb = !r && c?.sellBy && said % c.sellBy === 0 && c.sellBy <= said ? c.sellBy : sellBy
+      return { perPack: String(said), sellBy: sb, from: said > 1 ? ('invoice' as const) : ('none' as const) }
+    }
     if (r) return { perPack: String(r.perPack), sellBy: r.sellBy, from: 'medicine' as const }
+    // How the company already sells it (HQ first, then any chemist): pieces per pack, each or in pairs.
+    const c = (p ? catByName.get(norm(p.name)) ?? catBySku.get(p.sku.trim().toUpperCase()) : undefined) ?? names.map((x) => catByName.get(norm(x))).find(Boolean)
+    if (c?.packSize && c.packSize > 1) return { perPack: String(c.packSize), sellBy: c.sellBy && c.sellBy >= 1 && c.packSize % c.sellBy === 0 ? c.sellBy : 1, from: 'company' as const }
     const n = names.map(packSizeFrom).find((x) => x > 1) ?? 1
     return { perPack: String(n), sellBy: 1, from: n > 1 ? ('invoice' as const) : ('none' as const) }
   }
@@ -531,9 +555,15 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
     const p = c.productId !== undefined ? products.find((x) => x.id === c.productId) : undefined
     if (p) {
       const pk = packFor(p, p.name, l.read)
-      return { productId: p.id, name: p.name.toUpperCase(), vat: p.taxable, price: '', best: '', ...pk, convert: pk.from !== 'medicine' && looksPerPack(p, Number(pk.perPack), l.cost) }
+      return { productId: p.id, name: p.name.toUpperCase(), vat: p.taxable, price: '', best: '', ...pk, convert: false }
     }
-    const pk = !pieces && c.packSize && c.packSize >= 1 ? { perPack: String(c.packSize), sellBy: c.sellBy && c.packSize % c.sellBy === 0 ? c.sellBy : 1, from: 'medicine' as const } : packFor(undefined, c.name, l.read)
+    const said = pieces ? undefined : statedPackSize(l.read)
+    const pk =
+      said !== undefined
+        ? { perPack: String(said), sellBy: c.sellBy && said % c.sellBy === 0 && c.sellBy <= said ? c.sellBy : 1, from: said > 1 ? ('invoice' as const) : ('none' as const) }
+        : !pieces && c.packSize && c.packSize >= 1
+          ? { perPack: String(c.packSize), sellBy: c.sellBy && c.packSize % c.sellBy === 0 ? c.sellBy : 1, from: 'company' as const }
+          : packFor(undefined, c.name, l.read)
     return {
       productId: undefined,
       name: c.name,
@@ -547,9 +577,20 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
     }
   }
 
-  /** Old per-pack medicine: convert by default only when its price still looks like a pack price. */
-  // No pack cost (an order book): nothing to compare with, so leave it unticked.
-  const looksPerPack = (p: Product | undefined, perPack: number, packCostKes: number) => !!p && perPack > 1 && packCostKes > 0 && p.price >= 0.6 * Math.round(packCostKes * 100)
+  /**
+   * A price that makes sense for ONE unit of this line: not below its cost of 1, not over 3×. A
+   * medicine priced for a whole pack while its stock is in pieces fails this, so that price is
+   * never carried onto the units being received. Unknown cost: anything goes.
+   */
+  const unitCostOf = (l: { qty: string; perPack: string; sellBy: number; cost: string }) => {
+    const per = Number(l.perPack) > 1 ? Number(l.perPack) / (l.sellBy || 1) : 1
+    return Math.round(toCents(l.cost || '0') / per)
+  }
+  const saneFor = (l: ImportLine, cents: number | null | undefined) => {
+    if (!cents || cents <= 0) return false
+    const u = unitCostOf(l)
+    return !(u > 0) || (cents >= u && cents <= 3 * u)
+  }
 
   const catByName = useMemo(() => new Map((catalogue ?? []).map((c) => [norm(c.name), c])), [catalogue])
   const catBySku = useMemo(() => new Map((catalogue ?? []).map((c) => [c.sku.trim().toUpperCase(), c])), [catalogue])
@@ -560,7 +601,10 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
     const c = catByName.get(norm(p?.name ?? l.name)) ?? (p ? catBySku.get(p.sku.trim().toUpperCase()) : undefined)
     const per = Number(l.perPack)
     const factor = l.convert && p && per > 1 && per % l.sellBy === 0 ? per / l.sellBy : 1
-    return fillKnownPrices(l, p, c, { here: 'this chemist', factor })
+    // Only prices that make sense for one unit (never a pack price on pieces).
+    const own = p && !saneFor(l, p.price) ? { ...p, price: 0, minPrice: undefined } : p
+    const company = c && !saneFor(l, c.price) ? { ...c, price: 0, minPrice: null } : c
+    return fillKnownPrices(l, own, company, { here: 'this chemist', factor })
   }
 
   // Match once the medicines (and their pack sizes) have loaded.
@@ -573,7 +617,7 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
         const p = matchProduct(products, l.code, l.name)
         if (p) {
           const pk = packFor(p, l.name)
-          return withPrices({ ...base, productId: p.id, name: p.name.toUpperCase(), vat: p.taxable, ...pk, convert: pk.from !== 'medicine' && looksPerPack(p, Number(pk.perPack), l.unitPrice), fix: 'exact' as const, options: [] })
+          return withPrices({ ...base, productId: p.id, name: p.name.toUpperCase(), vat: p.taxable, ...pk, convert: false, fix: 'exact' as const, options: [] })
         }
         // Misspelt / handwritten: the closest medicine of this chemist or of the company list.
         const ac = autocorrect(read, cands, candKeys)
@@ -607,13 +651,23 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
   const priceOf = (l: ImportLine) => {
     if (l.price.trim()) return Number(l.price)
     const p = l.productId !== undefined ? byId.get(l.productId) : undefined
-    if (p) return Math.round(p.price / factorOf(l)) / 100
+    if (p && (factorOf(l) > 1 || ownPriceOk(l))) return Math.round(p.price / factorOf(l)) / 100
+    // New, or its current price does not fit one unit (a pack price): cost of 1 + markup.
     return markupV.trim() ? priceFromMarkup(unitsOf(l).unitCost / 100, Number(markupV) || 0) : 0
+  }
+  /** The matched medicine's current price fits one unit of this delivery. */
+  const ownPriceOk = (l: ImportLine) => {
+    const p = l.productId !== undefined ? byId.get(l.productId) : undefined
+    return !!p && saneFor(l, p.price)
   }
   /** The medicine's current Best Price per unit (cents), after any conversion. */
   const currentBest = (l: ImportLine) => {
     const p = l.productId !== undefined ? byId.get(l.productId) : undefined
-    return p?.minPrice ? Math.round(p.minPrice / factorOf(l)) : undefined
+    if (!p?.minPrice) return undefined
+    if (factorOf(l) > 1 || ownPriceOk(l)) return Math.round(p.minPrice / factorOf(l))
+    // Its price is being replaced (it was a pack price): keep the same step down from the selling price.
+    const sell = Math.round(priceOf(l) * 100)
+    return sell > 0 && p.price > 0 ? Math.round((p.minPrice * sell) / p.price) : undefined
   }
   /** The buyer picks a medicine for a line by name (a suggestion, or any in the list); '' = keep it as read, new. */
   const pick = (l: ImportLine, name: string) => {
@@ -694,8 +748,9 @@ function InvoiceReview({ inv, file, draft, onClose, onDone }: { inv: ParsedInvoi
             name: l.name,
             qty: u.units,
             costCents: u.unitCost,
-            priceCents: isNew ? toCents(String(priceOf(l))) : l.price.trim() ? toCents(l.price) : undefined,
-            bestCents: l.best.trim() ? toCents(l.best) : undefined,
+            // A medicine whose price was for a whole pack gets its price per unit now.
+            priceCents: isNew || (!l.price.trim() && !ownPriceOk(l) && factorOf(l) === 1) ? toCents(String(priceOf(l))) : l.price.trim() ? toCents(l.price) : undefined,
+            bestCents: l.best.trim() ? toCents(l.best) : !isNew && !ownPriceOk(l) && factorOf(l) === 1 ? currentBest(l) : undefined,
             productId: l.productId,
             vat: l.vat,
             ...(pieces ? {} : { packs: Number(l.qty) || 0, perPack: Number(l.perPack), sellBy: l.sellBy }),

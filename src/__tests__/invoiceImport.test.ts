@@ -260,6 +260,23 @@ describe('sales quote with units on quantities, a VAT % column and wrapped codes
   })
 })
 
+describe('item codes printed together with the description', () => {
+  it('takes the code from the code column, with or without digits', () => {
+    const pg: TextItem[] = [
+      T(23, 634, 'Item Code'), T(77, 634, 'Item Description'), T(315, 633, 'Units'), T(355, 634, 'Price (In)'), T(527, 634, 'Total (Incl)'),
+      T(23, 617, 'WH023'), T(76, 617, "ABZ TABS 400MG 1's"), T(314, 617, '25.00'), T(370, 617, '30.00'), T(499, 617, '0'), T(543, 617, '750.00'),
+      T(22.5, 594, 'WHO28778 ABZ SUSPENSION 10ML'), T(314, 594, '25.00'), T(370, 594, '39.00'), T(499, 594, '0'), T(543, 594, '975.00'),
+      T(23, 570, 'WHC'), T(76, 570, "CIPLADON 1000MG 8'S"), T(319, 570, '1.00'), T(365, 570, '349.00'), T(499, 570, '0'), T(543, 570, '349.00'),
+    ]
+    const r = parseInvoiceText([pg])
+    expect(r.lines.map((l) => [l.code, l.name, l.qty])).toEqual([
+      ['WH023', "ABZ TABS 400MG 1's", 25],
+      ['WHO28778', 'ABZ SUSPENSION 10ML', 25],
+      ['WHC', "CIPLADON 1000MG 8'S", 1],
+    ])
+  })
+})
+
 describe('order documents (Daily Order Book): quantities, no prices', () => {
   it('reads a stock print whose quantity heading is "QTY / UNITS" (no item codes)', () => {
     const pg: TextItem[] = [
