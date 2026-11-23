@@ -56,7 +56,8 @@ export default function InventoryPage() {
       .filter((p) => !t || [p.name, p.sku, p.barcode, p.partNumber, p.brand].some((v) => v?.toLowerCase().includes(t)))
   }, [products, q, cat, lowOnly])
 
-  const stockValue = products.filter((p) => p.trackStock && p.stock > 0).reduce((s, p) => s + p.stock * p.cost, 0)
+  // Stock is valued at the selling price of what is on the shelf.
+  const stockValue = products.filter((p) => p.trackStock && p.stock > 0).reduce((s, p) => s + p.stock * p.price, 0)
   const lowCount = products.filter((p) => p.active && p.trackStock && p.stock <= p.reorderLevel).length
   const inactiveCount = products.filter((p) => !p.active).length
 
@@ -186,7 +187,7 @@ export default function InventoryPage() {
     <div className="p-4 lg:p-6">
       <PageHeader
         title="Stock"
-        subtitle={`${products.length} medicines · ${inactiveCount} inactive · stock value ${money(stockValue, settings.currency)} at cost · ${lowCount} low on stock`}
+        subtitle={`${products.length} medicines · ${inactiveCount} inactive · stock value ${money(stockValue, settings.currency)} at selling price · ${lowCount} low on stock`}
         actions={
           <>
             <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={(e) => e.target.files?.[0] && importCsv(e.target.files[0])} />
@@ -278,7 +279,7 @@ export default function InventoryPage() {
         footer={
           <>
             <span>
-              Stock value at cost <strong>{money(stockValue, settings.currency)}</strong>
+              Stock value at selling price <strong>{money(stockValue, settings.currency)}</strong>
             </span>
             <span className="text-xs text-slate-500">{lowCount} low on stock</span>
           </>

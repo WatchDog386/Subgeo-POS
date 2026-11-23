@@ -180,7 +180,7 @@ describe('multi-chemist sync', () => {
     const r = await admin.sync.api<{ branches: { number: number; todaySales: number; stockValue: number; staff: unknown[] }[] }>(`/admin/overview?dayStart=${dayStart}&monthStart=0`)
     const b1 = r.branches.find((b) => b.number === 1)!
     expect(b1.todaySales).toBe(600_00)
-    expect(b1.stockValue).toBe(10 * 100_00)
+    expect(b1.stockValue).toBe(10 * 200_00) // 10 in stock at the selling price 200, not the cost 100
     expect(r.branches.find((b) => b.number === 2)?.staff).toHaveLength(1)
     // Cashiers can't see it.
     const login = await cashier.sync.api<{ token: string }>('/auth/login', { method: 'POST', body: JSON.stringify({ username: 'subgeo', password: '0001' }) })

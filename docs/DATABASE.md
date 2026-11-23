@@ -80,7 +80,7 @@ internet or the server is down.
 
 | View | Shows |
 |---|---|
-| `v_stock` | Every active medicine per chemist with category, supplier, stock value, a `below_reorder` flag, `max_stock`, `min_price` and `to_order` (how many to order to reach the maximum level) |
+| `v_stock` | Every active medicine per chemist with category, supplier, stock value (at the selling price; `stock_cost` at cost), a `below_reorder` flag, `max_stock`, `min_price` and `to_order` (how many to order to reach the maximum level) |
 | `v_daily_sales` | Bills and takings per chemist per day |
 | `v_payments_by_method` | Takings per chemist, day and payment method |
 | `v_debtors` | Customers who owe money |

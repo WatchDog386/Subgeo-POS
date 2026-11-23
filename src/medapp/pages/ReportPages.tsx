@@ -322,14 +322,16 @@ function StockReport() {
           in: String(inQ),
           out: String(outQ),
           close: String(closing),
-          rate: amt(p.cost),
-          value: amt(closing * p.cost),
+          // Valued at the selling price.
+          rate: amt(p.price),
+          value: amt(closing * p.price),
         }
       })
-      const cols = [C('name', 'Product Name', 240), C('code', 'Product Code', 100), C('loc', 'Location', 110), C('open', 'Opening', 70, 'right'), C('in', 'Receipts', 70, 'right'), C('out', 'Issues', 70, 'right'), C('close', 'Closing', 70, 'right'), ...(values ? [C('rate', 'Rate', 80, 'right'), C('value', 'Value', 100, 'right')] : [])]
+      const cols = [C('name', 'Product Name', 240), C('code', 'Product Code', 100), C('loc', 'Location', 110), C('open', 'Opening', 70, 'right'), C('in', 'Receipts', 70, 'right'), C('out', 'Issues', 70, 'right'), C('close', 'Closing', 70, 'right'), ...(values ? [C('rate', 'Selling Price', 90, 'right'), C('value', 'Value', 100, 'right')] : [])]
       if (opt('summary') || opt('groupTotal')) {
         const totalClose = rows.reduce((s, r) => s + Number(r.close), 0)
-        rows.push({ name: 'TOTAL', code: '', loc: '', open: '', in: '', out: '', close: String(totalClose), rate: '', value: amt(list.reduce((s, p) => s + p.stock * p.cost, 0)) })
+        // The closing stock of the dates chosen (not today's), at the selling price.
+        rows.push({ name: 'TOTAL', code: '', loc: '', open: '', in: '', out: '', close: String(totalClose), rate: '', value: amt(list.reduce((s, p, i) => s + Math.max(0, Number(rows[i].close)) * p.price, 0)) })
       }
       setRes({ title: 'Stock Statement', cols, rows })
     } else if (kind === 'issue') {

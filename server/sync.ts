@@ -455,7 +455,7 @@ syncRouter.get('/admin/overview', requireAuth, requireOwner, (req, res) => {
       `SELECT scope,
          SUM(CASE WHEN json_extract(data, '$.trackStock') THEN 1 ELSE 0 END) AS products,
          SUM(CASE WHEN json_extract(data, '$.trackStock') AND json_extract(data, '$.stock') > 0
-                  THEN json_extract(data, '$.stock') * json_extract(data, '$.cost') ELSE 0 END) AS stockValue,
+                  THEN json_extract(data, '$.stock') * json_extract(data, '$.price') ELSE 0 END) AS stockValue, -- at the selling price
          SUM(CASE WHEN json_extract(data, '$.active') AND json_extract(data, '$.trackStock')
                    AND json_extract(data, '$.stock') <= json_extract(data, '$.reorderLevel') THEN 1 ELSE 0 END) AS lowStock,
          SUM(CASE WHEN json_extract(data, '$.trackStock') AND json_extract(data, '$.stock') <= 0 THEN 1 ELSE 0 END) AS outOfStock

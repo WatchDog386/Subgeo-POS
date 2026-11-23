@@ -272,7 +272,8 @@ export function AnnexureReport() {
           dept: c.name.toUpperCase(),
           items: String(ps.filter((p) => p.categoryId === c.id).length),
           sales: amt(val.get(c.id) ?? 0),
-          stock: amt(ps.filter((p) => p.categoryId === c.id && p.trackStock).reduce((s, p) => s + p.stock * p.cost, 0)),
+          // At the selling price of the medicines in stock.
+          stock: amt(ps.filter((p) => p.categoryId === c.id && p.trackStock && p.stock > 0).reduce((s, p) => s + p.stock * p.price, 0)),
         })),
       })
     }
