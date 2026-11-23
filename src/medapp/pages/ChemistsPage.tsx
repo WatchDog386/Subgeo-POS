@@ -311,7 +311,7 @@ function ChemistForm({ branches, selected, userName, userId }: { branches: Branc
       } else {
         await db.branches.add({ number: n, code: newCode, name: name.trim().toUpperCase(), location: location.trim(), phone: phone.trim(), active, createdAt: Date.now() })
         await logActivity('settings', `Chemist ${label} created`, { detail: name.trim().toUpperCase(), userId, userName })
-        toast(`${label} created. Next: add its cashier in User Management, then key in its medicines.`)
+        toast(`${label} created. Its cashier signs in as subgeo / ${String(n).padStart(4, '0')} once this computer has synced (the server makes the account). Next: key in its medicines.`)
       }
       reset()
       void syncNow()

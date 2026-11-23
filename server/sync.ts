@@ -144,6 +144,13 @@ export function ensureSeeds(): void {
   })()
   ensureRelational()
   sql.transaction(() => convertLegacyKv())()
+  // Chemists added before cashiers were made automatically (e.g. a 13th) get theirs now.
+  sql.transaction(() => {
+    for (const b of branches()) {
+      const done = ensureStarterCashier(b.id)
+      if (done) console.log(done)
+    }
+  })()
   // The purchases account used to have no password; it now has the admin's rights,
   // so one without a password gets the admin's starter password subgeo22.
   sql.transaction(() => {
@@ -155,6 +162,31 @@ export function ensureSeeds(): void {
       }
     }
   })()
+}
+
+/**
+ * A chemist's starter cashier: "subgeo" with the chemist number as a 4-digit
+ * password (chemist 13 → 0013), as for the first twelve. Made once, when the
+ * chemist is new and has no staff; then the chemist is marked so a cashier the
+ * admin removes on purpose is never made again. Returns what was done.
+ */
+export function ensureStarterCashier(branchId: number, now = Date.now(), staffComing = false): string | undefined {
+  const b = parse(getRow('branches', 0, branchId)) as (Branch & { id: number; starterCashier?: boolean }) | undefined
+  if (!b || b.starterCashier) return undefined
+  const mark = () => writeRow('branches', 0, b.id, { ...b, starterCashier: true } as unknown as Rec, now, null)
+  // It already has staff, or the admin's own cashier for it is in the same upload.
+  if (staffComing || users().some((u) => u.branchId === b.id)) return mark(), undefined
+  const password = b.number === HQ_NUMBER ? '0000' : String(b.number).padStart(4, '0')
+  // Cashiers of different chemists share the name "subgeo": the password tells them apart.
+  if (users().some((u) => u.username === 'subgeo' && safeEqual(hashPassword(u.salt, password), u.passHash))) {
+    mark()
+    return `${chemCode(b.number)}: no starter cashier — another "subgeo" account already uses ${password}; add its cashier in User Management`
+  }
+  const id = newServerId()
+  const salt = crypto.randomBytes(8).toString('hex')
+  writeRow('users', 0, id, { id, name: chemCode(b.number), username: 'subgeo', salt, passHash: hashPassword(salt, password), role: 'cashier', active: true, branchId: b.id } as unknown as Rec, now, null)
+  mark()
+  return `Cashier subgeo / ${password} → ${chemCode(b.number)}`
 }
 
 /* ── Auth ─────────────────────────────────────────────────────────────────── */
@@ -367,6 +399,12 @@ syncRouter.post('/sync/push', requireAuth, (req, res) => {
           if (t === 'kv' && isSeqKvKey(String(id))) next.value = Math.max(Number(existing.value ?? 0), Number(data.value ?? 0))
         }
         writeRow(t, scope, id, next, Math.max(ts, row?.ts ?? 0), user.id)
+        // A new chemist gets its cashier "subgeo" / 00nn straight away (every till receives it on its next sync).
+        if (t === 'branches' && !existing) {
+          const staffComing = changes.some((x) => x.t === 'users' && x.data && typeof x.data === 'object' && String((x.data as Rec).branchId) === String(id))
+          const done = ensureStarterCashier(Number(id), Date.now(), staffComing)
+          if (done) console.log(done)
+        }
         if (t === 'kv' && isLegacyKvKey(String(id))) legacyPushed = true
       }
       for (const d of deletes) {

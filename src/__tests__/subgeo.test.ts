@@ -71,7 +71,6 @@ describe('SUBGEO1 … SUBGEO12', () => {
       expect(r.status).toBe(200)
       expect(r.body.branches!.find((b) => b.id === r.body.user!.branchId)!.number).toBe(n)
     }
-    expect((await login('subgeo', '0013')).status).toBe(401)
     // 0000 opens the head-office pharmacy HQ.
     const hq = await login('subgeo', '0000')
     expect(hq.status).toBe(200)
@@ -109,6 +108,33 @@ describe('SUBGEO1 … SUBGEO12', () => {
     sync.ensureSeeds() // what a deploy / restart runs
     expect((await login('purchase', 'subgeo22')).status).toBe(200)
     expect((await login('purchase', '')).status).toBe(401)
+  })
+
+  it('a chemist added later gets its cashier subgeo / 00nn by itself, once', async () => {
+    const admin = (await login('admin', 'subgeo22')).body as unknown as { token: string }
+    const push = (changes: unknown[], deletes: unknown[] = []) =>
+      fetch(`${base}/api/sync/push`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${admin.token}` }, body: JSON.stringify({ branchId: 1, changes, deletes }) })
+    const now = Date.now()
+    // Chemist 13 created in Utilities → Chemists: its cashier signs in with 0013 straight away.
+    expect((await push([{ t: 'branches', id: 913, data: { id: 913, number: 13, name: 'SUBGEO 13', active: true, createdAt: now }, ts: now }])).status).toBe(200)
+    const c13 = await login('subgeo', '0013')
+    expect(c13.status).toBe(200)
+    expect(c13.body.branches!.find((b) => b.id === c13.body.user!.branchId)!.number).toBe(13)
+    const cashierOf = (branch: number) => sqlMod.sql.prepare("SELECT id FROM users WHERE username = 'subgeo' AND branch_id = ?").get(branch) as { id: number } | undefined
+    // The admin removes chemist 13's cashier on purpose: a restart does not bring it back.
+    expect((await push([], [{ t: 'users', id: cashierOf(913)!.id, at: Date.now() }])).status).toBe(200)
+    sync.ensureSeeds() // what a deploy / restart runs
+    expect((await login('subgeo', '0013')).status).toBe(401)
+    // As on the live server: chemist 13 reached the server before cashiers were made by themselves
+    // (no staff, never set up). The next start gives it subgeo / 0013.
+    sqlMod.sql.prepare("UPDATE sync_records SET data = json_remove(data, '$.starterCashier') WHERE tbl = 'branches' AND id = '913'").run()
+    sync.ensureSeeds()
+    expect((await login('subgeo', '0013')).status).toBe(200)
+    // A chemist whose own cashier comes in the same upload gets no extra "subgeo".
+    const { hashPassword } = await import('../lib/sha256')
+    expect((await push([{ t: 'branches', id: 914, data: { id: 914, number: 14, name: 'SUBGEO 14', active: true, createdAt: now }, ts: now }, { t: 'users', id: 9141, data: { id: 9141, name: 'MARY', username: 'mary', salt: 's', passHash: hashPassword('s', 'pw14'), role: 'cashier', active: true, branchId: 914 }, ts: now }])).status).toBe(200)
+    expect((await login('subgeo', '0014')).status).toBe(401)
+    expect((await login('mary', 'pw14')).status).toBe(200)
   })
 
   it('still keeps admin and purchase user names unique', async () => {
